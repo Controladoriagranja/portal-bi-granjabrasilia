@@ -760,9 +760,121 @@
   }
   .pbi-hint strong { color: var(--text); }
 
-  @media (max-width: 900px) {
-    .stats-grid { grid-template-columns: 1fr 1fr; }
-    .sidebar { display: none; }
+  /* ══════════════ MOBILE ══════════════ */
+  @media (max-width: 768px) {
+
+    /* Login card */
+    .login-card {
+      width: 100%;
+      min-height: 100vh;
+      border-radius: 0;
+      padding: 40px 24px;
+      border: none;
+    }
+
+    /* Hide sidebar - show mobile nav instead */
+    .sidebar { display: none !important; }
+
+    /* Main takes full width */
+    .main { width: 100%; }
+
+    /* Topbar */
+    .topbar {
+      padding: 14px 16px;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .topbar-title { font-size: 16px; }
+    .topbar-actions { display: none; }
+
+    /* Content padding */
+    .content { padding: 16px; }
+
+    /* Stats grid - 1 col on mobile */
+    .stats-grid { grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+    .stat-card { padding: 14px; }
+    .stat-value { font-size: 22px; }
+
+    /* Report grid - 1 col */
+    .report-grid { grid-template-columns: 1fr; gap: 12px; }
+
+    /* Tables - scrollable */
+    .table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    table { min-width: 600px; }
+
+    /* Form rows - stack */
+    .form-row { grid-template-columns: 1fr; gap: 0; }
+    .form-panel { padding: 18px; }
+
+    /* Modal full screen */
+    .modal-overlay { padding: 0; }
+    .modal { width: 100vw; height: 100vh; border-radius: 0; }
+
+    /* Tabs scrollable */
+    .tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
+    .tab { white-space: nowrap; flex-shrink: 0; }
+
+    /* Request box */
+    .request-box { flex-direction: column; gap: 10px; }
+    .request-box .btn-sm { margin-left: 0; width: 100%; justify-content: center; }
+
+    /* Checkgroup wrap */
+    .checkgroup { gap: 6px; }
+
+    /* Section header */
+    .section-header { flex-direction: column; align-items: flex-start; gap: 10px; }
+
+    /* Sector row */
+    .sector-row { flex-wrap: wrap; }
+  }
+
+  /* Mobile bottom nav bar */
+  #mobileNav {
+    display: none;
+  }
+
+  @media (max-width: 768px) {
+    #mobileNav {
+      display: flex;
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      z-index: 50;
+      padding: 8px 4px;
+      padding-bottom: calc(8px + env(safe-area-inset-bottom));
+      justify-content: space-around;
+    }
+
+    /* Add padding to content so bottom nav doesn't cover it */
+    .main { padding-bottom: 70px; }
+
+    #screen-portal { flex-direction: column; }
+  }
+
+  .mob-nav-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 10px;
+    color: var(--text-muted);
+    background: none;
+    border: none;
+    font-family: inherit;
+    transition: color .15s, background .15s;
+    min-width: 52px;
+  }
+  .mob-nav-btn.active { color: var(--accent2); background: var(--accent-glow); }
+  .mob-nav-btn svg { width: 22px; height: 22px; }
+  .mob-nav-btn span { font-size: 10px; font-weight: 500; }
+
+  @media (max-width: 400px) {
+    .stats-grid { grid-template-columns: 1fr; }
+    .stat-card { padding: 12px; }
   }
 </style>
 </head>
@@ -1239,6 +1351,30 @@
   </main>
 </div>
 
+  <!-- MOBILE BOTTOM NAV -->
+  <nav id="mobileNav">
+    <button class="mob-nav-btn active" id="mnDash" onclick="switchView('dashboard', null); setMobNav('mnDash')">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+      <span>Início</span>
+    </button>
+    <button class="mob-nav-btn" id="mnReports" onclick="switchView('reports', null); setMobNav('mnReports')">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+      <span>Relatórios</span>
+    </button>
+    <button class="mob-nav-btn" id="mnPwd" onclick="switchView('changepass', null); setMobNav('mnPwd')">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+      <span>Senha</span>
+    </button>
+    <button class="mob-nav-btn" id="mnAdmin" style="display:none" onclick="switchView('users', null); setMobNav('mnAdmin')">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+      <span>Admin</span>
+    </button>
+    <button class="mob-nav-btn" id="mnLogout" onclick="logout()">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+      <span>Sair</span>
+    </button>
+  </nav>
+
 <!-- MODAL REPORT VIEWER -->
 <div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
   <div class="modal">
@@ -1563,7 +1699,7 @@ function initPortal() {
     rebuildSectorCheckboxes();
   }
 
-  // SEMPRE começar no Dashboard — resetar qualquer view ativa
+  // SEMPRE começar no Dashboard
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.getElementById('view-dashboard').classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
@@ -1571,6 +1707,10 @@ function initPortal() {
   if (navDash) navDash.classList.add('active');
   document.getElementById('topbarTitle').textContent = 'Dashboard';
   document.getElementById('topbarSub').textContent = 'Visão geral dos seus relatórios';
+
+  // Mobile nav admin button
+  showMobileAdminBtn(isAdmin);
+  setMobNav('mnDash');
 }
 
 function getUserReports() {
@@ -2212,6 +2352,19 @@ function showToast(msg, type='success') {
 document.addEventListener('keydown', e => {
   if (e.key === 'Enter' && document.getElementById('screen-login').classList.contains('active')) handleLogin();
 });
+
+// ── Mobile nav ──
+function setMobNav(activeId) {
+  ['mnDash','mnReports','mnPwd','mnAdmin'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('active', el.id === activeId);
+  });
+}
+
+function showMobileAdminBtn(show) {
+  const el = document.getElementById('mnAdmin');
+  if (el) el.style.display = show ? 'flex' : 'none';
+}
 
 // ═══════════════════════════════════════
 // TROCAR SENHA
