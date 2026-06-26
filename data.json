@@ -1,0 +1,92 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "name": "Admin Sistema",
+      "email": "admin@granjabrasilia.com.br",
+      "pass": "admin123",
+      "role": "admin",
+      "sectors": [
+        "logistica",
+        "pcp",
+        "comercial",
+        "financeiro",
+        "rh",
+        "operacional",
+        "ti",
+        "marketing",
+        "diretoria"
+      ],
+      "status": "active"
+    },
+    {
+      "id": 1782495397464,
+      "name": "Anderson",
+      "email": "andersonjr.eng@hotmail.com",
+      "pass": "temp123",
+      "role": "director",
+      "sectors": [
+        "logistica",
+        "pcp",
+        "comercial",
+        "financeiro",
+        "rh",
+        "operacional",
+        "ti",
+        "marketing",
+        "diretoria"
+      ],
+      "status": "active"
+    },
+    {
+      "id": 1782495591200,
+      "name": "Aline",
+      "email": "apsantos@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "director",
+      "sectors": [
+        "logistica",
+        "pcp",
+        "comercial",
+        "financeiro",
+        "rh",
+        "operacional",
+        "ti",
+        "marketing",
+        "diretoria"
+      ],
+      "status": "active"
+    }
+  ],
+  "reports": [
+    {
+      "id": 1782495274815,
+      "title": "Bi - Logistica",
+      "desc": "",
+      "sector": "logistica",
+      "url": "https://app.powerbi.com/view?r=eyJrIjoiOTg2MzMyOTMtMTdkMS00Mzk2LWI0YTgtYjY0OWUxNWI5ZDJmIiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
+      "updatedAt": "jun. de 2026"
+    },
+    {
+      "id": 1782495350440,
+      "title": "Bi - PCP",
+      "desc": "",
+      "sector": "pcp",
+      "url": "https://app.powerbi.com/view?r=eyJrIjoiMTJlZWMzZTUtOGQyNy00ZmNmLWEzYjgtYmYyNDdkYjIyMDYyIiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
+      "updatedAt": "jun. de 2026"
+    }
+  ],
+  "sectors": [
+    "logistica",
+    "pcp",
+    "comercial",
+    "financeiro",
+    "rh",
+    "operacional",
+    "ti",
+    "marketing",
+    "diretoria"
+  ],
+  "sectorMeta": {},
+  "publishedAt": "2026-06-26T19:00:00.495Z"
+}
