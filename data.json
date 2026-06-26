@@ -75,6 +75,25 @@
         "diretoria"
       ],
       "status": "active"
+    },
+    {
+      "id": 1782504302063,
+      "name": "Paulo Roberto Borges",
+      "email": "proberto@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "director",
+      "sectors": [
+        "logistica",
+        "pcp",
+        "comercial",
+        "financeiro",
+        "rh",
+        "operacional",
+        "ti",
+        "marketing",
+        "diretoria"
+      ],
+      "status": "active"
     }
   ],
   "reports": [
@@ -107,5 +126,5 @@
     "diretoria"
   ],
   "sectorMeta": {},
-  "publishedAt": "2026-06-26T19:45:14.495Z"
+  "publishedAt": "2026-06-26T20:05:21.783Z"
 }
