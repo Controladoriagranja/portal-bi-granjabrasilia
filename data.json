@@ -94,6 +94,17 @@
         "diretoria"
       ],
       "status": "active"
+    },
+    {
+      "id": 1782505827839,
+      "name": "Leandro Ilidio de Oliveira",
+      "email": "leilidio@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "logistica"
+      ],
+      "status": "active"
     }
   ],
   "reports": [
@@ -126,5 +137,5 @@
     "diretoria"
   ],
   "sectorMeta": {},
-  "publishedAt": "2026-06-26T20:25:49.415Z"
+  "publishedAt": "2026-06-26T20:30:40.622Z"
 }
