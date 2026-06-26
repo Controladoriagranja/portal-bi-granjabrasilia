@@ -877,7 +877,7 @@
     .stat-card { padding: 12px; }
   }
 </style>
-<!-- Firebase carrega em segundo plano após login -->
+
 </head>
 <body>
 
@@ -965,6 +965,9 @@
     </div>
     <div class="nav-item" id="nav-sectors" style="display:none" onclick="switchView('sectors', this)">
       <span class="nav-icon">🏷</span> Setores
+    </div>
+    <div class="nav-item" id="nav-publish" style="display:none;color:#3fb950" onclick="publishData()">
+      <span class="nav-icon">🚀</span> Publicar Dados
     </div>
     <div class="nav-item" id="nav-resetdb" style="display:none;color:var(--red)" onclick="resetDB()">
       <span class="nav-icon">🗑</span> Resetar Dados
@@ -1450,20 +1453,10 @@ const DEFAULT_DB = {
 // ── Persistência localStorage ──
 // ── Firestore persistence ──
 function saveDB() {
-  // Salvar localStorage imediatamente (síncrono)
   try { localStorage.setItem('granjabi_db', JSON.stringify(db)); } catch(e) {}
-  // Salvar Firebase em segundo plano (não bloqueia)
-  if (window._fbReady && window._fb && window._fb.firestore) {
-    window._fb.firestore.collection('portal').doc('db').set({
-      users:      JSON.stringify(db.users      || []),
-      reports:    JSON.stringify(db.reports    || []),
-      sectors:    JSON.stringify(db.sectors    || []),
-      sectorMeta: JSON.stringify(db.sectorMeta || {})
-    }).catch(e => console.warn('Firestore save error:', e));
-  }
 }
 
-// loadDB removido - dados carregados diretamente em initApp
+
 
 function syncSectors() {
   if (db.sectors) SECTORS = [...db.sectors];
@@ -1490,31 +1483,31 @@ syncSectors();
 let currentUser = null;
 
 // ── Auto-login se sessão salva ──
+function applyLoadedData(loaded) {
+  if (!loaded) return;
+  if (loaded.users      && loaded.users.length)   db.users      = loaded.users;
+  if (loaded.reports)                              db.reports    = loaded.reports;
+  if (loaded.sectors    && loaded.sectors.length)  db.sectors    = loaded.sectors;
+  if (loaded.sectorMeta)                           db.sectorMeta = loaded.sectorMeta;
+}
+
 function initApp() {
-  // Carregar do localStorage (síncrono e instantâneo)
+  // 1. Carregar localStorage imediatamente
   try {
     const saved = localStorage.getItem('granjabi_db');
-    if (saved) {
-      const loaded = JSON.parse(saved);
-      if (loaded.users      && loaded.users.length)      db.users      = loaded.users;
-      if (loaded.reports)                                 db.reports    = loaded.reports;
-      if (loaded.sectors    && loaded.sectors.length)     db.sectors    = loaded.sectors;
-      if (loaded.sectorMeta)                              db.sectorMeta = loaded.sectorMeta;
-    }
+    if (saved) applyLoadedData(JSON.parse(saved));
   } catch(e) {}
 
-  // Garantir admin
+  // 2. Garantir admin
   if (!db.users.find(u => u.email === 'admin@granjabrasilia.com.br')) {
     db.users.unshift({ id:1, name:'Admin Sistema', email:'admin@granjabrasilia.com.br',
       pass:'admin123', role:'admin', sectors:[...DEFAULT_SECTORS], status:'active' });
     try { localStorage.setItem('granjabi_db', JSON.stringify(db)); } catch(e) {}
   }
-  if (!db.sectors || db.sectors.length === 0) {
-    db.sectors = [...DEFAULT_SECTORS];
-  }
+  if (!db.sectors || db.sectors.length === 0) db.sectors = [...DEFAULT_SECTORS];
   syncSectors();
 
-  // Auto-login por sessão salva
+  // 3. Auto-login
   const uid = loadSession();
   if (uid) {
     const user = db.users.find(u => String(u.id) === uid && u.status === 'active');
@@ -1522,93 +1515,35 @@ function initApp() {
       currentUser = user;
       initPortal();
       showScreen('portal');
+      // 4. Carregar data.json em segundo plano (atualiza dados remotos)
+      loadRemoteData().then(remote => {
+        if (!remote || !remote.users || !remote.users.length) return;
+        applyLoadedData(remote);
+        syncSectors();
+        try { localStorage.setItem('granjabi_db', JSON.stringify(db)); } catch(e) {}
+        const updated = db.users.find(u => u.id === currentUser.id);
+        if (updated) currentUser = updated;
+        initPortal();
+      });
       return;
     }
     clearSession();
   }
-  showScreen('login');
-}
 
-function loadFirebaseAsync() {
-  return new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      console.warn('Firebase timeout');
-      window._fbReady = false;
-      resolve(false);
-    }, 8000);
-
-    function tryInit() {
-      if (typeof firebase !== 'undefined') {
-        clearTimeout(timeout);
-        try {
-          if (!firebase.apps.length) {
-            firebase.initializeApp({
-              apiKey: "AIzaSyCfUhC8Z2TWpTYLBpp-OH5WF1Rqp5zQb78",
-              authDomain: "portal-bi-granjabrasilia.firebaseapp.com",
-              projectId: "portal-bi-granjabrasilia",
-              storageBucket: "portal-bi-granjabrasilia.firebasestorage.app",
-              messagingSenderId: "858083547515",
-              appId: "1:858083547515:web:345580c199e9406dde85de"
-            });
-          }
-          window._fb = { firestore: firebase.firestore() };
-          window._fbReady = true;
-          resolve(true);
-        } catch(e) {
-          console.warn('Firebase init error:', e);
-          window._fbReady = false;
-          resolve(false);
-        }
-      } else {
-        setTimeout(tryInit, 200);
-      }
-    }
-
-    // Load scripts dynamically
-    const s1 = document.createElement('script');
-    s1.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js';
-    s1.onload = () => {
-      const s2 = document.createElement('script');
-      s2.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js';
-      s2.onload = () => setTimeout(tryInit, 100);
-      s2.onerror = () => { clearTimeout(timeout); window._fbReady = false; resolve(false); };
-      document.head.appendChild(s2);
-    };
-    s1.onerror = () => { clearTimeout(timeout); window._fbReady = false; resolve(false); };
-    document.head.appendChild(s1);
-  });
-}
-
-window.addEventListener('DOMContentLoaded', () => {
-  // Mostrar login IMEDIATAMENTE (síncrono, sem esperar Firebase)
-  initApp();
-
-  // Firebase carrega em segundo plano sem bloquear
-  loadFirebaseAsync().then(fbOk => {
-    if (!fbOk) return;
-    console.log('Firebase conectado! Sincronizando...');
-    window._fb.firestore.collection('portal').doc('db').get().then(snap => {
-      if (!snap.exists) return;
-      const d = snap.data();
-      const fbUsers   = JSON.parse(d.users      || '[]');
-      const fbReports = JSON.parse(d.reports    || '[]');
-      const fbSectors = JSON.parse(d.sectors    || '[]');
-      const fbMeta    = JSON.parse(d.sectorMeta || '{}');
-      if (fbUsers.length === 0) return;
-      db.users      = fbUsers;
-      db.reports    = fbReports;
-      db.sectors    = fbSectors.length ? fbSectors : db.sectors;
-      db.sectorMeta = fbMeta;
+  // 4. Carregar data.json antes de mostrar login
+  loadRemoteData().then(remote => {
+    if (remote && remote.users && remote.users.length) {
+      applyLoadedData(remote);
       syncSectors();
       try { localStorage.setItem('granjabi_db', JSON.stringify(db)); } catch(e) {}
-      // Atualizar portal se já logado
-      if (currentUser) {
-        const updated = db.users.find(u => u.id === currentUser.id);
-        if (updated) { currentUser = updated; initPortal(); }
-      }
-      showToast('✅ Dados sincronizados!', 'success');
-    }).catch(e => console.warn('Sync error:', e));
-  });
+    }
+    showScreen('login');
+  }).catch(() => showScreen('login'));
+}
+
+
+window.addEventListener('DOMContentLoaded', () => {
+  initApp();
 });
 
 // ═══════════════════════════════════════
@@ -1687,7 +1622,7 @@ function initPortal() {
   // Admin nav — somente role 'admin' vê o painel de administração
   const isAdmin = (u.role === 'admin');
   document.getElementById('adminSection').style.display = isAdmin ? 'block' : 'none';
-  ['nav-users','nav-access','nav-reportsmgr','nav-sectors','nav-resetdb'].forEach(id => {
+  ['nav-users','nav-access','nav-reportsmgr','nav-sectors','nav-publish','nav-resetdb'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = isAdmin ? 'flex' : 'none';
   });
@@ -2520,6 +2455,74 @@ function resetDB() {
   localStorage.removeItem('granjabi_db');
   localStorage.removeItem('granjabi_session');
   location.reload();
+}
+
+// ═══════════════════════════════════════
+// PUBLICAR DADOS — gera data.json para GitHub
+// ═══════════════════════════════════════
+function publishData() {
+  // Gerar o arquivo data.json com todos os dados
+  const data = {
+    users:      db.users,
+    reports:    db.reports,
+    sectors:    db.sectors,
+    sectorMeta: db.sectorMeta || {},
+    publishedAt: new Date().toISOString()
+  };
+
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+
+  // Criar link de download
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'data.json';
+  a.click();
+  URL.revokeObjectURL(url);
+
+  // Mostrar instruções
+  showPublishModal();
+}
+
+function showPublishModal() {
+  const overlay = document.createElement('div');
+  overlay.id = 'publishOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:32px;max-width:500px;width:100%">
+      <div style="font-size:28px;margin-bottom:12px">🚀</div>
+      <div style="font-size:18px;font-weight:700;margin-bottom:8px">Arquivo data.json baixado!</div>
+      <div style="font-size:13px;color:var(--text-muted);line-height:1.8;margin-bottom:20px">
+        Agora siga esses passos para publicar para todos:
+      </div>
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:16px;font-size:13px;line-height:2;margin-bottom:20px">
+        <strong>1.</strong> Acesse <span style="color:var(--accent2)">github.com/Controladoriagranja/portal-bi-granjabrasilia</span><br>
+        <strong>2.</strong> Clique em <strong>Add file → Upload files</strong><br>
+        <strong>3.</strong> Arraste o arquivo <strong>data.json</strong> que foi baixado<br>
+        <strong>4.</strong> Escreva <strong>"Publicar dados"</strong> no commit<br>
+        <strong>5.</strong> Clique em <strong>Commit changes</strong><br>
+        <strong>6.</strong> Em 2 minutos todos veem os dados atualizados! ✅
+      </div>
+      <button onclick="document.getElementById('publishOverlay').remove()" 
+        style="width:100%;background:#c0392b;border:none;color:#fff;padding:12px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">
+        Entendido!
+      </button>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+// Carregar data.json do GitHub ao iniciar (para todos os dispositivos)
+async function loadRemoteData() {
+  try {
+    const url = 'https://raw.githubusercontent.com/Controladoriagranja/portal-bi-granjabrasilia/main/data.json';
+    const res = await fetch(url + '?t=' + Date.now()); // cache bust
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data;
+  } catch(e) {
+    return null;
+  }
 }
 
 // ═══════════════════════════════════════
