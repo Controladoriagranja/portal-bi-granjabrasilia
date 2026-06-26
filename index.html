@@ -877,6 +877,30 @@
     .stat-card { padding: 12px; }
   }
 </style>
+<!-- Firebase SDK compat (Safari/iOS compatível) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script>
+  (function() {
+    try {
+      const firebaseConfig = {
+        apiKey: "AIzaSyCfUhC8Z2TWpTYLBpp-OH5WF1Rqp5zQb78",
+        authDomain: "portal-bi-granjabrasilia.firebaseapp.com",
+        projectId: "portal-bi-granjabrasilia",
+        storageBucket: "portal-bi-granjabrasilia.firebasestorage.app",
+        messagingSenderId: "858083547515",
+        appId: "1:858083547515:web:345580c199e9406dde85de"
+      };
+      firebase.initializeApp(firebaseConfig);
+      const _fs = firebase.firestore();
+      window._fb = { firestore: _fs };
+      window._fbReady = true;
+    } catch(e) {
+      console.warn('Firebase init error:', e);
+      window._fbReady = false;
+    }
+  })();
+</script>
 </head>
 <body>
 
@@ -1425,29 +1449,6 @@
 <!-- TOAST -->
 <div class="toast" id="toast"><span id="toastIcon">✓</span><span id="toastMsg"></span></div>
 
-<!-- Firebase SDK -->
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
-  import { getFirestore, doc, getDoc, setDoc, collection, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
-
-  const firebaseConfig = {
-    apiKey: "AIzaSyCfUhC8Z2TWpTYLBpp-OH5WF1Rqp5zQb78",
-    authDomain: "portal-bi-granjabrasilia.firebaseapp.com",
-    projectId: "portal-bi-granjabrasilia",
-    storageBucket: "portal-bi-granjabrasilia.firebasestorage.app",
-    messagingSenderId: "858083547515",
-    appId: "1:858083547515:web:345580c199e9406dde85de"
-  };
-
-  const app = initializeApp(firebaseConfig);
-  const firestore = getFirestore(app);
-
-  // Expose to global scope
-  window._fb = { firestore, doc, getDoc, setDoc, collection, getDocs, deleteDoc };
-  window._fbReady = true;
-  window.dispatchEvent(new Event('firebase-ready'));
-</script>
-
 <script>
 // ═══════════════════════════════════════
 // DATA STORE + LOCALSTORAGE
@@ -1472,28 +1473,23 @@ const DEFAULT_DB = {
 // ── Persistência localStorage ──
 // ── Firestore persistence ──
 async function saveDB() {
-  // Always save to localStorage as fallback
   try { localStorage.setItem('granjabi_db', JSON.stringify(db)); } catch(e) {}
-  // Save to Firestore if available
-  if (!window._fbReady) return;
+  if (!window._fbReady || !window._fb || !window._fb.firestore) return;
   try {
-    const { firestore, doc, setDoc } = window._fb;
-    await setDoc(doc(firestore, 'portal', 'db'), {
-      users: JSON.stringify(db.users),
-      reports: JSON.stringify(db.reports),
-      sectors: JSON.stringify(db.sectors),
+    await window._fb.firestore.collection('portal').doc('db').set({
+      users:      JSON.stringify(db.users      || []),
+      reports:    JSON.stringify(db.reports    || []),
+      sectors:    JSON.stringify(db.sectors    || []),
       sectorMeta: JSON.stringify(db.sectorMeta || {})
     });
   } catch(e) { console.warn('Firestore save error:', e); }
 }
 
 async function loadDB() {
-  // Try Firestore first
-  if (window._fbReady) {
+  if (window._fbReady && window._fb && window._fb.firestore) {
     try {
-      const { firestore, doc, getDoc } = window._fb;
-      const snap = await getDoc(doc(firestore, 'portal', 'db'));
-      if (snap.exists()) {
+      const snap = await window._fb.firestore.collection('portal').doc('db').get();
+      if (snap.exists) {
         const d = snap.data();
         return {
           users:      JSON.parse(d.users      || '[]'),
@@ -1504,7 +1500,6 @@ async function loadDB() {
       }
     } catch(e) { console.warn('Firestore load error:', e); }
   }
-  // Fallback to localStorage
   try {
     const saved = localStorage.getItem('granjabi_db');
     if (saved) return JSON.parse(saved);
@@ -1538,8 +1533,16 @@ let currentUser = null;
 
 // ── Auto-login se sessão salva ──
 async function initApp() {
-  // Show loading
-  document.body.innerHTML += '<div id="fbLoader" style="position:fixed;inset:0;background:#0d1117;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;gap:16px"><div style="width:40px;height:40px;border:3px solid #21262d;border-top-color:#c0392b;border-radius:50%;animation:spin .8s linear infinite"></div><div style="color:#7d8590;font-size:14px;font-family:Inter,sans-serif">Conectando ao banco de dados...</div></div>';
+  // Show loading only if Firebase available
+  const hasFB = window._fbReady && window._fb && window._fb.firestore;
+  let loader = null;
+  if (hasFB) {
+    loader = document.createElement('div');
+    loader.id = 'fbLoader';
+    loader.style.cssText = 'position:fixed;inset:0;background:#0d1117;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;gap:16px';
+    loader.innerHTML = '<div style="width:40px;height:40px;border:3px solid #21262d;border-top-color:#c0392b;border-radius:50%;animation:spin .8s linear infinite"></div><div style="color:#7d8590;font-size:14px;font-family:Inter,sans-serif">Conectando ao banco de dados...</div>';
+    document.body.appendChild(loader);
+  }
 
   // Load db from Firestore
   const loaded = await loadDB();
@@ -1564,8 +1567,9 @@ async function initApp() {
   syncSectors();
 
   // Remove loader
-  const loader = document.getElementById('fbLoader');
   if (loader) loader.remove();
+  const oldLoader = document.getElementById('fbLoader');
+  if (oldLoader) oldLoader.remove();
 
   // Tentar auto-login por sessão salva
   const uid = loadSession();
@@ -1583,13 +1587,8 @@ async function initApp() {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-  // Wait for Firebase or timeout after 5s
-  if (window._fbReady) {
-    initApp();
-  } else {
-    const timeout = setTimeout(() => { window._fbReady = false; initApp(); }, 5000);
-    window.addEventListener('firebase-ready', () => { clearTimeout(timeout); initApp(); });
-  }
+  // Firebase already initialized in <head>, just call initApp
+  initApp();
 });
 
 // ═══════════════════════════════════════
