@@ -4,7 +4,7 @@
       "id": 1,
       "name": "Admin Sistema",
       "email": "admin@granjabrasilia.com.br",
-      "pass": "admin123",
+      "pass": "BrasiliaControl@58",
       "role": "admin",
       "sectors": [
         "logistica",
@@ -107,5 +107,5 @@
     "diretoria"
   ],
   "sectorMeta": {},
-  "publishedAt": "2026-06-26T19:19:35.167Z"
+  "publishedAt": "2026-06-26T19:45:14.495Z"
 }
