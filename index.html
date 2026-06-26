@@ -1289,6 +1289,29 @@
 <!-- TOAST -->
 <div class="toast" id="toast"><span id="toastIcon">✓</span><span id="toastMsg"></span></div>
 
+<!-- Firebase SDK -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
+  import { getFirestore, doc, getDoc, setDoc, collection, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCfUhC8Z2TWpTYLBpp-OH5WF1Rqp5zQb78",
+    authDomain: "portal-bi-granjabrasilia.firebaseapp.com",
+    projectId: "portal-bi-granjabrasilia",
+    storageBucket: "portal-bi-granjabrasilia.firebasestorage.app",
+    messagingSenderId: "858083547515",
+    appId: "1:858083547515:web:345580c199e9406dde85de"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const firestore = getFirestore(app);
+
+  // Expose to global scope
+  window._fb = { firestore, doc, getDoc, setDoc, collection, getDocs, deleteDoc };
+  window._fbReady = true;
+  window.dispatchEvent(new Event('firebase-ready'));
+</script>
+
 <script>
 // ═══════════════════════════════════════
 // DATA STORE + LOCALSTORAGE
@@ -1311,11 +1334,41 @@ const DEFAULT_DB = {
 };
 
 // ── Persistência localStorage ──
-function saveDB() {
+// ── Firestore persistence ──
+async function saveDB() {
+  // Always save to localStorage as fallback
   try { localStorage.setItem('granjabi_db', JSON.stringify(db)); } catch(e) {}
+  // Save to Firestore if available
+  if (!window._fbReady) return;
+  try {
+    const { firestore, doc, setDoc } = window._fb;
+    await setDoc(doc(firestore, 'portal', 'db'), {
+      users: JSON.stringify(db.users),
+      reports: JSON.stringify(db.reports),
+      sectors: JSON.stringify(db.sectors),
+      sectorMeta: JSON.stringify(db.sectorMeta || {})
+    });
+  } catch(e) { console.warn('Firestore save error:', e); }
 }
 
-function loadDB() {
+async function loadDB() {
+  // Try Firestore first
+  if (window._fbReady) {
+    try {
+      const { firestore, doc, getDoc } = window._fb;
+      const snap = await getDoc(doc(firestore, 'portal', 'db'));
+      if (snap.exists()) {
+        const d = snap.data();
+        return {
+          users:      JSON.parse(d.users      || '[]'),
+          reports:    JSON.parse(d.reports    || '[]'),
+          sectors:    JSON.parse(d.sectors    || '[]'),
+          sectorMeta: JSON.parse(d.sectorMeta || '{}')
+        };
+      }
+    } catch(e) { console.warn('Firestore load error:', e); }
+  }
+  // Fallback to localStorage
   try {
     const saved = localStorage.getItem('granjabi_db');
     if (saved) return JSON.parse(saved);
@@ -1348,19 +1401,35 @@ syncSectors();
 let currentUser = null;
 
 // ── Auto-login se sessão salva ──
-window.addEventListener('DOMContentLoaded', () => {
-  // Garantir que o admin sempre existe no db
+async function initApp() {
+  // Show loading
+  document.body.innerHTML += '<div id="fbLoader" style="position:fixed;inset:0;background:#0d1117;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;gap:16px"><div style="width:40px;height:40px;border:3px solid #21262d;border-top-color:#c0392b;border-radius:50%;animation:spin .8s linear infinite"></div><div style="color:#7d8590;font-size:14px;font-family:Inter,sans-serif">Conectando ao banco de dados...</div></div>';
+
+  // Load db from Firestore
+  const loaded = await loadDB();
+  if (loaded) {
+    db.users      = loaded.users      && loaded.users.length      ? loaded.users      : db.users;
+    db.reports    = loaded.reports    || db.reports;
+    db.sectors    = loaded.sectors    && loaded.sectors.length    ? loaded.sectors    : db.sectors;
+    db.sectorMeta = loaded.sectorMeta || db.sectorMeta || {};
+  }
+
+  // Garantir que o admin sempre existe
   const adminExists = db.users.find(u => u.email === 'admin@granjabrasilia.com.br');
   if (!adminExists) {
     db.users.unshift({ id:1, name:'Admin Sistema', email:'admin@granjabrasilia.com.br',
       pass:'admin123', role:'admin', sectors:[...DEFAULT_SECTORS], status:'active' });
-    saveDB();
+    await saveDB();
   }
   if (!db.sectors || db.sectors.length === 0) {
     db.sectors = [...DEFAULT_SECTORS];
-    saveDB();
+    await saveDB();
   }
   syncSectors();
+
+  // Remove loader
+  const loader = document.getElementById('fbLoader');
+  if (loader) loader.remove();
 
   // Tentar auto-login por sessão salva
   const uid = loadSession();
@@ -1375,6 +1444,16 @@ window.addEventListener('DOMContentLoaded', () => {
     clearSession();
   }
   showScreen('login');
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  // Wait for Firebase or timeout after 5s
+  if (window._fbReady) {
+    initApp();
+  } else {
+    const timeout = setTimeout(() => { window._fbReady = false; initApp(); }, 5000);
+    window.addEventListener('firebase-ready', () => { clearTimeout(timeout); initApp(); });
+  }
 });
 
 // ═══════════════════════════════════════
