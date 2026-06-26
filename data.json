@@ -56,6 +56,25 @@
         "diretoria"
       ],
       "status": "active"
+    },
+    {
+      "id": 1782501286407,
+      "name": "Barbara Morgado",
+      "email": "bantunes@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "director",
+      "sectors": [
+        "logistica",
+        "pcp",
+        "comercial",
+        "financeiro",
+        "rh",
+        "operacional",
+        "ti",
+        "marketing",
+        "diretoria"
+      ],
+      "status": "active"
     }
   ],
   "reports": [
@@ -88,5 +107,5 @@
     "diretoria"
   ],
   "sectorMeta": {},
-  "publishedAt": "2026-06-26T19:03:29.247Z"
+  "publishedAt": "2026-06-26T19:14:49.063Z"
 }
