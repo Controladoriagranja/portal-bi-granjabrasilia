@@ -1533,8 +1533,8 @@ let currentUser = null;
 
 // ── Auto-login se sessão salva ──
 async function initApp() {
-  // Show loading only if Firebase available
-  const hasFB = window._fbReady && window._fb && window._fb.firestore;
+  // Verificar se Firebase está disponível
+  const hasFB = (typeof firebase !== 'undefined') && window._fb && window._fb.firestore;
   let loader = null;
   if (hasFB) {
     loader = document.createElement('div');
@@ -1587,8 +1587,32 @@ async function initApp() {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
-  // Firebase already initialized in <head>, just call initApp
-  initApp();
+  // Timeout de segurança — se Firebase demorar mais de 3s, entra sem ele
+  const safetyTimer = setTimeout(() => {
+    console.warn('Firebase timeout — entrando sem banco de dados online');
+    window._fbReady = false;
+    window._fb = null;
+    initApp();
+  }, 3000);
+
+  // Se Firebase já carregou (síncrono no head), chama direto
+  if (typeof firebase !== 'undefined' && window._fb && window._fb.firestore) {
+    clearTimeout(safetyTimer);
+    initApp();
+  } else {
+    // Aguarda firebase carregar com timeout
+    let attempts = 0;
+    const check = setInterval(() => {
+      attempts++;
+      if (typeof firebase !== 'undefined' && window._fb && window._fb.firestore) {
+        clearTimeout(safetyTimer);
+        clearInterval(check);
+        initApp();
+      } else if (attempts >= 30) {
+        clearInterval(check);
+      }
+    }, 100);
+  }
 });
 
 // ═══════════════════════════════════════
