@@ -1475,9 +1475,18 @@ function clearSession() {
 }
 
 // Carregar db do localStorage ou usar padrão
-const saved = loadDB();
-let db = saved || JSON.parse(JSON.stringify(DEFAULT_DB));
-if (!db.sectors) db.sectors = [...DEFAULT_SECTORS];
+let db = (function() {
+  try {
+    const saved = localStorage.getItem('granjabi_db');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed && parsed.users) return parsed;
+    }
+  } catch(e) {}
+  return JSON.parse(JSON.stringify(DEFAULT_DB));
+})();
+if (!db.sectors || !db.sectors.length) db.sectors = [...DEFAULT_SECTORS];
+if (!db.sectorMeta) db.sectorMeta = {};
 syncSectors();
 
 let currentUser = null;
@@ -1492,7 +1501,7 @@ function applyLoadedData(loaded) {
 }
 
 function initApp() {
-  // 1. Carregar localStorage imediatamente
+  // 1. Carregar localStorage
   try {
     const saved = localStorage.getItem('granjabi_db');
     if (saved) applyLoadedData(JSON.parse(saved));
@@ -1507,7 +1516,7 @@ function initApp() {
   if (!db.sectors || db.sectors.length === 0) db.sectors = [...DEFAULT_SECTORS];
   syncSectors();
 
-  // 3. Auto-login
+  // 3. Mostrar tela IMEDIATAMENTE
   const uid = loadSession();
   if (uid) {
     const user = db.users.find(u => String(u.id) === uid && u.status === 'active');
@@ -1515,30 +1524,28 @@ function initApp() {
       currentUser = user;
       initPortal();
       showScreen('portal');
-      // 4. Carregar data.json em segundo plano (atualiza dados remotos)
-      loadRemoteData().then(remote => {
-        if (!remote || !remote.users || !remote.users.length) return;
-        applyLoadedData(remote);
-        syncSectors();
-        try { localStorage.setItem('granjabi_db', JSON.stringify(db)); } catch(e) {}
-        const updated = db.users.find(u => u.id === currentUser.id);
-        if (updated) currentUser = updated;
-        initPortal();
-      });
-      return;
+    } else {
+      clearSession();
+      showScreen('login');
     }
-    clearSession();
+  } else {
+    showScreen('login');
   }
 
-  // 4. Carregar data.json antes de mostrar login
-  loadRemoteData().then(remote => {
-    if (remote && remote.users && remote.users.length) {
+  // 4. Tentar carregar data.json em segundo plano (sem bloquear)
+  setTimeout(() => {
+    loadRemoteData().then(remote => {
+      if (!remote || !remote.users || !remote.users.length) return;
       applyLoadedData(remote);
       syncSectors();
       try { localStorage.setItem('granjabi_db', JSON.stringify(db)); } catch(e) {}
-    }
-    showScreen('login');
-  }).catch(() => showScreen('login'));
+      if (currentUser) {
+        const updated = db.users.find(u => u.id === currentUser.id);
+        if (updated) currentUser = updated;
+        initPortal();
+      }
+    }).catch(() => {});
+  }, 500);
 }
 
 
