@@ -169,8 +169,6 @@ td{
     </div>
 
     <button class="primary" id="btnTudo">▶ Atualizar tudo Logística</button>
-    <button id="btnStatus">Atualizar status</button>
-
     <div id="execInfo" style="margin-left:auto;color:#8b949e;font-size:12px;">
       Aguardando...
     </div>
@@ -234,6 +232,14 @@ function badge(status){
 
   if(s.includes("erro")){
     return '<span class="badge erro">● Erro</span>';
+  }
+
+  if(s.includes("atualizando")){
+    return '<span class="badge executando">● Atualizando</span>';
+  }
+
+  if(s.includes("em andamento")){
+    return '<span class="badge executando">● Em andamento</span>';
   }
 
   if(s.includes("executando")){
@@ -315,10 +321,6 @@ function desenhar(data){
     tbody.appendChild(tr);
   });
 
-  document.querySelectorAll("button[data-id]").forEach(btn => {
-    btn.addEventListener("click", () => atualizarRelatorio(btn.dataset.id));
-  });
-
   const rodando = exec.status === "executando";
   const concluidos = exec.concluidos || [];
   const total = relatorios.length || 1;
@@ -338,6 +340,10 @@ function desenhar(data){
     "Status: " + (exec.status || "aguardando");
 
   document.getElementById("btnTudo").disabled = rodando;
+  document.querySelectorAll("button[data-id]").forEach(btn => {
+    btn.disabled = rodando;
+  });
+
 
   desenharHistorico(data.historico || []);
 }
@@ -400,9 +406,13 @@ async function atualizarRelatorio(id){
 }
 
 document.getElementById("btnTudo").addEventListener("click", atualizarTudo);
-document.getElementById("btnStatus").addEventListener("click", () => {
-  carregarStatus();
-  carregarLogs();
+
+document.getElementById("tbody").addEventListener("click", (ev) => {
+  const btn = ev.target.closest("button[data-id]");
+  if(!btn){
+    return;
+  }
+  atualizarRelatorio(btn.dataset.id);
 });
 
 carregarStatus();
