@@ -143,6 +143,95 @@
         "diretoria"
       ],
       "status": "active"
+    },
+    {
+      "id": 1782747373790,
+      "name": "Lucinaldo Alves Bezerra",
+      "email": "lbezerra@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "pcp"
+      ],
+      "allowUpdates": false,
+      "status": "active"
+    },
+    {
+      "id": 1782747425045,
+      "name": "Marcio Marçal da Cruz",
+      "email": "mcruz@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "pcp"
+      ],
+      "allowUpdates": false,
+      "status": "active"
+    },
+    {
+      "id": 1782747463149,
+      "name": "Isadora Gomes Santos",
+      "email": "isadora@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "director",
+      "sectors": [
+        "logistica",
+        "pcp",
+        "comercial",
+        "financeiro",
+        "rh",
+        "operacional",
+        "ti",
+        "marketing",
+        "diretoria"
+      ],
+      "allowUpdates": false,
+      "status": "active"
+    },
+    {
+      "id": 1782747515549,
+      "name": "Adilson Augusto dos Santos",
+      "email": "adilson@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "director",
+      "sectors": [
+        "logistica",
+        "pcp",
+        "comercial",
+        "financeiro",
+        "rh",
+        "operacional",
+        "ti",
+        "marketing",
+        "diretoria"
+      ],
+      "allowUpdates": false,
+      "status": "active"
+    },
+    {
+      "id": 1782747575846,
+      "name": "Hermeson de Almeida",
+      "email": "healmeida@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "pcp"
+      ],
+      "allowUpdates": false,
+      "status": "active"
+    },
+    {
+      "id": 1782747665613,
+      "name": "Geovane Antonio Teixeira",
+      "email": "gteixeira@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "logistica",
+        "pcp"
+      ],
+      "allowUpdates": false,
+      "status": "active"
     }
   ],
   "reports": [
@@ -175,5 +264,5 @@
     "diretoria"
   ],
   "sectorMeta": {},
-  "publishedAt": "2026-06-26T20:36:12.039Z"
+  "publishedAt": "2026-06-29T15:42:29.374Z"
 }
