@@ -2,2620 +2,415 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
+<title>Central de Atualizações — Portal BI</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Granja Brasília — Portal de Relatórios</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  :root {
-    --bg: #0d1117;
-    --surface: #161b22;
-    --surface2: #1c2330;
-    --border: #21262d;
-    --accent: #c0392b;
-    --accent-glow: rgba(192,57,43,0.15);
-    --accent2: #e74c3c;
-    --green: #2ea043;
-    --red: #da3633;
-    --orange: #d4993a;
-    --text: #e6edf3;
-    --text-muted: #7d8590;
-    --text-dim: #484f58;
-    --radius: 8px;
-  }
-
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-
-  body {
-    font-family: 'Inter', sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
-
-  /* ── SCREENS ── */
-  .screen { display: none; }
-  .screen.active { display: flex; }
-
-  /* ══════════════ LOGIN ══════════════ */
-  #screen-login {
-    min-height: 100vh;
-    align-items: center;
-    justify-content: center;
-    background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(192,57,43,0.15) 0%, transparent 70%), var(--bg);
-  }
-
-  .login-card {
-    width: 420px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 44px 40px;
-    box-shadow: 0 24px 64px rgba(0,0,0,0.5);
-  }
-
-  .login-logo {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 32px;
-  }
-
-  .logo-icon {
-    width: 42px; height: 42px;
-    background: linear-gradient(135deg, #c0392b, #e74c3c);
-    border-radius: 10px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 20px;
-  }
-
-  .logo-text { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
-  .logo-text span { color: var(--accent2); }
-
-  .login-title { font-size: 24px; font-weight: 700; margin-bottom: 6px; text-align: center; }
-  .login-subtitle { color: var(--text-muted); font-size: 14px; margin-bottom: 32px; text-align: center; }
-
-  .field { margin-bottom: 18px; }
-  .field label { display: block; font-size: 13px; font-weight: 500; color: var(--text-muted); margin-bottom: 7px; }
-  .field input {
-    width: 100%;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 11px 14px;
-    color: var(--text);
-    font-size: 14px;
-    font-family: inherit;
-    transition: border-color .2s, box-shadow .2s;
-    outline: none;
-  }
-  .field input:focus {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--accent-glow);
-  }
-
-  .btn-primary {
-    width: 100%;
-    background: #c0392b;
-    color: #fff;
-    border: none;
-    border-radius: var(--radius);
-    padding: 12px;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background .2s, transform .1s;
-    font-family: inherit;
-  }
-  .btn-primary:hover { background: #a93226; }
-  .btn-primary:active { transform: scale(.98); }
-
-  .login-footer {
-    margin-top: 28px;
-    text-align: center;
-    font-size: 12px;
-    color: var(--text-dim);
-  }
-
-  .login-access-hint {
-    margin-top: 20px;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 14px;
-    font-size: 12px;
-    color: var(--text-muted);
-    text-align: center;
-  }
-  .login-access-hint strong { color: var(--text); }
-
-  .login-error {
-    background: rgba(218,54,51,0.12);
-    border: 1px solid rgba(218,54,51,0.35);
-    border-radius: var(--radius);
-    padding: 10px 14px;
-    font-size: 13px;
-    color: #f85149;
-    margin-bottom: 16px;
-    display: none;
-  }
-
-  /* ══════════════ PENDING ══════════════ */
-  #screen-pending {
-    min-height: 100vh;
-    align-items: center;
-    justify-content: center;
-    background: var(--bg);
-    flex-direction: column;
-    text-align: center;
-  }
-
-  .pending-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 52px 48px;
-    max-width: 440px;
-    text-align: center;
-  }
-  .pending-icon { font-size: 52px; margin-bottom: 20px; }
-  .pending-title { font-size: 22px; font-weight: 700; margin-bottom: 10px; }
-  .pending-sub { color: var(--text-muted); font-size: 14px; line-height: 1.6; }
-  .pending-email {
-    display: inline-block;
-    margin-top: 16px;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 6px 14px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 13px;
-    color: var(--accent2);
-  }
-  .btn-back {
-    margin-top: 28px;
-    background: transparent;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    color: var(--text-muted);
-    padding: 9px 20px;
-    font-size: 13px;
-    cursor: pointer;
-    font-family: inherit;
-    transition: border-color .2s, color .2s;
-  }
-  .btn-back:hover { border-color: var(--text-muted); color: var(--text); }
-
-  /* ══════════════ PORTAL LAYOUT ══════════════ */
-  #screen-portal {
-    flex-direction: row;
-    min-height: 100vh;
-  }
-
-  /* SIDEBAR */
-  .sidebar {
-    width: 240px;
-    background: var(--surface);
-    border-right: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    height: 100vh;
-    position: sticky;
-    top: 0;
-    flex-shrink: 0;
-  }
-
-  .sidebar-logo {
-    display: flex; align-items: center; gap: 10px;
-    padding: 20px 18px 16px;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .sidebar-logo .logo-icon { width: 34px; height: 34px; font-size: 16px; border-radius: 8px; }
-  .sidebar-logo .logo-text { font-size: 15px; }
-
-  .sidebar-section {
-    padding: 16px 12px 4px;
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
-    color: var(--text-dim);
-  }
-
-  .nav-item {
-    display: flex; align-items: center; gap: 10px;
-    padding: 9px 12px;
-    border-radius: var(--radius);
-    margin: 1px 8px;
-    font-size: 13.5px;
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: background .15s, color .15s;
-    user-select: none;
-  }
-  .nav-item:hover { background: var(--surface2); color: var(--text); }
-  .nav-item.active { background: var(--accent-glow); color: var(--accent2); font-weight: 500; }
-  .nav-item .nav-icon { font-size: 16px; width: 20px; text-align: center; }
-  .nav-badge {
-    margin-left: auto;
-    background: var(--accent);
-    color: #fff;
-    font-size: 10px;
-    font-weight: 700;
-    border-radius: 99px;
-    padding: 1px 7px;
-  }
-
-  .sidebar-footer {
-    margin-top: auto;
-    padding: 14px;
-    border-top: 1px solid var(--border);
-  }
-
-  .user-pill {
-    display: flex; align-items: center; gap: 10px;
-    padding: 8px 10px;
-    border-radius: var(--radius);
-    cursor: pointer;
-    transition: background .15s;
-  }
-  .user-pill:hover { background: var(--surface2); }
-  .user-avatar {
-    width: 30px; height: 30px;
-    background: linear-gradient(135deg, #c0392b, #e67e22);
-    border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 12px; font-weight: 700;
-    flex-shrink: 0;
-  }
-  .user-info { min-width: 0; }
-  .user-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .user-role-badge {
-    font-size: 10px;
-    padding: 1px 7px;
-    border-radius: 99px;
-    font-weight: 600;
-    display: inline-block;
-    margin-top: 2px;
-  }
-  .role-director { background: rgba(212,153,58,0.2); color: #f0b429; }
-  .role-sector { background: rgba(46,160,67,0.2); color: #3fb950; }
-  .role-admin { background: rgba(26,111,212,0.2); color: var(--accent2); }
-
-  .btn-logout {
-    margin-left: auto;
-    background: none;
-    border: none;
-    color: var(--text-dim);
-    cursor: pointer;
-    font-size: 16px;
-    padding: 4px;
-    border-radius: 4px;
-    transition: color .15s;
-  }
-  .btn-logout:hover { color: var(--red); }
-
-  /* MAIN CONTENT */
-  .main {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    overflow-y: auto;
-    background: var(--bg);
-  }
-
-  .topbar {
-    padding: 20px 28px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    background: var(--bg);
-    position: sticky;
-    top: 0;
-    z-index: 10;
-  }
-
-  .topbar-title { font-size: 18px; font-weight: 700; }
-  .topbar-sub { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
-
-  .topbar-actions { margin-left: auto; display: flex; gap: 10px; }
-
-  .btn-sm {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    color: var(--text);
-    padding: 7px 14px;
-    font-size: 13px;
-    cursor: pointer;
-    font-family: inherit;
-    transition: border-color .2s, background .2s;
-    display: flex; align-items: center; gap: 6px;
-  }
-  .btn-sm:hover { background: var(--surface2); border-color: var(--text-dim); }
-  .btn-sm.accent { background: #c0392b; border-color: #c0392b; color: #fff; }
-  .btn-sm.accent:hover { background: #a93226; }
-
-  .content { padding: 28px; }
-
-  /* SECTIONS */
-  .view { display: none; }
-  .view.active { display: block; }
-
-  /* STATS GRID */
-  .stats-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
-    margin-bottom: 28px;
-  }
-
-  .stat-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 18px 20px;
-  }
-  .stat-label { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; font-weight: 500; }
-  .stat-value { font-size: 28px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
-  .stat-delta { font-size: 12px; margin-top: 4px; }
-  .delta-up { color: var(--green); }
-  .delta-down { color: var(--red); }
-
-  /* REPORT GRID */
-  .section-header {
-    display: flex; align-items: center; justify-content: space-between;
-    margin-bottom: 16px;
-  }
-  .section-title { font-size: 15px; font-weight: 600; }
-  .section-count { font-size: 12px; color: var(--text-muted); }
-
-  .report-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: 16px;
-    margin-bottom: 32px;
-  }
-
-  .report-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 18px;
-    cursor: pointer;
-    transition: border-color .2s, box-shadow .2s, transform .15s;
-    position: relative;
-    overflow: hidden;
-  }
-  .report-card::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 3px;
-    background: linear-gradient(90deg, #c0392b, #e74c3c);
-    opacity: 0;
-    transition: opacity .2s;
-  }
-  .report-card:hover { border-color: rgba(26,111,212,0.5); box-shadow: 0 4px 16px rgba(0,0,0,0.3); transform: translateY(-1px); }
-  .report-card:hover::before { opacity: 1; }
-
-  .report-sector-tag {
-    display: inline-block;
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    padding: 2px 8px;
-    border-radius: 4px;
-    margin-bottom: 10px;
-  }
-
-  .tag-comercial { background: rgba(26,111,212,0.18); color: #58a6ff; }
-  .tag-financeiro { background: rgba(46,160,67,0.18); color: #3fb950; }
-  .tag-rh { background: rgba(124,58,237,0.18); color: #a78bfa; }
-  .tag-operacional { background: rgba(212,153,58,0.18); color: #f0b429; }
-  .tag-ti { background: rgba(14,165,233,0.18); color: #38bdf8; }
-  .tag-diretoria { background: rgba(218,54,51,0.18); color: #f85149; }
-  .tag-marketing { background: rgba(236,72,153,0.18); color: #f472b6; }
-  .tag-logistica { background: rgba(16,185,129,0.18); color: #34d399; }
-  .tag-pcp { background: rgba(245,158,11,0.18); color: #fbbf24; }
-
-  .report-title { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
-  .report-desc { font-size: 13px; color: var(--text-muted); line-height: 1.5; margin-bottom: 14px; }
-  .report-meta { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--text-dim); }
-  .report-meta span { display: flex; align-items: center; gap: 4px; }
-
-  .btn-open {
-    width: 100%;
-    margin-top: 14px;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    color: var(--text-muted);
-    padding: 8px;
-    font-size: 13px;
-    cursor: pointer;
-    font-family: inherit;
-    transition: background .2s, color .2s, border-color .2s;
-    display: flex; align-items: center; justify-content: center; gap: 6px;
-  }
-  .btn-open:hover { background: #c0392b; border-color: #c0392b; color: #fff; }
-
-  /* IFRAME MODAL */
-  .modal-overlay {
-    position: fixed; inset: 0;
-    background: rgba(0,0,0,0.75);
-    z-index: 100;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-  }
-  .modal-overlay.open { display: flex; }
-  .modal {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    width: 95vw; max-width: 1400px;
-    height: 90vh;
-    display: flex; flex-direction: column;
-    overflow: hidden;
-    box-shadow: 0 32px 80px rgba(0,0,0,0.6);
-  }
-  .modal-header {
-    padding: 14px 20px;
-    border-bottom: 1px solid var(--border);
-    display: flex; align-items: center; gap: 12px;
-  }
-  .modal-title { font-size: 15px; font-weight: 600; }
-  .modal-close {
-    margin-left: auto;
-    background: none; border: none;
-    color: var(--text-muted);
-    font-size: 20px;
-    cursor: pointer;
-    padding: 4px 8px;
-    border-radius: 4px;
-    transition: color .15s, background .15s;
-  }
-  .modal-close:hover { background: var(--surface2); color: var(--text); }
-  .modal-body { flex: 1; display: flex; align-items: center; justify-content: center; }
-  .modal-placeholder {
-    text-align: center;
-    color: var(--text-muted);
-  }
-  .modal-placeholder h3 { font-size: 18px; margin-bottom: 8px; color: var(--text); }
-  .modal-placeholder p { font-size: 13px; line-height: 1.6; max-width: 340px; }
-  .modal-placeholder .pbi-logo { font-size: 48px; margin-bottom: 16px; }
-  .modal-url {
-    margin-top: 20px;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 8px 14px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
-    color: var(--accent2);
-  }
-  .modal-open-btn {
-    margin-top: 16px;
-    display: inline-block;
-    background: var(--accent);
-    color: #fff;
-    border: none;
-    border-radius: var(--radius);
-    padding: 10px 22px;
-    font-size: 14px;
-    font-family: inherit;
-    font-weight: 600;
-    cursor: pointer;
-    text-decoration: none;
-    transition: background .2s;
-  }
-  .modal-open-btn:hover { background: #1a7fe8; }
-
-  /* ADMIN VIEWS */
-  .table-wrapper {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    overflow: hidden;
-  }
-
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13.5px;
-  }
-
-  thead { background: var(--surface2); }
-  thead th {
-    padding: 12px 16px;
-    text-align: left;
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    border-bottom: 1px solid var(--border);
-  }
-  tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
-  tbody tr:last-child { border-bottom: none; }
-  tbody tr:hover { background: var(--surface2); }
-  tbody td { padding: 13px 16px; color: var(--text); vertical-align: middle; }
-
-  .status-badge {
-    display: inline-flex; align-items: center; gap: 5px;
-    padding: 3px 10px;
-    border-radius: 99px;
-    font-size: 11px; font-weight: 600;
-  }
-  .status-active { background: rgba(46,160,67,0.15); color: #3fb950; }
-  .status-pending { background: rgba(212,153,58,0.15); color: #f0b429; }
-  .status-blocked { background: rgba(218,54,51,0.15); color: #f85149; }
-
-  .status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-
-  .action-btn {
-    background: none; border: none;
-    padding: 4px 10px;
-    border-radius: 5px;
-    font-size: 12px;
-    cursor: pointer;
-    font-family: inherit;
-    transition: background .15s;
-    font-weight: 500;
-  }
-  .action-btn.approve { color: #27ae60; }
-  .action-btn.approve:hover { background: rgba(46,160,67,0.15); }
-  .action-btn.block { color: var(--red); }
-  .action-btn.block:hover { background: rgba(218,54,51,0.15); }
-  .action-btn.edit { color: var(--accent2); }
-  .action-btn.edit:hover { background: rgba(14,165,233,0.15); }
-
-  /* SEARCH */
-  .search-bar {
-    position: relative;
-    margin-bottom: 20px;
-  }
-  .search-bar input {
-    width: 100%;
-    max-width: 360px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 9px 14px 9px 36px;
-    color: var(--text);
-    font-size: 13.5px;
-    font-family: inherit;
-    outline: none;
-    transition: border-color .2s, box-shadow .2s;
-  }
-  .search-bar input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
-  .search-icon {
-    position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
-    color: var(--text-dim); font-size: 15px;
-  }
-
-  /* TABS */
-  .tabs {
-    display: flex; gap: 4px;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 24px;
-  }
-  .tab {
-    padding: 9px 16px;
-    font-size: 13.5px;
-    color: var(--text-muted);
-    cursor: pointer;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
-    font-weight: 500;
-    transition: color .15s, border-color .15s;
-  }
-  .tab:hover { color: var(--text); }
-  .tab.active { color: var(--accent2); border-bottom-color: var(--accent2); }
-
-  /* FORM PANEL */
-  .form-panel {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 24px;
-    max-width: 540px;
-  }
-  .form-title { font-size: 16px; font-weight: 600; margin-bottom: 20px; }
-  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  .form-group { margin-bottom: 16px; }
-  .form-group label { display: block; font-size: 13px; color: var(--text-muted); margin-bottom: 7px; font-weight: 500; }
-  .form-group input, .form-group select {
-    width: 100%;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 9px 12px;
-    color: var(--text);
-    font-size: 14px;
-    font-family: inherit;
-    outline: none;
-    transition: border-color .2s;
-  }
-  .form-group input:focus, .form-group select:focus { border-color: var(--accent); }
-  .form-group select option { background: var(--surface); }
-
-  .checkgroup { display: flex; flex-wrap: wrap; gap: 8px; }
-  .check-item {
-    display: flex; align-items: center; gap: 6px;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 6px 12px;
-    cursor: pointer;
-    font-size: 13px;
-    transition: border-color .15s, background .15s;
-  }
-  .check-item:hover { border-color: var(--accent); }
-  .check-item input { width: auto; }
-  .check-item.checked { border-color: var(--accent); background: var(--accent-glow); color: var(--accent2); }
-
-  /* NOTIFICATION */
-  .toast {
-    position: fixed;
-    bottom: 24px; right: 24px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 14px 20px;
-    font-size: 13.5px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-    display: flex; align-items: center; gap: 10px;
-    z-index: 200;
-    transform: translateY(60px);
-    opacity: 0;
-    transition: transform .3s, opacity .3s;
-  }
-  .toast.show { transform: translateY(0); opacity: 1; }
-  .toast.success { border-left: 3px solid var(--green); }
-  .toast.error { border-left: 3px solid var(--red); }
-
-  /* EMPTY STATE */
-  .empty-state {
-    text-align: center;
-    padding: 60px 20px;
-    color: var(--text-muted);
-  }
-  .empty-state .empty-icon { font-size: 48px; margin-bottom: 16px; }
-  .empty-state h3 { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
-  .empty-state p { font-size: 13px; line-height: 1.6; }
-
-  /* REQUEST ACCESS */
-  .request-box {
-    background: linear-gradient(135deg, rgba(26,111,212,0.08), rgba(14,165,233,0.06));
-    border: 1px solid rgba(26,111,212,0.25);
-    border-radius: 10px;
-    padding: 20px 24px;
-    display: flex; align-items: center; gap: 16px;
-    margin-bottom: 24px;
-  }
-  .request-box-icon { font-size: 28px; }
-  .request-box h4 { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
-  .request-box p { font-size: 13px; color: var(--text-muted); }
-  .request-box .btn-sm { margin-left: auto; flex-shrink: 0; }
-
-  /* COLOR PICKER */
-  .color-opt { cursor:pointer; display:inline-flex; }
-  .color-opt input { display:none; }
-  .color-opt span {
-    display:block; width:22px; height:22px;
-    border-radius:50%;
-    background: var(--c);
-    border: 2px solid transparent;
-    transition: border-color .15s, transform .15s;
-  }
-  .color-opt input:checked + span {
-    border-color: #fff;
-    transform: scale(1.2);
-    box-shadow: 0 0 0 2px var(--c);
-  }
-  .sector-row {
-    display:flex; align-items:center; gap:10px;
-    background:var(--surface);
-    border:1px solid var(--border);
-    border-radius:var(--radius);
-    padding:10px 14px;
-    transition: border-color .15s;
-  }
-  .sector-row:hover { border-color: var(--text-dim); }
-  .sector-dot { width:10px;height:10px;border-radius:50%;flex-shrink:0; }
-  .sector-name { font-size:14px;font-weight:500;flex:1; }
-  .sector-meta { font-size:11px;color:var(--text-muted); }
-
-  /* SCROLLBAR */
-  ::-webkit-scrollbar { width: 6px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-
-  /* SPINNER */
-  .spinner {
-    width: 36px; height: 36px;
-    border: 3px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin .8s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  /* IFRAME HINT BOX */
-  .pbi-hint {
-    background: rgba(192,57,43,0.08);
-    border: 1px solid rgba(192,57,43,0.25);
-    border-radius: 8px;
-    padding: 10px 14px;
-    font-size: 12px;
-    color: var(--text-muted);
-    margin-top: 8px;
-    line-height: 1.6;
-  }
-  .pbi-hint strong { color: var(--text); }
-
-  /* ══════════════ MOBILE ══════════════ */
-  @media (max-width: 768px) {
-
-    /* Login card */
-    .login-card {
-      width: 100%;
-      min-height: 100vh;
-      border-radius: 0;
-      padding: 40px 24px;
-      border: none;
-    }
-
-    /* Hide sidebar - show mobile nav instead */
-    .sidebar { display: none !important; }
-
-    /* Main takes full width */
-    .main { width: 100%; }
-
-    /* Topbar */
-    .topbar {
-      padding: 14px 16px;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-    .topbar-title { font-size: 16px; }
-    .topbar-actions { display: none; }
-
-    /* Content padding */
-    .content { padding: 16px; }
-
-    /* Stats grid - 1 col on mobile */
-    .stats-grid { grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
-    .stat-card { padding: 14px; }
-    .stat-value { font-size: 22px; }
-
-    /* Report grid - 1 col */
-    .report-grid { grid-template-columns: 1fr; gap: 12px; }
-
-    /* Tables - scrollable */
-    .table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-    table { min-width: 600px; }
-
-    /* Form rows - stack */
-    .form-row { grid-template-columns: 1fr; gap: 0; }
-    .form-panel { padding: 18px; }
-
-    /* Modal full screen */
-    .modal-overlay { padding: 0; }
-    .modal { width: 100vw; height: 100vh; border-radius: 0; }
-
-    /* Tabs scrollable */
-    .tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
-    .tab { white-space: nowrap; flex-shrink: 0; }
-
-    /* Request box */
-    .request-box { flex-direction: column; gap: 10px; }
-    .request-box .btn-sm { margin-left: 0; width: 100%; justify-content: center; }
-
-    /* Checkgroup wrap */
-    .checkgroup { gap: 6px; }
-
-    /* Section header */
-    .section-header { flex-direction: column; align-items: flex-start; gap: 10px; }
-
-    /* Sector row */
-    .sector-row { flex-wrap: wrap; }
-  }
-
-  /* Mobile bottom nav bar */
-  #mobileNav {
-    display: none;
-  }
-
-  @media (max-width: 768px) {
-    #mobileNav {
-      display: flex;
-      position: fixed;
-      bottom: 0; left: 0; right: 0;
-      background: var(--surface);
-      border-top: 1px solid var(--border);
-      z-index: 50;
-      padding: 8px 4px;
-      padding-bottom: calc(8px + env(safe-area-inset-bottom));
-      justify-content: space-around;
-    }
-
-    /* Add padding to content so bottom nav doesn't cover it */
-    .main { padding-bottom: 70px; }
-
-    #screen-portal { flex-direction: column; }
-  }
-
-  .mob-nav-btn {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 3px;
-    padding: 6px 10px;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 10px;
-    color: var(--text-muted);
-    background: none;
-    border: none;
-    font-family: inherit;
-    transition: color .15s, background .15s;
-    min-width: 52px;
-  }
-  .mob-nav-btn.active { color: var(--accent2); background: var(--accent-glow); }
-  .mob-nav-btn svg { width: 22px; height: 22px; }
-  .mob-nav-btn span { font-size: 10px; font-weight: 500; }
-
-  @media (max-width: 400px) {
-    .stats-grid { grid-template-columns: 1fr; }
-    .stat-card { padding: 12px; }
-  }
+body{
+  margin:0;
+  background:#0d1117;
+  color:#e6edf3;
+  font-family:Arial, sans-serif;
+}
+.header{
+  padding:22px 28px;
+  border-bottom:1px solid #26303b;
+}
+.header h1{margin:0;font-size:22px}
+.header p{margin:4px 0 0;color:#8b949e}
+.wrap{padding:28px}
+.box{
+  background:#161b22;
+  border:1px solid #26303b;
+  border-radius:12px;
+  padding:16px;
+  margin-bottom:18px;
+}
+.alert{
+  background:#2d1117;
+  border:1px solid #8b2c2c;
+  color:#ff8585;
+}
+.alert.ok{
+  background:#10281a;
+  border-color:#2ea043;
+  color:#54d36a;
+}
+button,select{
+  background:#0b1220;
+  color:#e6edf3;
+  border:1px solid #26303b;
+  border-radius:8px;
+  padding:10px 14px;
+  font-weight:bold;
+}
+button{
+  cursor:pointer;
+}
+button.primary{
+  background:#c0392b;
+  border-color:#c0392b;
+  color:white;
+}
+button:disabled{
+  opacity:.45;
+  cursor:not-allowed;
+}
+.toolbar{
+  display:flex;
+  gap:10px;
+  align-items:end;
+  flex-wrap:wrap;
+}
+label{
+  display:block;
+  color:#8b949e;
+  font-size:12px;
+  font-weight:bold;
+  margin-bottom:8px;
+}
+table{
+  width:100%;
+  border-collapse:collapse;
+  background:#161b22;
+  border-radius:12px;
+  overflow:hidden;
+}
+th{
+  background:#1d2633;
+  color:#8b949e;
+  text-align:left;
+  padding:13px;
+  font-size:12px;
+}
+td{
+  border-top:1px solid #26303b;
+  padding:13px;
+  font-size:13px;
+}
+.nome{
+  font-weight:bold;
+}
+.arquivo{
+  color:#8b949e;
+  font-size:12px;
+  margin-top:3px;
+}
+.badge{
+  padding:4px 10px;
+  border-radius:99px;
+  font-weight:bold;
+  font-size:12px;
+  white-space:nowrap;
+}
+.sucesso{background:#12351d;color:#54d36a}
+.erro{background:#3a1111;color:#ff8585}
+.executando{background:#3b2b0a;color:#f0b429}
+.aguardando{background:#222b35;color:#a6b0bb}
+.link{
+  background:transparent;
+  border:0;
+  color:#ff776d;
+}
+.progress{
+  height:10px;
+  background:#0b1220;
+  border-radius:999px;
+  overflow:hidden;
+}
+.bar{
+  height:100%;
+  width:0%;
+  background:#c0392b;
+  transition:width .25s;
+}
+.terminal{
+  background:#020617;
+  border:1px solid #26303b;
+  border-radius:12px;
+  padding:16px;
+  height:280px;
+  overflow:auto;
+  white-space:pre-wrap;
+  font-family:Consolas, monospace;
+  font-size:12px;
+  color:#cde3ff;
+}
+.table-wrap{
+  overflow-x:auto;
+}
+@media(max-width:900px){
+  .wrap{padding:14px}
+  table{min-width:900px}
+}
 </style>
-
 </head>
 <body>
 
-<!-- ═══════════ SCREEN: LOGIN ═══════════ -->
-<div id="screen-login" class="screen">
-  <div class="login-card">
-    <div class="login-logo" style="justify-content:center;">
-      <img src="data:image/png;base64,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" alt="Granja Brasília" style="height:44px;object-fit:contain;">
-    </div>
-    <div class="login-title">Bem-vindo ao Portal</div>
-    <div class="login-subtitle">Acesse os relatórios da Granja Brasília</div>
+<div class="header">
+  <h1>Central de Atualizações</h1>
+  <p>Atualização dos relatórios Power BI</p>
+</div>
 
-    <div class="login-error" id="loginError">E-mail ou senha incorretos. Tente novamente.</div>
+<div class="wrap">
 
-    <div class="field">
-      <label>E-mail corporativo</label>
-      <input type="email" id="loginEmail" placeholder="seu@empresa.com.br" autocomplete="off">
-    </div>
-    <div class="field">
-      <label>Senha</label>
-      <div style="position:relative">
-        <input type="password" id="loginPass" placeholder="••••••••" style="padding-right:42px">
-        <span onclick="toggleLoginPwd()" id="loginPwdEye"
-          style="position:absolute;right:13px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--text-muted);user-select:none;display:flex;align-items:center"
-          title="Mostrar/ocultar senha"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span>
-      </div>
-    </div>
-    <button class="btn-primary" onclick="handleLogin()">Entrar no Portal</button>
-
-    <div class="login-access-hint">
-      Ainda não tem acesso? Envie seu e-mail para<br>
-      <strong>asalvino@granjabrasilia.com.br</strong> para solicitar liberação.
-    </div>
-
-    <div class="login-footer">© 2026 Granja Brasília · Portal Interno de BI</div>
+  <div id="apiBox" class="box alert">
+    Verificando API...
   </div>
-</div>
 
-<!-- ═══════════ SCREEN: PENDING ═══════════ -->
-<div id="screen-pending" class="screen">
-  <div class="pending-card">
-    <div class="pending-icon">⏳</div>
-    <div class="pending-title">Aguardando liberação</div>
-    <div class="pending-sub">
-      Seu cadastro foi identificado, mas seu acesso ainda está pendente de aprovação pelo administrador.
-    </div>
-    <div class="pending-email" id="pendingEmail">-</div>
-    <br>
-    <div class="pending-sub">Você receberá um e-mail assim que seu acesso for liberado. Em caso de urgência, contate o setor de TI.</div>
-    <br>
-    <button class="btn-back" onclick="logout()">← Voltar</button>
-  </div>
-</div>
-
-<!-- ═══════════ SCREEN: PORTAL ═══════════ -->
-<div id="screen-portal" class="screen">
-
-  <!-- SIDEBAR -->
-  <nav class="sidebar">
-    <div class="sidebar-logo" style="justify-content:center;padding:14px 16px;">
-      <img src="data:image/png;base64,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" alt="Granja Brasília" style="height:30px;object-fit:contain;">
+  <div class="box toolbar">
+    <div>
+      <label>Período</label>
+      <select id="periodo">
+        <option value="hoje">Hoje</option>
+        <option value="2_dias">Últimos 2 dias</option>
+        <option value="5_dias" selected>Últimos 5 dias</option>
+        <option value="7_dias">Últimos 7 dias</option>
+      </select>
     </div>
 
-    <div class="sidebar-section">Navegação</div>
-    <div class="nav-item active" onclick="switchView('dashboard', this)">
-      <span class="nav-icon">🏠</span> Dashboard
-    </div>
-    <div class="nav-item" id="nav-reports" onclick="switchView('reports', this)">
-      <span class="nav-icon">📈</span> Relatórios
-    </div>
-    <div class="nav-item" onclick="switchView('changepass', this)">
-      <span class="nav-icon">🔑</span> Trocar Senha
-    </div>
+    <button class="primary" id="btnTudo">▶ Atualizar tudo Logística</button>
+    <button id="btnStatus">Atualizar status</button>
 
-    <div class="sidebar-section" id="adminSection" style="display:none">Administração</div>
-    <div class="nav-item" id="nav-users" style="display:none" onclick="switchView('users', this)">
-      <span class="nav-icon">👥</span> Usuários
-      <span class="nav-badge" id="pendingBadge">0</span>
-    </div>
-    <div class="nav-item" id="nav-access" style="display:none" onclick="switchView('access', this)">
-      <span class="nav-icon">🔐</span> Acessos
-    </div>
-    <div class="nav-item" id="nav-reportsmgr" style="display:none" onclick="switchView('reportsmgr', this)">
-      <span class="nav-icon">🗂</span> Gerir Relatórios
-    </div>
-    <div class="nav-item" id="nav-sectors" style="display:none" onclick="switchView('sectors', this)">
-      <span class="nav-icon">🏷</span> Setores
-    </div>
-    <div class="nav-item" id="nav-publish" style="display:none;color:#3fb950" onclick="publishData()">
-      <span class="nav-icon">🚀</span> Publicar Dados
-    </div>
-    <div class="nav-item" id="nav-resetdb" style="display:none;color:var(--red)" onclick="resetDB()">
-      <span class="nav-icon">🗑</span> Resetar Dados
-    </div>
-
-    <div class="sidebar-footer">
-      <div class="user-pill" id="userPill">
-        <div class="user-avatar" id="userAvatarSidebar">?</div>
-        <div class="user-info">
-          <div class="user-name" id="userNameSidebar">-</div>
-          <span class="user-role-badge" id="userRoleBadge">-</span>
-        </div>
-        <button class="btn-logout" onclick="logout()" title="Sair">⏻</button>
-      </div>
-    </div>
-  </nav>
-
-  <!-- MAIN -->
-  <main class="main">
-    <div class="topbar">
-      <div>
-        <div class="topbar-title" id="topbarTitle">Dashboard</div>
-        <div class="topbar-sub" id="topbarSub">Visão geral dos seus relatórios</div>
-      </div>
-      <div class="topbar-actions" id="topbarActions"></div>
-    </div>
-
-    <div class="content">
-
-      <!-- VIEW: DASHBOARD -->
-      <div class="view active" id="view-dashboard">
-        <div class="stats-grid" id="statsGrid"></div>
-
-        <div class="request-box" id="requestBox" style="display:none">
-          <div class="request-box-icon">💡</div>
-          <div>
-            <h4>Precisa de acesso a mais relatórios?</h4>
-            <p>Solicite ao administrador a liberação de novos setores.</p>
-          </div>
-          <button class="btn-sm" onclick="showToast('Solicitação enviada ao administrador!','success')">Solicitar acesso</button>
-        </div>
-
-        <div class="section-header">
-          <div class="section-title">Seus relatórios disponíveis</div>
-          <div class="section-count" id="dashReportCount"></div>
-        </div>
-        <div class="report-grid" id="dashReportGrid"></div>
-      </div>
-
-      <!-- VIEW: REPORTS (full) -->
-      <div class="view" id="view-reports">
-        <div class="tabs" id="reportTabs"></div>
-        <div class="report-grid" id="allReportGrid"></div>
-      </div>
-
-      <!-- VIEW: USERS (admin) -->
-      <div class="view" id="view-users">
-        <div class="tabs">
-          <div class="tab active" onclick="switchUserTab('pending', this)">Pendentes <span class="nav-badge" style="margin-left:6px;font-size:11px" id="pendingTabBadge">0</span></div>
-          <div class="tab" onclick="switchUserTab('all', this)">Todos os Usuários</div>
-        </div>
-        <div id="usersPendingView">
-          <div class="table-wrapper" id="pendingTable"></div>
-        </div>
-        <div id="usersAllView" style="display:none">
-          <div class="search-bar"><span class="search-icon">🔍</span><input type="text" placeholder="Buscar usuário..." oninput="filterUsers(this.value)"></div>
-          <div class="table-wrapper" id="allUsersTable"></div>
-        </div>
-      <!-- EDIT USER MODAL -->
-        <div class="modal-overlay" id="editUserOverlay" onclick="closeEditUser(event)">
-          <div class="modal" style="max-width:560px;height:auto;max-height:92vh;overflow-y:auto">
-            <div class="modal-header">
-              <span>✏️</span>
-              <span class="modal-title">Editar Usuário</span>
-              <button class="modal-close" onclick="closeEditUser()">✕</button>
-            </div>
-            <div style="padding:24px">
-              <input type="hidden" id="euId">
-
-              <!-- Avatar + nome -->
-              <div style="display:flex;align-items:center;gap:14px;margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid var(--border)">
-                <div id="euAvatar" style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#c0392b,#e67e22);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;flex-shrink:0"></div>
-                <div>
-                  <div id="euNameDisplay" style="font-size:17px;font-weight:700"></div>
-                  <div id="euEmailDisplay" style="font-size:12px;color:var(--text-muted);font-family:monospace;margin-top:2px"></div>
-                </div>
-              </div>
-
-              <div class="form-row">
-                <div class="form-group">
-                  <label>Nome completo</label>
-                  <input type="text" id="euName" placeholder="Nome do usuário">
-                </div>
-                <div class="form-group">
-                  <label>E-mail</label>
-                  <input type="email" id="euEmail" placeholder="email@granjabrasilia.com.br">
-                </div>
-              </div>
-
-              <div class="form-group">
-                <label>Perfil de acesso</label>
-                <select id="euRole" onchange="toggleEuSectors()">
-                  <option value="admin">Admin — acesso total ao sistema</option>
-                  <option value="director">Diretor — vê todos os relatórios</option>
-                  <option value="sector">Setor — acesso por área</option>
-                </select>
-              </div>
-
-              <div class="form-group" id="euSectorField">
-                <label>Setores permitidos <span style="font-size:11px;color:var(--text-muted)">(selecione um ou mais)</span></label>
-                <div class="checkgroup" id="euSectorCheckGroup"></div>
-                <div id="euSectorWarn" style="font-size:12px;color:var(--orange);margin-top:6px;display:none">⚠️ Selecione pelo menos um setor.</div>
-              </div>
-
-              <div class="form-group">
-                <label>Status</label>
-                <div style="display:flex;gap:10px;flex-wrap:wrap">
-                  <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
-                    <input type="radio" name="euStatus" value="active"> <span style="color:#3fb950">● Ativo</span>
-                  </label>
-                  <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
-                    <input type="radio" name="euStatus" value="pending"> <span style="color:#f0b429">● Pendente</span>
-                  </label>
-                  <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
-                    <input type="radio" name="euStatus" value="blocked"> <span style="color:#f85149">● Bloqueado</span>
-                  </label>
-                </div>
-              </div>
-
-              <div style="padding-top:16px;border-top:1px solid var(--border);margin-top:8px">
-                <label style="font-size:13px;color:var(--text-muted);font-weight:500">Redefinir senha (opcional)</label>
-                <div style="display:flex;gap:10px;margin-top:8px">
-                  <input type="text" id="euNewPwd" placeholder="Nova senha para este usuário" style="flex:1">
-                  <button class="btn-sm" onclick="document.getElementById('euNewPwd').value=generatePwd()" style="flex-shrink:0;white-space:nowrap">🎲 Gerar</button>
-                </div>
-                <div style="font-size:11px;color:var(--text-muted);margin-top:5px">Deixe em branco para manter a senha atual.</div>
-              </div>
-
-              <div style="display:flex;gap:10px;margin-top:24px;flex-wrap:wrap">
-                <button class="btn-sm accent" onclick="saveEditUser()" style="flex:1;justify-content:center;padding:11px">💾 Salvar Alterações</button>
-                <button class="btn-sm" onclick="closeEditUser()" style="padding:11px 20px">Cancelar</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- VIEW: ACCESS CONTROL -->
-      <div class="view" id="view-access">
-        <div class="section-header" style="margin-bottom:20px">
-          <div class="section-title">Convidar / Liberar Acesso</div>
-        </div>
-        <div class="form-panel">
-          <div class="form-title">Adicionar novo usuário</div>
-          <div class="form-row">
-            <div class="form-group"><label>Nome completo</label><input type="text" id="newUserName" placeholder="Maria da Silva"></div>
-            <div class="form-group"><label>E-mail</label><input type="email" id="newUserEmail" placeholder="maria@empresa.com.br"></div>
-          </div>
-          <div class="form-group">
-            <label>Perfil de acesso</label>
-            <select id="newUserRole" onchange="toggleSectorField()">
-              <option value="">Selecione...</option>
-              <option value="director">Diretor — acesso a todos os relatórios</option>
-              <option value="sector">Setor — acesso restrito por área</option>
-            </select>
-          </div>
-          <div class="form-group" id="sectorField" style="display:none">
-            <label>Setores permitidos <span style="font-size:11px;color:var(--text-muted)">(pode selecionar vários)</span></label>
-            <div class="checkgroup" id="sectorCheckGroup"></div>
-          </div>
-          <button class="btn-sm accent" onclick="addUser()" style="margin-top:4px">✔ Liberar Acesso</button>
-        </div>
-      </div>
-
-      <!-- VIEW: REPORTS MANAGER (admin) -->
-      <div class="view" id="view-reportsmgr">
-
-        <!-- FORM PANEL (add) -->
-        <div id="rFormPanel" style="display:none;margin-bottom:28px">
-          <div class="form-panel" style="max-width:680px">
-            <div class="form-title" id="rFormTitle">➕ Novo Relatório Power BI</div>
-            <div class="form-row">
-              <div class="form-group"><label>Título do Relatório *</label><input type="text" id="rTitle" placeholder="Ex: Logística — Entregas Diárias"></div>
-              <div class="form-group"><label>Setor *</label>
-                <select id="rSector">
-                  <option value="logistica">Logística</option>
-                  <option value="pcp">PCP</option>
-                  <option value="comercial">Comercial</option>
-                  <option value="financeiro">Financeiro</option>
-                  <option value="rh">RH</option>
-                  <option value="operacional">Operacional</option>
-                  <option value="ti">TI</option>
-                  <option value="marketing">Marketing</option>
-                  <option value="diretoria">Diretoria</option>
-                </select>
-              </div>
-            </div>
-            <div class="form-group"><label>Descrição</label><input type="text" id="rDesc" placeholder="Breve descrição do que o relatório mostra"></div>
-            <div class="form-group">
-              <label>URL de Incorporação (Embed) do Power BI *</label>
-              <input type="text" id="rUrl" placeholder="https://app.powerbi.com/reportEmbed?reportId=..." oninput="previewUrl()">
-              <div class="pbi-hint">
-                <strong>✅ URL correta (abre dentro do portal):</strong><br>
-                Acesse app.powerbi.com → abra o relatório → <strong>Arquivo → Publicar na Web → Criar código de inserção</strong><br>
-                Copie a URL que começa com <span style="color:#3fb950;font-family:monospace">https://app.powerbi.com/view?r=...</span>
-              </div>
-            </div>
-            <div id="urlPreviewBox" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:12px">
-              <span style="color:var(--text-muted)">Preview: </span>
-              <span id="urlPreviewText" style="color:#3fb950;font-family:monospace;word-break:break-all"></span>
-            </div>
-            <div style="display:flex;gap:10px;flex-wrap:wrap">
-              <button class="btn-sm accent" onclick="saveReport()">💾 Salvar Relatório</button>
-              <button class="btn-sm" onclick="cancelReportForm()">Cancelar</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- TABLE -->
-        <div class="section-header" style="margin-bottom:16px">
-          <div>
-            <div class="section-title">Relatórios cadastrados</div>
-            <div style="font-size:12px;color:var(--text-muted);margin-top:3px" id="rMgrCount"></div>
-          </div>
-          <button class="btn-sm accent" onclick="openAddReport()">＋ Novo Relatório</button>
-        </div>
-        <div class="table-wrapper" id="reportsMgrTable"></div>
-
-        <!-- EDIT MODAL -->
-        <div class="modal-overlay" id="editModalOverlay" onclick="closeEditModal(event)">
-          <div class="modal" style="max-width:660px;height:auto;max-height:90vh;overflow-y:auto">
-            <div class="modal-header">
-              <span>✏️</span>
-              <span class="modal-title">Editar Relatório</span>
-              <button class="modal-close" onclick="closeEditModal()">✕</button>
-            </div>
-            <div style="padding:24px">
-              <input type="hidden" id="eId">
-              <div class="form-row">
-                <div class="form-group"><label>Título *</label><input type="text" id="eTitle"></div>
-                <div class="form-group"><label>Setor *</label>
-                  <select id="eSector">
-                    <option value="logistica">Logística</option>
-                    <option value="pcp">PCP</option>
-                    <option value="comercial">Comercial</option>
-                    <option value="financeiro">Financeiro</option>
-                    <option value="rh">RH</option>
-                    <option value="operacional">Operacional</option>
-                    <option value="ti">TI</option>
-                    <option value="marketing">Marketing</option>
-                    <option value="diretoria">Diretoria</option>
-                  </select>
-                </div>
-              </div>
-              <div class="form-group"><label>Descrição</label><input type="text" id="eDesc"></div>
-              <div class="form-group">
-                <label>URL de Embed do Power BI *</label>
-                <input type="text" id="eUrl" placeholder="https://app.powerbi.com/reportEmbed?...">
-              </div>
-              <div class="pbi-hint" style="margin-top:8px;margin-bottom:16px">
-                <strong>✅ URL correta:</strong> app.powerbi.com → relatório → <strong>Arquivo → Publicar na Web → Criar código de inserção</strong><br>
-                Use a URL <span style="color:#3fb950;font-family:monospace">https://app.powerbi.com/view?r=...</span>
-              </div>
-              <div style="display:flex;gap:10px">
-                <button class="btn-sm accent" onclick="saveEditReport()">💾 Salvar Alterações</button>
-                <button class="btn-sm" onclick="closeEditModal()">Cancelar</button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      <!-- VIEW: SETORES -->
-      <div class="view" id="view-sectors">
-        <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
-
-          <!-- Add sector form -->
-          <div class="form-panel" style="min-width:280px;max-width:340px">
-            <div class="form-title">➕ Novo Setor</div>
-            <div class="form-group">
-              <label>Nome do Setor</label>
-              <input type="text" id="newSectorName" placeholder="Ex: Compras, Jurídico..." maxlength="30">
-            </div>
-            <div class="form-group">
-              <label>Cor de identificação</label>
-              <div style="display:flex;gap:8px;flex-wrap:wrap" id="colorPicker">
-                <label class="color-opt" style="--c:#58a6ff"><input type="radio" name="sectorColor" value="#58a6ff" checked><span></span></label>
-                <label class="color-opt" style="--c:#3fb950"><input type="radio" name="sectorColor" value="#3fb950"><span></span></label>
-                <label class="color-opt" style="--c:#f0b429"><input type="radio" name="sectorColor" value="#f0b429"><span></span></label>
-                <label class="color-opt" style="--c:#f85149"><input type="radio" name="sectorColor" value="#f85149"><span></span></label>
-                <label class="color-opt" style="--c:#a78bfa"><input type="radio" name="sectorColor" value="#a78bfa"><span></span></label>
-                <label class="color-opt" style="--c:#f472b6"><input type="radio" name="sectorColor" value="#f472b6"><span></span></label>
-                <label class="color-opt" style="--c:#34d399"><input type="radio" name="sectorColor" value="#34d399"><span></span></label>
-                <label class="color-opt" style="--c:#fb923c"><input type="radio" name="sectorColor" value="#fb923c"><span></span></label>
-                <label class="color-opt" style="--c:#e74c3c"><input type="radio" name="sectorColor" value="#e74c3c"><span></span></label>
-              </div>
-            </div>
-            <button class="btn-sm accent" onclick="addSector()" style="width:100%;justify-content:center">Criar Setor</button>
-          </div>
-
-          <!-- Sectors list -->
-          <div style="flex:1;min-width:280px">
-            <div class="section-header" style="margin-bottom:12px">
-              <div class="section-title">Setores cadastrados</div>
-              <div style="font-size:12px;color:var(--text-muted)" id="sectorsCount"></div>
-            </div>
-            <div id="sectorsList" style="display:flex;flex-direction:column;gap:8px"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- VIEW: TROCAR SENHA -->
-      <div class="view" id="view-changepass">
-        <div class="form-panel" style="max-width:440px">
-          <div class="form-title">🔑 Trocar Senha</div>
-          <p style="font-size:13px;color:var(--text-muted);margin-bottom:20px;line-height:1.6">
-            Defina uma nova senha para sua conta. Use no mínimo 6 caracteres.
-          </p>
-
-          <div class="form-group">
-            <label>Senha atual</label>
-            <div style="position:relative">
-              <input type="password" id="cpCurrent" placeholder="Digite sua senha atual" style="padding-right:40px">
-              <span onclick="togglePwd('cpCurrent',this)" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--text-muted);user-select:none;display:flex;align-items:center"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span>
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label>Nova senha</label>
-            <div style="position:relative">
-              <input type="password" id="cpNew" placeholder="Mínimo 6 caracteres" oninput="checkPwdStrength(this.value)" style="padding-right:40px">
-              <span onclick="togglePwd('cpNew',this)" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--text-muted);user-select:none;display:flex;align-items:center"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span>
-            </div>
-            <!-- Strength bar -->
-            <div style="margin-top:8px;display:flex;gap:4px;align-items:center">
-              <div style="flex:1;height:4px;border-radius:2px;background:var(--border);overflow:hidden">
-                <div id="pwdStrengthBar" style="height:100%;width:0%;background:var(--red);transition:width .3s,background .3s;border-radius:2px"></div>
-              </div>
-              <span id="pwdStrengthLabel" style="font-size:11px;color:var(--text-muted);width:60px;text-align:right"></span>
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label>Confirmar nova senha</label>
-            <div style="position:relative">
-              <input type="password" id="cpConfirm" placeholder="Repita a nova senha" style="padding-right:40px">
-              <span onclick="togglePwd('cpConfirm',this)" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--text-muted);user-select:none;display:flex;align-items:center"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span>
-            </div>
-            <div id="cpMatchMsg" style="font-size:12px;margin-top:6px;display:none"></div>
-          </div>
-
-          <div id="cpError" style="background:rgba(218,54,51,0.12);border:1px solid rgba(218,54,51,0.35);border-radius:var(--radius);padding:10px 14px;font-size:13px;color:#f85149;margin-bottom:14px;display:none"></div>
-          <div id="cpSuccess" style="background:rgba(46,160,67,0.12);border:1px solid rgba(46,160,67,0.35);border-radius:var(--radius);padding:10px 14px;font-size:13px;color:#3fb950;margin-bottom:14px;display:none">✅ Senha alterada com sucesso!</div>
-
-          <button class="btn-sm accent" onclick="changePassword()" style="width:100%;padding:12px;justify-content:center;font-size:14px">Salvar Nova Senha</button>
-
-          <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)">
-            <div style="font-size:12px;color:var(--text-dim)">
-              🔒 Sua senha é salva localmente no navegador.<br>
-              Dica: use letras, números e símbolos para uma senha mais forte.
-            </div>
-          </div>
-        </div>
-
-        <!-- Admin: resetar senha de outro usuário -->
-        <div id="adminResetPwd" style="display:none;margin-top:28px;max-width:440px">
-          <div class="form-panel">
-            <div class="form-title">⚙️ Redefinir Senha de Usuário</div>
-            <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">Como admin, você pode redefinir a senha de qualquer usuário.</p>
-            <div class="form-group">
-              <label>Usuário</label>
-              <select id="resetUserSelect"></select>
-            </div>
-            <div class="form-group">
-              <label>Nova senha</label>
-              <input type="text" id="resetNewPwd" placeholder="Nova senha para o usuário">
-            </div>
-            <button class="btn-sm accent" onclick="adminResetPassword()">🔄 Redefinir Senha</button>
-          </div>
-        </div>
-      </div>
-
-    </div><!-- /content -->
-  </main>
-</div>
-
-  <!-- MOBILE BOTTOM NAV -->
-  <nav id="mobileNav">
-    <button class="mob-nav-btn active" id="mnDash" onclick="switchView('dashboard', null); setMobNav('mnDash')">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
-      <span>Início</span>
-    </button>
-    <button class="mob-nav-btn" id="mnReports" onclick="switchView('reports', null); setMobNav('mnReports')">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-      <span>Relatórios</span>
-    </button>
-    <button class="mob-nav-btn" id="mnPwd" onclick="switchView('changepass', null); setMobNav('mnPwd')">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
-      <span>Senha</span>
-    </button>
-    <button class="mob-nav-btn" id="mnAdmin" style="display:none" onclick="switchView('users', null); setMobNav('mnAdmin')">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
-      <span>Admin</span>
-    </button>
-    <button class="mob-nav-btn" id="mnLogout" onclick="logout()">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
-      <span>Sair</span>
-    </button>
-  </nav>
-
-<!-- MODAL REPORT VIEWER -->
-<div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
-  <div class="modal">
-    <div class="modal-header">
-      <span>📊</span>
-      <span class="modal-title" id="modalTitle">-</span>
-      <a id="modalOpenBtn" href="#" target="_blank" class="btn-sm" style="margin-left:auto;margin-right:8px;font-size:12px;text-decoration:none">↗ Abrir no Power BI</a>
-      <button class="modal-close" onclick="closeModal()">✕</button>
-    </div>
-    <div class="modal-body" style="flex-direction:column;padding:0;position:relative;">
-      <!-- Loading state -->
-      <div id="iframeLoader" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg);z-index:2;gap:12px">
-        <div class="spinner"></div>
-        <div style="font-size:13px;color:var(--text-muted)">Carregando relatório...</div>
-      </div>
-      <!-- Error state -->
-      <div id="iframeError" style="position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;background:var(--bg);z-index:2;text-align:center;padding:32px">
-        <div style="font-size:48px;margin-bottom:16px">⚠️</div>
-        <h3 style="font-size:17px;margin-bottom:10px;color:var(--text)">Não foi possível carregar o relatório</h3>
-        <p style="font-size:13px;color:var(--text-muted);max-width:420px;line-height:1.7;margin-bottom:20px">
-          A URL configurada pode estar bloqueando a exibição em iframe.<br>
-          Certifique-se de usar a URL gerada por <strong>"Publicar na Web"</strong> no Power BI Service.
-        </p>
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 20px;text-align:left;max-width:480px;margin-bottom:20px;font-size:12px;color:var(--text-muted);line-height:1.8">
-          <strong style="color:var(--text)">Como gerar a URL correta:</strong><br>
-          1. Acesse <strong>app.powerbi.com</strong> e abra o relatório<br>
-          2. Clique em <strong>Arquivo → Publicar na Web</strong><br>
-          3. Clique em <strong>"Criar código de inserção"</strong><br>
-          4. Copie a URL que começa com <span style="color:#3fb950;font-family:monospace">https://app.powerbi.com/view?r=...</span><br>
-          5. Cole essa URL no campo do relatório no portal
-        </div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
-          <a id="errorOpenBtn" href="#" target="_blank" class="modal-open-btn">Abrir no Power BI ↗</a>
-          <button class="btn-sm" onclick="retryIframe()" style="padding:10px 22px">↺ Tentar novamente</button>
-        </div>
-      </div>
-      <!-- Iframe -->
-      <iframe id="reportIframe"
-        style="width:100%;height:100%;border:none;display:block;position:relative;z-index:1"
-        allowfullscreen="true"
-        allow="fullscreen"
-        sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-top-navigation">
-      </iframe>
+    <div id="execInfo" style="margin-left:auto;color:#8b949e;font-size:12px;">
+      Aguardando...
     </div>
   </div>
-</div>
 
-<!-- TOAST -->
-<div class="toast" id="toast"><span id="toastIcon">✓</span><span id="toastMsg"></span></div>
+  <div class="box">
+    <div style="display:flex;justify-content:space-between;margin-bottom:8px;color:#8b949e;font-size:12px;">
+      <span id="progressText">Nenhuma execução em andamento</span>
+      <span id="progressPct">0%</span>
+    </div>
+    <div class="progress">
+      <div id="progressBar" class="bar"></div>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Relatório</th>
+          <th>Status</th>
+          <th>Última atualização</th>
+          <th>Duração</th>
+          <th>Período / Dados</th>
+          <th>Arquivos</th>
+          <th>Ação</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+  <div class="box" style="margin-top:18px;">
+    <h3>Terminal</h3>
+    <div id="terminal" class="terminal">Aguardando...</div>
+  </div>
+
+  <div class="box">
+    <h3>Histórico</h3>
+    <div id="historico">Aguardando...</div>
+  </div>
+
+</div>
 
 <script>
-// ═══════════════════════════════════════
-// DATA STORE + LOCALSTORAGE
-// ═══════════════════════════════════════
-let SECTORS = ['logistica','pcp','comercial','financeiro','rh','operacional','ti','marketing','diretoria'];
+/*
+  IMPORTANTE:
+  Como o portal será aberto pelo GitHub,
+  a API precisa ficar fixa no computador que executa os robôs.
+*/
+const API = "http://192.168.1.193:5000";
 
-const DEFAULT_SECTORS = ['logistica','pcp','comercial','financeiro','rh','operacional','ti','marketing','diretoria'];
+let statusAtual = null;
 
-const SECTOR_LABELS = {
-  logistica:'Logística', pcp:'PCP', comercial:'Comercial', financeiro:'Financeiro',
-  rh:'RH', operacional:'Operacional', ti:'TI', marketing:'Marketing', diretoria:'Diretoria'
-};
+function badge(status){
+  const s = String(status || "Aguardando").toLowerCase();
 
-const DEFAULT_DB = {
-  sectors: [...DEFAULT_SECTORS],
-  users: [
-    { id:1, name:'Admin Sistema', email:'admin@granjabrasilia.com.br', pass:'admin123', role:'admin', sectors:[...DEFAULT_SECTORS], status:'active' },
-  ],
-  reports: []
-};
-
-// ── Persistência localStorage ──
-// ── Firestore persistence ──
-function saveDB() {
-  try { localStorage.setItem('granjabi_db', JSON.stringify(db)); } catch(e) {}
-}
-
-
-
-function syncSectors() {
-  if (db.sectors) SECTORS = [...db.sectors];
-}
-
-function saveSession(userId) {
-  try { localStorage.setItem('granjabi_session', String(userId)); } catch(e) {}
-}
-
-function loadSession() {
-  try { return localStorage.getItem('granjabi_session'); } catch(e) { return null; }
-}
-
-function clearSession() {
-  try { localStorage.removeItem('granjabi_session'); } catch(e) {}
-}
-
-// Carregar db do localStorage ou usar padrão
-let db = (function() {
-  try {
-    const saved = localStorage.getItem('granjabi_db');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (parsed && parsed.users) return parsed;
-    }
-  } catch(e) {}
-  return JSON.parse(JSON.stringify(DEFAULT_DB));
-})();
-if (!db.sectors || !db.sectors.length) db.sectors = [...DEFAULT_SECTORS];
-if (!db.sectorMeta) db.sectorMeta = {};
-syncSectors();
-
-let currentUser = null;
-
-// ── Auto-login se sessão salva ──
-function applyLoadedData(loaded) {
-  if (!loaded) return;
-  if (loaded.users      && loaded.users.length)   db.users      = loaded.users;
-  if (loaded.reports)                              db.reports    = loaded.reports;
-  if (loaded.sectors    && loaded.sectors.length)  db.sectors    = loaded.sectors;
-  if (loaded.sectorMeta)                           db.sectorMeta = loaded.sectorMeta;
-}
-
-function initApp() {
-  // 1. Carregar localStorage
-  try {
-    const saved = localStorage.getItem('granjabi_db');
-    if (saved) applyLoadedData(JSON.parse(saved));
-  } catch(e) {}
-
-  // 2. Garantir admin
-  if (!db.users.find(u => u.email === 'admin@granjabrasilia.com.br')) {
-    db.users.unshift({ id:1, name:'Admin Sistema', email:'admin@granjabrasilia.com.br',
-      pass:'admin123', role:'admin', sectors:[...DEFAULT_SECTORS], status:'active' });
-    try { localStorage.setItem('granjabi_db', JSON.stringify(db)); } catch(e) {}
-  }
-  if (!db.sectors || db.sectors.length === 0) db.sectors = [...DEFAULT_SECTORS];
-  syncSectors();
-
-  // 3. Mostrar tela IMEDIATAMENTE
-  const uid = loadSession();
-  if (uid) {
-    const user = db.users.find(u => String(u.id) === uid && u.status === 'active');
-    if (user) {
-      currentUser = user;
-      initPortal();
-      showScreen('portal');
-    } else {
-      clearSession();
-      showScreen('login');
-    }
-  } else {
-    showScreen('login');
+  if(s.includes("sucesso")){
+    return '<span class="badge sucesso">● Sucesso</span>';
   }
 
-  // 4. Tentar carregar data.json em segundo plano (sem bloquear)
-  setTimeout(() => {
-    loadRemoteData().then(remote => {
-      if (!remote || !remote.users || !remote.users.length) return;
-      applyLoadedData(remote);
-      syncSectors();
-      try { localStorage.setItem('granjabi_db', JSON.stringify(db)); } catch(e) {}
-      if (currentUser) {
-        const updated = db.users.find(u => u.id === currentUser.id);
-        if (updated) currentUser = updated;
-        initPortal();
-      }
-    }).catch(() => {});
-  }, 500);
-}
-
-
-window.addEventListener('DOMContentLoaded', () => {
-  initApp();
-});
-
-// ═══════════════════════════════════════
-// AUTH
-// ═══════════════════════════════════════
-const SVG_EYE_ON_LG = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
-const SVG_EYE_OFF_LG = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
-const SVG_EYE_ON_SM = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
-const SVG_EYE_OFF_SM = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
-
-function toggleLoginPwd() {
-  const input = document.getElementById('loginPass');
-  const icon  = document.getElementById('loginPwdEye');
-  if (input.type === 'password') {
-    input.type = 'text';
-    icon.innerHTML = SVG_EYE_OFF_LG;
-  } else {
-    input.type = 'password';
-    icon.innerHTML = SVG_EYE_ON_LG;
-  }
-}
-
-function handleLogin() {
-  const email = document.getElementById('loginEmail').value.trim().toLowerCase();
-  const pass  = document.getElementById('loginPass').value;
-  const err   = document.getElementById('loginError');
-
-  const user = db.users.find(u => u.email.toLowerCase() === email && u.pass === pass);
-
-  if (!user) { err.style.display = 'block'; return; }
-  err.style.display = 'none';
-
-  if (user.status === 'pending') {
-    document.getElementById('pendingEmail').textContent = user.email;
-    showScreen('pending');
-    return;
-  }
-  if (user.status === 'blocked') {
-    err.style.display = 'block';
-    err.textContent = 'Seu acesso foi bloqueado. Entre em contato com o administrador.';
-    return;
+  if(s.includes("erro")){
+    return '<span class="badge erro">● Erro</span>';
   }
 
-  currentUser = user;
-  saveSession(user.id);
-  initPortal();
-  showScreen('portal');
+  if(s.includes("executando")){
+    return '<span class="badge executando">● Executando</span>';
+  }
+
+  return '<span class="badge aguardando">● Aguardando</span>';
 }
 
-function logout() {
-  currentUser = null;
-  clearSession();
-  document.getElementById('loginEmail').value = '';
-  document.getElementById('loginPass').value = '';
-  showScreen('login');
-}
-
-function showScreen(id) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.getElementById('screen-'+id).classList.add('active');
-}
-
-// ═══════════════════════════════════════
-// PORTAL INIT
-// ═══════════════════════════════════════
-function initPortal() {
-  const u = currentUser;
-  // Sidebar user
-  document.getElementById('userAvatarSidebar').textContent = u.name[0].toUpperCase();
-  document.getElementById('userNameSidebar').textContent = u.name.split(' ')[0];
-  const badge = document.getElementById('userRoleBadge');
-  if (u.role === 'admin')     { badge.textContent = 'Admin';    badge.className = 'user-role-badge role-admin'; }
-  if (u.role === 'director')  { badge.textContent = 'Diretor';  badge.className = 'user-role-badge role-director'; }
-  if (u.role === 'sector')    { badge.textContent = 'Setor';    badge.className = 'user-role-badge role-sector'; }
-
-  // Admin nav — somente role 'admin' vê o painel de administração
-  const isAdmin = (u.role === 'admin');
-  document.getElementById('adminSection').style.display = isAdmin ? 'block' : 'none';
-  ['nav-users','nav-access','nav-reportsmgr','nav-sectors','nav-publish','nav-resetdb'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.display = isAdmin ? 'flex' : 'none';
+async function chamarApi(caminho, opcoes={}){
+  const resp = await fetch(API + caminho, {
+    headers: {"Content-Type":"application/json"},
+    ...opcoes
   });
-  // Se for admin, garantir que as views admin estão acessíveis (remover display:none inline)
-  if (isAdmin) {
-    const adminViews = ['view-users','view-access','view-reportsmgr','view-sectors'];
-    adminViews.forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.style.removeProperty('display');
+
+  if(!resp.ok){
+    throw new Error(await resp.text());
+  }
+
+  return await resp.json();
+}
+
+async function carregarStatus(){
+  try{
+    const data = await chamarApi("/api/status");
+    statusAtual = data;
+
+    const apiBox = document.getElementById("apiBox");
+    apiBox.className = "box alert ok";
+    apiBox.innerHTML = "● API conectada — " + API;
+
+    desenhar(data);
+
+  }catch(e){
+    const apiBox = document.getElementById("apiBox");
+    apiBox.className = "box alert";
+    apiBox.innerHTML = "✖ API desconectada — " + API + "<br><small>Verifique se a API está aberta no computador 192.168.1.193.</small>";
+  }
+}
+
+async function carregarLogs(){
+  try{
+    const data = await chamarApi("/api/logs");
+    const terminal = document.getElementById("terminal");
+    terminal.textContent = data.logs || "Aguardando...";
+    terminal.scrollTop = terminal.scrollHeight;
+  }catch(e){
+    document.getElementById("terminal").textContent = "Não foi possível carregar logs. Verifique se a API está conectada.";
+  }
+}
+
+function desenhar(data){
+  const exec = data.execucao || {};
+  const relatorios = Object.values(data.relatorios || {});
+  const tbody = document.getElementById("tbody");
+
+  tbody.innerHTML = "";
+
+  relatorios.forEach(r => {
+    const tr = document.createElement("tr");
+
+    tr.innerHTML = `
+      <td>
+        <div class="nome">${r.nome}</div>
+        <div class="arquivo">${(r.arquivo || "").split("\\").pop()}</div>
+        ${r.erro ? `<div class="arquivo" style="color:#ff8585;">Erro: ${r.erro}</div>` : ""}
+      </td>
+      <td>${badge(r.status)}</td>
+      <td>${r.ultima || "—"}</td>
+      <td>${r.duracao || "—"}</td>
+      <td>
+        ${r.periodo || "—"}
+        ${r.ultima_data_arquivo ? `<div class="arquivo">Última data: ${r.ultima_data_arquivo}</div>` : ""}
+      </td>
+      <td>${r.total_arquivos || 0}</td>
+      <td><button class="link" data-id="${r.id}">Atualizar</button></td>
+    `;
+
+    tbody.appendChild(tr);
+  });
+
+  document.querySelectorAll("button[data-id]").forEach(btn => {
+    btn.addEventListener("click", () => atualizarRelatorio(btn.dataset.id));
+  });
+
+  const rodando = exec.status === "executando";
+  const concluidos = exec.concluidos || [];
+  const total = relatorios.length || 1;
+  const pct = rodando ? Math.round((concluidos.length / total) * 100) : 0;
+
+  document.getElementById("progressBar").style.width = pct + "%";
+  document.getElementById("progressPct").textContent = pct + "%";
+
+  document.getElementById("progressText").textContent =
+    rodando
+      ? "Executando: " + (exec.etapa_atual || "")
+      : exec.status === "erro"
+        ? "Erro: " + (exec.erro || "")
+        : "Nenhuma execução em andamento";
+
+  document.getElementById("execInfo").textContent =
+    "Status: " + (exec.status || "aguardando");
+
+  document.getElementById("btnTudo").disabled = rodando;
+
+  desenharHistorico(data.historico || []);
+}
+
+function desenharHistorico(lista){
+  const div = document.getElementById("historico");
+
+  if(!lista.length){
+    div.innerHTML = '<div style="color:#8b949e;font-size:13px;">Nenhum histórico ainda.</div>';
+    return;
+  }
+
+  div.innerHTML = lista.slice(0,15).map(h => `
+    <div style="border-top:1px solid #26303b;padding:10px 0;color:#8b949e;font-size:13px;">
+      <b>${h.status === "Sucesso" ? "✅" : "❌"} ${h.data}</b>
+      — ${h.nome}
+      — ${h.duracao || ""}
+      ${h.erro ? `<br><span style="color:#ff8585;">${h.erro}</span>` : ""}
+    </div>
+  `).join("");
+}
+
+async function atualizarTudo(){
+  const periodo = document.getElementById("periodo").value;
+
+  if(!confirm("Atualizar tudo Logística?")){
+    return;
+  }
+
+  try{
+    await chamarApi("/api/executar/logistica", {
+      method:"POST",
+      body:JSON.stringify({periodo})
     });
+
+    carregarStatus();
+  }catch(e){
+    alert("Erro: " + e.message);
   }
-
-  // Sector checkboxes
-  const cg = document.getElementById('sectorCheckGroup');
-  cg.innerHTML = SECTORS.map(s => `
-    <label class="check-item" onclick="toggleCheck(this)">
-      <input type="checkbox" value="${s}" style="display:none"> ${sectorLabel(s)}
-    </label>`).join('');
-
-  syncSectors();
-  updatePendingBadge();
-  renderDashboard();
-  renderReportTabs();
-  if (isAdmin) {
-    renderUsersTable();
-    renderReportsMgr();
-    rebuildSectorSelects();
-    rebuildSectorCheckboxes();
-  }
-
-  // SEMPRE começar no Dashboard
-  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-  document.getElementById('view-dashboard').classList.add('active');
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  const navDash = document.querySelector('.nav-item[onclick*="dashboard"]');
-  if (navDash) navDash.classList.add('active');
-  document.getElementById('topbarTitle').textContent = 'Dashboard';
-  document.getElementById('topbarSub').textContent = 'Visão geral dos seus relatórios';
-
-  // Mobile nav admin button
-  showMobileAdminBtn(isAdmin);
-  setMobNav('mnDash');
 }
 
-function getUserReports() {
-  const u = currentUser;
-  if (u.role === 'admin' || u.role === 'director') return db.reports;
-  return db.reports.filter(r => u.sectors.includes(r.sector));
-}
+async function atualizarRelatorio(id){
+  const periodo = document.getElementById("periodo").value;
+  const nome = statusAtual?.relatorios?.[id]?.nome || id;
 
-// ═══════════════════════════════════════
-// DASHBOARD
-// ═══════════════════════════════════════
-function renderDashboard() {
-  const reps = getUserReports();
-  const u = currentUser;
-
-  // Stats
-  const sectors = [...new Set(reps.map(r => r.sector))];
-  const statsGrid = document.getElementById('statsGrid');
-  const isAdminDir = u.role === 'admin' || u.role === 'director';
-  const pending = db.users.filter(x => x.status === 'pending').length;
-
-  statsGrid.innerHTML = `
-    <div class="stat-card">
-      <div class="stat-label">Relatórios disponíveis</div>
-      <div class="stat-value" style="color:var(--accent2)">${reps.length}</div>
-      <div class="stat-delta delta-up">↑ acesso liberado</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Setores acessíveis</div>
-      <div class="stat-value">${sectors.length}</div>
-      <div class="stat-delta" style="color:var(--text-muted)">de ${SECTORS.length} setores</div>
-    </div>
-    ${isAdminDir ? `
-    <div class="stat-card">
-      <div class="stat-label">Total de usuários</div>
-      <div class="stat-value" style="color:var(--green)">${db.users.filter(x=>x.status==='active').length}</div>
-      <div class="stat-delta delta-up">ativos no portal</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Acessos pendentes</div>
-      <div class="stat-value" style="color:${pending>0?'var(--orange)':'var(--green)'}">${pending}</div>
-      <div class="stat-delta ${pending>0?'delta-down':'delta-up'}">${pending>0?'aguardando aprovação':'nenhum pendente'}</div>
-    </div>` : `
-    <div class="stat-card">
-      <div class="stat-label">Última atualização</div>
-      <div class="stat-value" style="font-size:20px;margin-top:4px">Jun 2026</div>
-      <div class="stat-delta delta-up">↑ dados atualizados</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Seu perfil</div>
-      <div class="stat-value" style="font-size:18px;margin-top:4px">${u.role==='director'?'Diretor':'Setor'}</div>
-      <div class="stat-delta" style="color:var(--text-muted)">${u.sectors.map(sectorLabel).join(', ')}</div>
-    </div>`}`;
-
-  // Request box
-  document.getElementById('requestBox').style.display = (u.role === 'sector') ? 'flex' : 'none';
-
-  // Report grid
-  document.getElementById('dashReportCount').textContent = `${reps.length} relatório${reps.length!==1?'s':''}`;
-  document.getElementById('dashReportGrid').innerHTML = reps.slice(0, 8).map(r => reportCard(r)).join('');
-}
-
-// ═══════════════════════════════════════
-// REPORTS VIEW
-// ═══════════════════════════════════════
-let activeSectorTab = 'all';
-function renderReportTabs() {
-  const reps = getUserReports();
-  const sectors = [...new Set(reps.map(r => r.sector))];
-  const tabs = document.getElementById('reportTabs');
-  tabs.innerHTML = `<div class="tab active" onclick="filterReportTab('all',this)">Todos</div>` +
-    sectors.map(s => `<div class="tab" onclick="filterReportTab('${s}',this)">${sectorLabel(s)}</div>`).join('');
-  filterReportTab('all', tabs.firstChild);
-}
-
-function filterReportTab(sector, el) {
-  activeSectorTab = sector;
-  document.querySelectorAll('#reportTabs .tab').forEach(t => t.classList.remove('active'));
-  el.classList.add('active');
-  const reps = getUserReports();
-  const filtered = sector === 'all' ? reps : reps.filter(r => r.sector === sector);
-  document.getElementById('allReportGrid').innerHTML = filtered.map(r => reportCard(r)).join('');
-}
-
-function reportCard(r) {
-  return `<div class="report-card">
-    <div class="report-sector-tag tag-${r.sector}">${sectorLabel(r.sector)}</div>
-    <div class="report-title">${r.title}</div>
-    <div class="report-desc">${r.desc}</div>
-    <div class="report-meta">
-      <span>📅 ${r.updatedAt}</span>
-    </div>
-    <button class="btn-open" onclick="openReport(${r.id})">🔗 Abrir Relatório</button>
-  </div>`;
-}
-
-let currentReportUrl = '';
-function openReport(id) {
-  const r = db.reports.find(x => x.id === id);
-  if (!r) return;
-  currentReportUrl = r.url || '';
-  document.getElementById('modalTitle').textContent = r.title;
-  document.getElementById('modalOpenBtn').href = currentReportUrl;
-  document.getElementById('errorOpenBtn').href = currentReportUrl;
-
-  // Reset states
-  document.getElementById('iframeLoader').style.display = 'flex';
-  document.getElementById('iframeError').style.display = 'none';
-  const iframe = document.getElementById('reportIframe');
-  iframe.src = '';
-
-  document.getElementById('modalOverlay').classList.add('open');
-
-  if (!currentReportUrl) {
-    document.getElementById('iframeLoader').style.display = 'none';
-    document.getElementById('iframeError').style.display = 'flex';
+  if(!confirm("Atualizar " + nome + "?")){
     return;
   }
 
-  // Load iframe
-  setTimeout(() => {
-    iframe.src = currentReportUrl;
-    iframe.onload = () => {
-      document.getElementById('iframeLoader').style.display = 'none';
-      // Try to detect block (won't always work due to cross-origin)
-      try {
-        const doc = iframe.contentDocument || iframe.contentWindow.document;
-        if (!doc || doc.body.innerHTML === '') throw new Error('blocked');
-      } catch(e) {
-        // Cross-origin means it loaded (can't read content = different origin = OK usually)
-        document.getElementById('iframeLoader').style.display = 'none';
-      }
-    };
-    iframe.onerror = () => {
-      document.getElementById('iframeLoader').style.display = 'none';
-      document.getElementById('iframeError').style.display = 'flex';
-    };
-    // Timeout fallback - if 12s and still loading, hide spinner anyway
-    setTimeout(() => {
-      if (document.getElementById('iframeLoader').style.display !== 'none') {
-        document.getElementById('iframeLoader').style.display = 'none';
-      }
-    }, 12000);
-  }, 300);
-}
+  try{
+    await chamarApi("/api/executar/relatorio", {
+      method:"POST",
+      body:JSON.stringify({id, periodo})
+    });
 
-function retryIframe() {
-  document.getElementById('iframeError').style.display = 'none';
-  document.getElementById('iframeLoader').style.display = 'flex';
-  const iframe = document.getElementById('reportIframe');
-  iframe.src = '';
-  setTimeout(() => { iframe.src = currentReportUrl; }, 300);
-  setTimeout(() => {
-    document.getElementById('iframeLoader').style.display = 'none';
-  }, 10000);
-}
-
-function closeModal(e) {
-  if (!e || e.target === document.getElementById('modalOverlay') || e === undefined) {
-    document.getElementById('modalOverlay').classList.remove('open');
+    carregarStatus();
+  }catch(e){
+    alert("Erro: " + e.message);
   }
 }
 
-// ═══════════════════════════════════════
-// USERS
-// ═══════════════════════════════════════
-function renderUsersTable() {
-  if (!currentUser || currentUser.role !== 'admin') return;
-  updatePendingBadge();
-  renderPendingTable();
-  renderAllUsersTable();
-}
-
-function updatePendingBadge() {
-  const n = db.users.filter(u => u.status === 'pending').length;
-  document.getElementById('pendingBadge').textContent = n;
-  document.getElementById('pendingTabBadge').textContent = n;
-}
-
-function renderPendingTable() {
-  const pending = db.users.filter(u => u.status === 'pending');
-  const el = document.getElementById('pendingTable');
-  if (pending.length === 0) {
-    el.innerHTML = `<div class="empty-state"><div class="empty-icon">✅</div><h3>Nenhum acesso pendente</h3><p>Todos os usuários foram revisados.</p></div>`;
-    return;
-  }
-  el.innerHTML = `<table><thead><tr>
-    <th>Nome</th><th>E-mail</th><th>Cadastro</th><th>Ações</th>
-  </tr></thead><tbody>${pending.map(u => `<tr>
-    <td><strong>${u.name}</strong></td>
-    <td style="font-family:'JetBrains Mono',monospace;font-size:12px">${u.email}</td>
-    <td><span class="status-badge status-pending"><span class="status-dot"></span>Pendente</span></td>
-    <td>
-      <button class="action-btn approve" onclick="approveUser(${u.id})">✔ Aprovar</button>
-      <button class="action-btn edit" onclick="configUser(${u.id})">⚙ Configurar</button>
-      <button class="action-btn block" onclick="blockUser(${u.id})">✕ Rejeitar</button>
-    </td>
-  </tr>`).join('')}</tbody></table>`;
-}
-
-let userFilter = '';
-function filterUsers(v) { userFilter = v.toLowerCase(); renderAllUsersTable(); }
-
-function renderAllUsersTable() {
-  const users = db.users.filter(u => !userFilter || u.name.toLowerCase().includes(userFilter) || u.email.toLowerCase().includes(userFilter));
-  const el = document.getElementById('allUsersTable');
-  if (users.length === 0) {
-    el.innerHTML = '<div class="empty-state"><div class="empty-icon">👥</div><h3>Nenhum usuário encontrado</h3><p>Tente outro termo de busca.</p></div>';
-    return;
-  }
-  el.innerHTML = `<table><thead><tr>
-    <th>Usuário</th><th>Perfil</th><th>Setores</th><th>Status</th><th style="text-align:center">Ações</th>
-  </tr></thead><tbody>${users.map(u => `<tr>
-    <td>
-      <div style="display:flex;align-items:center;gap:10px">
-        <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#c0392b,#e67e22);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0">${u.name[0].toUpperCase()}</div>
-        <div>
-          <div style="font-weight:600;font-size:13px">${u.name}</div>
-          <div style="font-size:11px;color:var(--text-muted);font-family:monospace">${u.email}</div>
-        </div>
-      </div>
-    </td>
-    <td>${roleLabel(u.role)}</td>
-    <td style="font-size:12px;color:var(--text-muted);max-width:180px">
-      ${u.role==='sector'
-        ? (u.sectors && u.sectors.length
-            ? u.sectors.map(s => `<span class="report-sector-tag" style="margin:2px;font-size:10px;${sectorTagStyle(s)}">${sectorLabel(s)}</span>`).join('')
-            : '<span style="color:var(--red);font-size:11px">Nenhum setor</span>')
-        : '<span style="color:var(--text-dim);font-size:11px">Todos</span>'}
-    </td>
-    <td>${statusBadge(u.status)}</td>
-    <td style="text-align:center;white-space:nowrap">
-      <button class="action-btn edit" onclick="openEditUser(${u.id})">✏ Editar</button>
-      ${u.status==='pending'?`<button class="action-btn approve" onclick="approveUser(${u.id})">✔ Aprovar</button>`:''}
-      ${u.status==='active' && u.role!=='admin'?`<button class="action-btn block" onclick="blockUser(${u.id})">✕ Bloquear</button>`:''}
-      ${u.status==='blocked'?`<button class="action-btn approve" onclick="unblockUser(${u.id})">↩ Reativar</button>`:''}
-    </td>
-  </tr>`).join('')}</tbody></table>`;
-}
-
-function approveUser(id) {
-  const u = db.users.find(x => x.id === id);
-  if (!u) return;
-  if (u.sectors.length === 0 && u.role !== 'director') {
-    showToast('Configure os setores antes de aprovar!', 'error');
-    switchView('access', document.querySelector('#nav-access'));
-    return;
-  }
-  u.status = 'active';
-  saveDB();
-  renderUsersTable();
-  showToast(`Acesso liberado para ${u.name}!`, 'success');
-}
-
-function blockUser(id) {
-  const u = db.users.find(x => x.id === id);
-  if (!u) return;
-  u.status = 'blocked';
-  saveDB();
-  renderUsersTable();
-  showToast(`Acesso de ${u.name} bloqueado.`, 'error');
-}
-
-function unblockUser(id) {
-  const u = db.users.find(x => x.id === id);
-  if (!u) return;
-  u.status = 'active';
-  saveDB();
-  renderUsersTable();
-  showToast(`Acesso de ${u.name} reativado!`, 'success');
-}
-
-function configUser(id) {
-  switchView('access', document.getElementById('nav-access'));
-  showToast('Configure os dados e clique em Liberar Acesso.', 'success');
-}
-
-// ═══════════════════════════════════════
-// ACCESS CONTROL
-// ═══════════════════════════════════════
-function toggleSectorField() {
-  const role = document.getElementById('newUserRole').value;
-  // Show sector selection for 'sector' role; directors get all automatically
-  document.getElementById('sectorField').style.display = (role === 'sector') ? 'block' : 'none';
-}
-
-function toggleCheck(el) {
-  el.classList.toggle('checked');
-  el.querySelector('input').checked = el.classList.contains('checked');
-}
-
-function addUser() {
-  const name  = document.getElementById('newUserName').value.trim();
-  const email = document.getElementById('newUserEmail').value.trim();
-  const role  = document.getElementById('newUserRole').value;
-
-  if (!name || !email || !role) { showToast('Preencha todos os campos!', 'error'); return; }
-
-  const sectors = (role === 'sector')
-    ? [...document.querySelectorAll('#sectorCheckGroup input:checked')].map(i => i.value)
-    : SECTORS;
-
-  if (role === 'sector' && sectors.length === 0) { showToast('Selecione pelo menos um setor para liberar.', 'error'); return; }
-
-  const existing = db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
-  if (existing) {
-    existing.status = 'active';
-    existing.role = role;
-    existing.sectors = sectors;
-    saveDB();
-    showToast(`Acesso de ${name} atualizado!`, 'success');
-  } else {
-    db.users.push({ id: Date.now(), name, email, pass: 'temp123', role, sectors, status: 'active' });
-    saveDB();
-    showToast(`Usuário ${name} adicionado com sucesso!`, 'success');
-  }
-
-  document.getElementById('newUserName').value = '';
-  document.getElementById('newUserEmail').value = '';
-  document.getElementById('newUserRole').value = '';
-  document.getElementById('sectorField').style.display = 'none';
-  document.querySelectorAll('#sectorCheckGroup .check-item').forEach(el => el.classList.remove('checked'));
-  renderUsersTable();
-}
-
-// ═══════════════════════════════════════
-// REPORTS MANAGER
-// ═══════════════════════════════════════
-function renderReportsMgr() {
-  const el = document.getElementById('reportsMgrTable');
-  const count = document.getElementById('rMgrCount');
-  if (count) count.textContent = db.reports.length + ' relatório' + (db.reports.length !== 1 ? 's' : '') + ' cadastrado' + (db.reports.length !== 1 ? 's' : '');
-  if (db.reports.length === 0) {
-    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📊</div><h3>Nenhum relatório cadastrado</h3><p>Clique em "Novo Relatório" para adicionar.</p></div>';
-    return;
-  }
-  el.innerHTML = `<table><thead><tr>
-    <th>Título / Descrição</th><th>Setor</th><th>URL Power BI</th><th>Atualizado</th><th style="text-align:center">Ações</th>
-  </tr></thead><tbody>${db.reports.map(r => `<tr>
-    <td>
-      <strong>${r.title}</strong>
-      ${r.desc ? `<br><span style="font-size:12px;color:var(--text-muted)">${r.desc}</span>` : ''}
-    </td>
-    <td><span class="report-sector-tag" style="margin:0;${sectorTagStyle(r.sector)}">${sectorLabel(r.sector)}</span></td>
-    <td style="max-width:200px">
-      ${r.url ? `<span style="font-size:11px;font-family:monospace;color:var(--text-muted);word-break:break-all;display:block;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.url}">${r.url}</span>` : '<span style="font-size:11px;color:var(--red)">Não configurada</span>'}
-    </td>
-    <td style="color:var(--text-muted);font-size:12px;white-space:nowrap">${r.updatedAt}</td>
-    <td style="text-align:center;white-space:nowrap">
-      <button class="action-btn edit" onclick="openEditReport(${r.id})">✏ Editar</button>
-      <button class="action-btn approve" onclick="testReport(${r.id})" title="Testar abertura">👁 Testar</button>
-      <button class="action-btn block" onclick="confirmRemoveReport(${r.id})">✕ Excluir</button>
-    </td>
-  </tr>`).join('')}</tbody></table>`;
-}
-
-function openAddReport() {
-  document.getElementById('rFormTitle').textContent = '➕ Novo Relatório Power BI';
-  document.getElementById('rTitle').value = '';
-  document.getElementById('rDesc').value = '';
-  document.getElementById('rUrl').value = '';
-  document.getElementById('rSector').value = 'logistica';
-  document.getElementById('urlPreviewBox').style.display = 'none';
-  document.getElementById('rFormPanel').style.display = 'block';
-  document.getElementById('rFormPanel').scrollIntoView({behavior:'smooth'});
-}
-
-function cancelReportForm() {
-  document.getElementById('rFormPanel').style.display = 'none';
-}
-
-function previewUrl() {
-  const url = document.getElementById('rUrl').value.trim();
-  const box = document.getElementById('urlPreviewBox');
-  if (url.length > 10) {
-    document.getElementById('urlPreviewText').textContent = url;
-    box.style.display = 'block';
-  } else {
-    box.style.display = 'none';
-  }
-}
-
-function saveReport() {
-  const title  = document.getElementById('rTitle').value.trim();
-  const desc   = document.getElementById('rDesc').value.trim();
-  const url    = document.getElementById('rUrl').value.trim();
-  const sector = document.getElementById('rSector').value;
-  if (!title) { showToast('Informe o título do relatório!', 'error'); return; }
-  if (!url)   { showToast('Informe a URL de embed do Power BI!', 'error'); return; }
-  const now = new Date();
-  const updatedAt = now.toLocaleDateString('pt-BR', {month:'short', year:'numeric'});
-  db.reports.push({ id: Date.now(), title, desc, sector, url, updatedAt });
-  saveDB();
-  document.getElementById('rFormPanel').style.display = 'none';
-  renderReportsMgr();
-  renderDashboard();
-  renderReportTabs();
-  showToast('✅ Relatório "' + title + '" adicionado!', 'success');
-}
-
-function openEditReport(id) {
-  const r = db.reports.find(x => x.id === id);
-  if (!r) return;
-  document.getElementById('eId').value = r.id;
-  document.getElementById('eTitle').value = r.title;
-  document.getElementById('eDesc').value = r.desc || '';
-  document.getElementById('eUrl').value = r.url || '';
-  document.getElementById('eSector').value = r.sector;
-  document.getElementById('editModalOverlay').classList.add('open');
-}
-
-function saveEditReport() {
-  const id     = parseInt(document.getElementById('eId').value);
-  const title  = document.getElementById('eTitle').value.trim();
-  const desc   = document.getElementById('eDesc').value.trim();
-  const url    = document.getElementById('eUrl').value.trim();
-  const sector = document.getElementById('eSector').value;
-  if (!title) { showToast('Informe o título!', 'error'); return; }
-  if (!url)   { showToast('Informe a URL de embed!', 'error'); return; }
-  const r = db.reports.find(x => x.id === id);
-  if (!r) return;
-  const now = new Date();
-  r.title = title; r.desc = desc; r.url = url; r.sector = sector;
-  r.updatedAt = now.toLocaleDateString('pt-BR', {month:'short', year:'numeric'});
-  saveDB();
-  closeEditModal();
-  renderReportsMgr();
-  renderDashboard();
-  renderReportTabs();
-  showToast('✅ Relatório atualizado!', 'success');
-}
-
-function closeEditModal(e) {
-  if (!e || e.target === document.getElementById('editModalOverlay')) {
-    document.getElementById('editModalOverlay').classList.remove('open');
-  }
-}
-
-function testReport(id) {
-  const r = db.reports.find(x => x.id === id);
-  if (!r || !r.url) { showToast('URL não configurada!', 'error'); return; }
-  openReport(id);
-}
-
-function confirmRemoveReport(id) {
-  const r = db.reports.find(x => x.id === id);
-  if (!r) return;
-  if (confirm('Tem certeza que deseja excluir "' + r.title + '"?')) {
-    removeReport(id);
-  }
-}
-
-function removeReport(id) {
-  const r = db.reports.find(x => x.id === id);
-  const name = r ? r.title : '';
-  db.reports = db.reports.filter(r => r.id !== id);
-  saveDB();
-  renderReportsMgr();
-  renderDashboard();
-  renderReportTabs();
-  showToast('Relatório "' + name + '" excluído.', 'error');
-}
-
-// ═══════════════════════════════════════
-// NAV
-// ═══════════════════════════════════════
-const viewMeta = {
-  dashboard:  { title: 'Dashboard',            sub: 'Visão geral dos seus relatórios' },
-  reports:    { title: 'Relatórios',            sub: 'Todos os relatórios disponíveis para você' },
-  users:      { title: 'Gerenciar Usuários',    sub: 'Aprovações e controle de acesso' },
-  access:     { title: 'Controle de Acesso',    sub: 'Libere e configure permissões de usuários' },
-  reportsmgr: { title: 'Gerenciar Relatórios',  sub: 'Adicione, edite e remova relatórios Power BI' },
-  changepass:  { title: 'Trocar Senha',           sub: 'Altere a senha da sua conta' },
-  sectors:     { title: 'Gerenciar Setores',      sub: 'Crie, edite e remova setores do portal' },
-};
-
-function switchView(viewId, navEl) {
-  // Proteger rotas de admin para não-admins
-  const adminOnlyViews = ['users','access','reportsmgr','sectors'];
-  if (adminOnlyViews.includes(viewId) && currentUser && currentUser.role !== 'admin') {
-    showToast('Acesso restrito ao administrador.', 'error');
-    return;
-  }
-  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-  document.getElementById('view-'+viewId).classList.add('active');
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  if (navEl) navEl.classList.add('active');
-  const m = viewMeta[viewId];
-  if (m) {
-    document.getElementById('topbarTitle').textContent = m.title;
-    document.getElementById('topbarSub').textContent = m.sub;
-  }
-  if (viewId === 'changepass') initAdminResetPanel();
-  if (viewId === 'sectors') renderSectorsList();
-}
-
-function switchUserTab(tab, el) {
-  document.querySelectorAll('.tabs .tab').forEach(t => t.classList.remove('active'));
-  el.classList.add('active');
-  document.getElementById('usersPendingView').style.display = tab === 'pending' ? 'block' : 'none';
-  document.getElementById('usersAllView').style.display = tab === 'all' ? 'block' : 'none';
-}
-
-// ═══════════════════════════════════════
-// HELPERS
-// ═══════════════════════════════════════
-function sectorLabel(s) {
-  if (db.sectorMeta && db.sectorMeta[s] && db.sectorMeta[s].label) return db.sectorMeta[s].label;
-  const defaults = { comercial:'Comercial', financeiro:'Financeiro', rh:'RH', operacional:'Operacional',
-    ti:'TI', marketing:'Marketing', diretoria:'Diretoria', logistica:'Logística', pcp:'PCP' };
-  return defaults[s] || s.charAt(0).toUpperCase() + s.slice(1);
-}
-
-function sectorColor(s) {
-  const defaults = {
-    logistica:'#34d399', pcp:'#fbbf24', comercial:'#58a6ff', financeiro:'#3fb950',
-    rh:'#a78bfa', operacional:'#f0b429', ti:'#38bdf8', marketing:'#f472b6', diretoria:'#f85149'
-  };
-  if (db.sectorMeta && db.sectorMeta[s] && db.sectorMeta[s].color) return db.sectorMeta[s].color;
-  return defaults[s] || '#7d8590';
-}
-
-function sectorTagStyle(s) {
-  const c = sectorColor(s);
-  return `background:${c}22;color:${c}`;
-}
-function roleLabel(r) {
-  return { admin:'Admin', director:'Diretor', sector:'Setor' }[r] || r;
-}
-
-// ═══════════════════════════════════════
-// EDITAR USUÁRIO
-// ═══════════════════════════════════════
-function generatePwd() {
-  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789@#$!';
-  let pwd = '';
-  for (let i = 0; i < 10; i++) pwd += chars[Math.floor(Math.random() * chars.length)];
-  return pwd;
-}
-
-function openEditUser(id) {
-  const u = db.users.find(x => x.id === id);
-  if (!u) return;
-
-  document.getElementById('euId').value = u.id;
-  document.getElementById('euName').value = u.name;
-  document.getElementById('euEmail').value = u.email;
-  document.getElementById('euRole').value = u.role;
-  document.getElementById('euNewPwd').value = '';
-  document.getElementById('euAvatar').textContent = u.name[0].toUpperCase();
-  document.getElementById('euNameDisplay').textContent = u.name;
-  document.getElementById('euEmailDisplay').textContent = u.email;
-  document.getElementById('euSectorWarn').style.display = 'none';
-
-  // Status radio
-  const radios = document.querySelectorAll('input[name="euStatus"]');
-  radios.forEach(r => { r.checked = (r.value === u.status); });
-
-  // Rebuild sector checkboxes
-  const cg = document.getElementById('euSectorCheckGroup');
-  cg.innerHTML = SECTORS.map(s => {
-    const checked = u.sectors && u.sectors.includes(s);
-    return `<label class="check-item ${checked ? 'checked' : ''}" onclick="toggleCheck(this)">
-      <input type="checkbox" value="${s}" style="display:none" ${checked ? 'checked' : ''}> ${sectorLabel(s)}
-    </label>`;
-  }).join('');
-
-  toggleEuSectors();
-  document.getElementById('editUserOverlay').classList.add('open');
-}
-
-function toggleEuSectors() {
-  const role = document.getElementById('euRole').value;
-  document.getElementById('euSectorField').style.display = role === 'sector' ? 'block' : 'none';
-}
-
-function saveEditUser() {
-  const id     = parseInt(document.getElementById('euId').value);
-  const name   = document.getElementById('euName').value.trim();
-  const email  = document.getElementById('euEmail').value.trim();
-  const role   = document.getElementById('euRole').value;
-  const status = document.querySelector('input[name="euStatus"]:checked')?.value;
-  const newPwd = document.getElementById('euNewPwd').value.trim();
-  const warn   = document.getElementById('euSectorWarn');
-
-  if (!name)   { showToast('Informe o nome!', 'error'); return; }
-  if (!email)  { showToast('Informe o e-mail!', 'error'); return; }
-  if (!status) { showToast('Selecione o status!', 'error'); return; }
-
-  let sectors = role === 'sector'
-    ? [...document.querySelectorAll('#euSectorCheckGroup input:checked')].map(i => i.value)
-    : [...SECTORS];
-
-  if (role === 'sector' && sectors.length === 0) {
-    warn.style.display = 'block';
-    showToast('Selecione pelo menos um setor!', 'error');
-    return;
-  }
-  warn.style.display = 'none';
-
-  const u = db.users.find(x => x.id === id);
-  if (!u) return;
-
-  u.name    = name;
-  u.email   = email;
-  u.role    = role;
-  u.status  = status;
-  u.sectors = sectors;
-  if (newPwd && newPwd.length >= 6) u.pass = newPwd;
-
-  saveDB();
-  closeEditUser();
-  renderUsersTable();
-  showToast(`✅ Usuário ${name} atualizado!`, 'success');
-}
-
-function closeEditUser(e) {
-  if (!e || e.target === document.getElementById('editUserOverlay')) {
-    document.getElementById('editUserOverlay').classList.remove('open');
-  }
-}
-function statusBadge(s) {
-  const map = { active:['status-active','Ativo'], pending:['status-pending','Pendente'], blocked:['status-blocked','Bloqueado'] };
-  const [cls,lbl] = map[s] || ['',''];
-  return `<span class="status-badge ${cls}"><span class="status-dot"></span>${lbl}</span>`;
-}
-
-let toastTimer;
-function showToast(msg, type='success') {
-  const t = document.getElementById('toast');
-  document.getElementById('toastMsg').textContent = msg;
-  document.getElementById('toastIcon').textContent = type === 'success' ? '✓' : '✕';
-  t.className = `toast ${type} show`;
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
-}
-
-// Enter key on login
-document.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && document.getElementById('screen-login').classList.contains('active')) handleLogin();
+document.getElementById("btnTudo").addEventListener("click", atualizarTudo);
+document.getElementById("btnStatus").addEventListener("click", () => {
+  carregarStatus();
+  carregarLogs();
 });
 
-// ── Mobile nav ──
-function setMobNav(activeId) {
-  ['mnDash','mnReports','mnPwd','mnAdmin'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.classList.toggle('active', el.id === activeId);
-  });
-}
+carregarStatus();
+carregarLogs();
 
-function showMobileAdminBtn(show) {
-  const el = document.getElementById('mnAdmin');
-  if (el) el.style.display = show ? 'flex' : 'none';
-}
-
-// ═══════════════════════════════════════
-// TROCAR SENHA
-// ═══════════════════════════════════════
-function togglePwd(id, el) {
-  const input = document.getElementById(id);
-  if (input.type === 'password') {
-    input.type = 'text';
-    el.innerHTML = SVG_EYE_OFF_SM;
-  } else {
-    input.type = 'password';
-    el.innerHTML = SVG_EYE_ON_SM;
-  }
-}
-
-function checkPwdStrength(val) {
-  const bar   = document.getElementById('pwdStrengthBar');
-  const label = document.getElementById('pwdStrengthLabel');
-  let score = 0;
-  if (val.length >= 6)  score++;
-  if (val.length >= 10) score++;
-  if (/[A-Z]/.test(val)) score++;
-  if (/[0-9]/.test(val)) score++;
-  if (/[^A-Za-z0-9]/.test(val)) score++;
-  const levels = [
-    { pct:'0%',   color:'var(--border)', lbl:'' },
-    { pct:'20%',  color:'var(--red)',    lbl:'Muito fraca' },
-    { pct:'40%',  color:'var(--orange)', lbl:'Fraca' },
-    { pct:'60%',  color:'#f0b429',       lbl:'Média' },
-    { pct:'80%',  color:'#58a6ff',       lbl:'Boa' },
-    { pct:'100%', color:'var(--green)',  lbl:'Forte' },
-  ];
-  const lvl = levels[score] || levels[0];
-  bar.style.width = lvl.pct;
-  bar.style.background = lvl.color;
-  label.textContent = lvl.lbl;
-  label.style.color = lvl.color;
-
-  // Check confirm match live
-  const confirm = document.getElementById('cpConfirm').value;
-  if (confirm) checkPwdMatch();
-}
-
-function checkPwdMatch() {
-  const newPwd  = document.getElementById('cpNew').value;
-  const confirm = document.getElementById('cpConfirm').value;
-  const msg     = document.getElementById('cpMatchMsg');
-  if (!confirm) { msg.style.display = 'none'; return; }
-  msg.style.display = 'block';
-  if (newPwd === confirm) {
-    msg.textContent = '✅ Senhas coincidem';
-    msg.style.color = 'var(--green)';
-  } else {
-    msg.textContent = '❌ Senhas não coincidem';
-    msg.style.color = 'var(--red)';
-  }
-}
-
-document.addEventListener('input', e => {
-  if (e.target.id === 'cpConfirm') checkPwdMatch();
-});
-
-function changePassword() {
-  const current = document.getElementById('cpCurrent').value;
-  const newPwd  = document.getElementById('cpNew').value;
-  const confirm = document.getElementById('cpConfirm').value;
-  const errEl   = document.getElementById('cpError');
-  const sucEl   = document.getElementById('cpSuccess');
-  errEl.style.display = 'none';
-  sucEl.style.display = 'none';
-
-  if (!current || !newPwd || !confirm) {
-    errEl.textContent = 'Preencha todos os campos.';
-    errEl.style.display = 'block'; return;
-  }
-  if (current !== currentUser.pass) {
-    errEl.textContent = 'Senha atual incorreta.';
-    errEl.style.display = 'block'; return;
-  }
-  if (newPwd.length < 6) {
-    errEl.textContent = 'A nova senha deve ter no mínimo 6 caracteres.';
-    errEl.style.display = 'block'; return;
-  }
-  if (newPwd !== confirm) {
-    errEl.textContent = 'A confirmação de senha não confere.';
-    errEl.style.display = 'block'; return;
-  }
-  if (newPwd === current) {
-    errEl.textContent = 'A nova senha deve ser diferente da atual.';
-    errEl.style.display = 'block'; return;
-  }
-
-  // Save
-  currentUser.pass = newPwd;
-  saveDB();
-  document.getElementById('cpCurrent').value = '';
-  document.getElementById('cpNew').value = '';
-  document.getElementById('cpConfirm').value = '';
-  document.getElementById('pwdStrengthBar').style.width = '0%';
-  document.getElementById('pwdStrengthLabel').textContent = '';
-  document.getElementById('cpMatchMsg').style.display = 'none';
-  sucEl.style.display = 'block';
-  setTimeout(() => sucEl.style.display = 'none', 4000);
-}
-
-function adminResetPassword() {
-  const uid    = parseInt(document.getElementById('resetUserSelect').value);
-  const newPwd = document.getElementById('resetNewPwd').value.trim();
-  if (!newPwd || newPwd.length < 6) { showToast('Senha deve ter ao menos 6 caracteres!', 'error'); return; }
-  const u = db.users.find(x => x.id === uid);
-  if (!u) return;
-  u.pass = newPwd;
-  saveDB();
-  document.getElementById('resetNewPwd').value = '';
-  showToast(`Senha de ${u.name} redefinida!`, 'success');
-}
-
-function initAdminResetPanel() {
-  const panel = document.getElementById('adminResetPwd');
-  if (!panel) return;
-  const isAdmin = currentUser && currentUser.role === 'admin';
-  panel.style.display = isAdmin ? 'block' : 'none';
-  if (!isAdmin) return;
-  const sel = document.getElementById('resetUserSelect');
-  sel.innerHTML = db.users
-    .filter(u => u.id !== currentUser.id)
-    .map(u => `<option value="${u.id}">${u.name} (${u.email})</option>`)
-    .join('');
-}
-
-// Add reset DB button for admin
-function resetDB() {
-  if (!confirm('Isso vai apagar TODOS os dados e restaurar o padrão. Tem certeza?')) return;
-  localStorage.removeItem('granjabi_db');
-  localStorage.removeItem('granjabi_session');
-  location.reload();
-}
-
-// ═══════════════════════════════════════
-// PUBLICAR DADOS — gera data.json para GitHub
-// ═══════════════════════════════════════
-function publishData() {
-  // Gerar o arquivo data.json com todos os dados
-  const data = {
-    users:      db.users,
-    reports:    db.reports,
-    sectors:    db.sectors,
-    sectorMeta: db.sectorMeta || {},
-    publishedAt: new Date().toISOString()
-  };
-
-  const json = JSON.stringify(data, null, 2);
-  const blob = new Blob([json], { type: 'application/json' });
-  const url  = URL.createObjectURL(blob);
-
-  // Criar link de download
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'data.json';
-  a.click();
-  URL.revokeObjectURL(url);
-
-  // Mostrar instruções
-  showPublishModal();
-}
-
-function showPublishModal() {
-  const overlay = document.createElement('div');
-  overlay.id = 'publishOverlay';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px';
-  overlay.innerHTML = `
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:32px;max-width:500px;width:100%">
-      <div style="font-size:28px;margin-bottom:12px">🚀</div>
-      <div style="font-size:18px;font-weight:700;margin-bottom:8px">Arquivo data.json baixado!</div>
-      <div style="font-size:13px;color:var(--text-muted);line-height:1.8;margin-bottom:20px">
-        Agora siga esses passos para publicar para todos:
-      </div>
-      <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:16px;font-size:13px;line-height:2;margin-bottom:20px">
-        <strong>1.</strong> Acesse <span style="color:var(--accent2)">github.com/Controladoriagranja/portal-bi-granjabrasilia</span><br>
-        <strong>2.</strong> Clique em <strong>Add file → Upload files</strong><br>
-        <strong>3.</strong> Arraste o arquivo <strong>data.json</strong> que foi baixado<br>
-        <strong>4.</strong> Escreva <strong>"Publicar dados"</strong> no commit<br>
-        <strong>5.</strong> Clique em <strong>Commit changes</strong><br>
-        <strong>6.</strong> Em 2 minutos todos veem os dados atualizados! ✅
-      </div>
-      <button onclick="document.getElementById('publishOverlay').remove()" 
-        style="width:100%;background:#c0392b;border:none;color:#fff;padding:12px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">
-        Entendido!
-      </button>
-    </div>`;
-  document.body.appendChild(overlay);
-}
-
-// Carregar data.json do GitHub ao iniciar (para todos os dispositivos)
-async function loadRemoteData() {
-  try {
-    const url = 'https://raw.githubusercontent.com/Controladoriagranja/portal-bi-granjabrasilia/main/data.json';
-    const res = await fetch(url + '?t=' + Date.now()); // cache bust
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data;
-  } catch(e) {
-    return null;
-  }
-}
-
-// ═══════════════════════════════════════
-// GERENCIAR SETORES
-// ═══════════════════════════════════════
-function slugify(str) {
-  return str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
-}
-
-function addSector() {
-  const name = document.getElementById('newSectorName').value.trim();
-  if (!name) { showToast('Digite o nome do setor!', 'error'); return; }
-  const slug = slugify(name);
-  if (SECTORS.includes(slug)) { showToast('Setor já existe!', 'error'); return; }
-  const color = document.querySelector('input[name="sectorColor"]:checked').value;
-  if (!db.sectorMeta) db.sectorMeta = {};
-  db.sectorMeta[slug] = { label: name, color };
-  db.sectors.push(slug);
-  SECTORS.push(slug);
-  saveDB();
-  document.getElementById('newSectorName').value = '';
-  renderSectorsList();
-  rebuildSectorSelects();
-  rebuildSectorCheckboxes();
-  showToast('Setor "' + name + '" criado!', 'success');
-}
-
-function removeSector(slug) {
-  const label = sectorLabel(slug);
-  const usedInReports = db.reports.some(r => r.sector === slug);
-  const usedInUsers   = db.users.some(u => u.sectors && u.sectors.includes(slug));
-  if (usedInReports || usedInUsers) {
-    showToast('Não é possível remover: setor em uso em relatórios ou usuários.', 'error');
-    return;
-  }
-  if (!confirm('Remover setor "' + label + '"?')) return;
-  db.sectors = db.sectors.filter(s => s !== slug);
-  SECTORS.splice(SECTORS.indexOf(slug), 1);
-  if (db.sectorMeta) delete db.sectorMeta[slug];
-  saveDB();
-  renderSectorsList();
-  rebuildSectorSelects();
-  rebuildSectorCheckboxes();
-  showToast('Setor removido.', 'error');
-}
-
-function renderSectorsList() {
-  const el = document.getElementById('sectorsList');
-  const count = document.getElementById('sectorsCount');
-  if (!el) return;
-  if (count) count.textContent = SECTORS.length + ' setor' + (SECTORS.length !== 1 ? 'es' : '');
-  const defaults = ['logistica','pcp','comercial','financeiro','rh','operacional','ti','marketing','diretoria'];
-  el.innerHTML = SECTORS.map(s => {
-    const isDefault = defaults.includes(s);
-    const rCount = db.reports.filter(r => r.sector === s).length;
-    const uCount = db.users.filter(u => u.sectors && u.sectors.includes(s)).length;
-    const c = sectorColor(s);
-    return `<div class="sector-row">
-      <div class="sector-dot" style="background:${c}"></div>
-      <div class="sector-name">${sectorLabel(s)}</div>
-      <div class="sector-meta">${rCount} relatório${rCount!==1?'s':''} · ${uCount} usuário${uCount!==1?'s':''}</div>
-      ${isDefault
-        ? '<span style="font-size:11px;color:var(--text-dim);padding:3px 8px">padrão</span>'
-        : `<button class="action-btn block" onclick="removeSector('${s}')">✕</button>`}
-    </div>`;
-  }).join('');
-}
-
-function rebuildSectorSelects() {
-  // Update all sector <select> elements
-  const opts = SECTORS.map(s => `<option value="${s}">${sectorLabel(s)}</option>`).join('');
-  ['rSector','eSector'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) { const val = el.value; el.innerHTML = opts; el.value = val; }
-  });
-}
-
-function rebuildSectorCheckboxes() {
-  // Rebuild the checkboxes in access control
-  const cg = document.getElementById('sectorCheckGroup');
-  if (!cg) return;
-  cg.innerHTML = SECTORS.map(s => `
-    <label class="check-item" onclick="toggleCheck(this)">
-      <input type="checkbox" value="${s}" style="display:none"> ${sectorLabel(s)}
-    </label>`).join('');
-}
+setInterval(carregarStatus, 2000);
+setInterval(carregarLogs, 2000);
 </script>
+
 </body>
 </html>
