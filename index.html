@@ -976,6 +976,18 @@
   }
 </style>
 
+
+<style>
+#btnStatus,
+.btn-status,
+[data-action="status"],
+[data-action="atualizar-status"],
+button[onclick*="atualizarStatus"],
+button[onclick*="carregarStatus"]{
+  display:none !important;
+}
+</style>
+
 </head>
 <body>
 
@@ -1437,7 +1449,7 @@ Running on http://192.168.1.193:5000</pre>
             </div>
             <button onclick="executarLogistica('completa')" class="btn-sm accent" style="padding:11px 20px;font-size:13px;gap:8px">▶ Atualizar tudo Logística</button>
             <button onclick="executarLogistica('continuar')" class="btn-sm" style="padding:11px 20px;font-size:13px;gap:8px" id="btnContinuar">↪ Continuar de onde parou</button>
-            <button onclick="buscarStatus()" class="btn-sm" style="padding:11px 16px;font-size:13px">↻ Atualizar status</button>
+            
             <button onclick="showApiHelp()" class="btn-sm" style="padding:11px 16px;font-size:13px">❓ Ajuda</button>
             <div class="updates-kpi-line" id="updatesSummaryLine">Aguardando status da API...</div>
           </div>
@@ -3404,5 +3416,21 @@ function rebuildSectorCheckboxes() {
     </label>`).join('');
 }
 </script>
+
+<script>
+(function removerBotaoAtualizarStatus(){
+  function limpar(){
+    document.querySelectorAll('button,a').forEach(el=>{
+      const t=(el.textContent||'').trim().toLowerCase();
+      if(t.includes('atualizar status')){
+        el.remove();
+      }
+    });
+  }
+  limpar();
+  setInterval(limpar, 1000);
+})();
+</script>
+
 </body>
 </html>
