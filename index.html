@@ -1440,7 +1440,7 @@ Running on http://192.168.1.193:5000</pre>
           <div class="updates-toolbar">
             <div class="updates-field">
               <label for="updateModule">Módulo</label>
-              <select id="updateModule" onchange="renderUpdates(portalStatus)">
+              <select id="updateModule" onchange="renderUpdates(portalStatus); atualizarBotaoModulo()">
                 <option value="logistica" selected>Logística</option>
                 <option value="pcp">PCP</option>
                 <option value="todos">Todos</option>
@@ -1457,8 +1457,7 @@ Running on http://192.168.1.193:5000</pre>
                 <option value="auto_pasta">Automático - ler pasta</option>
               </select>
             </div>
-            <button onclick="executarModulo('logistica')" class="btn-sm accent" style="padding:11px 20px;font-size:13px;gap:8px">▶ Atualizar tudo Logística</button>
-            <button onclick="executarModulo('pcp')" class="btn-sm accent" style="padding:11px 20px;font-size:13px;gap:8px;background:#d4993a;border-color:#d4993a">▶ Atualizar tudo PCP</button>
+            <button id="btnAtualizarModulo" onclick="executarModuloSelecionado()" class="btn-sm accent" style="padding:11px 22px;font-size:13px;gap:8px">▶ Atualizar tudo</button>
             <button onclick="showApiHelp()" class="btn-sm" style="padding:11px 16px;font-size:13px">❓ Ajuda</button>
             <div class="updates-kpi-line" id="updatesSummaryLine">Aguardando status da API...</div>
           </div>
@@ -2702,6 +2701,24 @@ function moduloLabel(modulo) {
   return ({ logistica:'Logística', pcp:'PCP', todos:'Todos' })[modulo] || modulo || '—';
 }
 
+function atualizarBotaoModulo() {
+  const btn = document.getElementById('btnAtualizarModulo');
+  if (!btn) return;
+  const modulo = getSelectedModule();
+  const label = moduloLabel(modulo);
+  btn.textContent = `▶ Atualizar tudo ${label}`;
+
+  // Mantém um único botão, mas muda levemente a cor conforme o módulo selecionado.
+  if (modulo === 'pcp') {
+    btn.style.background = '#d4993a';
+    btn.style.borderColor = '#d4993a';
+  } else {
+    btn.style.background = '';
+    btn.style.borderColor = '';
+  }
+}
+
+
 // ── API helpers ──
 async function apiFetch(path, opts={}) {
   try {
@@ -3021,10 +3038,15 @@ function executarRoboById(robotId) {
 }
 
 // ── Execution ──
+function executarModuloSelecionado() {
+  return executarModulo(getSelectedModule());
+}
+
 async function executarModulo(modulo) {
   const endpoints = {
     logistica: '/api/executar/logistica-completa',
-    pcp:       '/api/executar/pcp-completo'
+    pcp:       '/api/executar/pcp-completo',
+    todos:     '/api/executar/todos'
   };
   const periodo = getSelectedPeriod();
   const endpoint = endpoints[modulo];
@@ -3499,3 +3521,5 @@ function rebuildSectorCheckboxes() {
 
 </body>
 </html>
+
+<script>atualizarBotaoModulo();</script>
