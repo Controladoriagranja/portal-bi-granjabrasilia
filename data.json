@@ -61,7 +61,7 @@
       "id": 1782501286407,
       "name": "Barbara Morgado",
       "email": "bantunes@granjabrasilia.com.br",
-      "pass": "temp123",
+      "pass": "bac0105",
       "role": "director",
       "sectors": [
         "logistica",
@@ -74,7 +74,8 @@
         "marketing",
         "diretoria"
       ],
-      "status": "active"
+      "status": "active",
+      "allowUpdates": true
     },
     {
       "id": 1782504302063,
@@ -264,5 +265,5 @@
     "diretoria"
   ],
   "sectorMeta": {},
-  "publishedAt": "2026-06-30T19:51:20.603Z"
+  "publishedAt": "2026-06-30T19:56:02.768Z"
 }
