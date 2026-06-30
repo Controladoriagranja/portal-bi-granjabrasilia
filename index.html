@@ -1458,7 +1458,6 @@ Running on http://192.168.1.193:5000</pre>
             </div>
             <button onclick="executarModulo('logistica')" class="btn-sm accent" style="padding:11px 20px;font-size:13px;gap:8px">▶ Atualizar tudo Logística</button>
             <button onclick="executarModulo('pcp')" class="btn-sm accent" style="padding:11px 20px;font-size:13px;gap:8px;background:#d4993a;border-color:#d4993a">▶ Atualizar tudo PCP</button>
-            <button onclick="executarTratamentoModulo()" class="btn-sm" style="padding:11px 16px;font-size:13px">⚙ Tratamento</button>
             <button onclick="showApiHelp()" class="btn-sm" style="padding:11px 16px;font-size:13px">❓ Ajuda</button>
             <div class="updates-kpi-line" id="updatesSummaryLine">Aguardando status da API...</div>
           </div>
@@ -2670,7 +2669,7 @@ const ROBOTS = [
 
   // PCP
   { modulo:'pcp', id:'pcp_desperdicio',                  nome:'PCP - Desperdício',                     script:'pcp_desperdicio.py' },
-  { modulo:'pcp', id:'pcp_devolucao',                    nome:'PCP - Devolução',                       script:'pcp_devolucao_padrao_logistica.py' },
+  { modulo:'pcp', id:'pcp_devolucao',                    nome:'PCP - Devolução',                       script:'pcp_devolucao.py' },
   { modulo:'pcp', id:'pcp_diario_industria',             nome:'PCP - Diário da Indústria',             script:'pcp_diario_industria.py' },
   { modulo:'pcp', id:'pcp_estoque_online',               nome:'PCP - Estoque Online',                  script:'pcp_estoque_online.py' },
   { modulo:'pcp', id:'pcp_movimento_geral',              nome:'PCP - Movimento Geral de Pesagem',      script:'pcp_movimento_geral_pesagem.py' },
@@ -2876,24 +2875,26 @@ function renderRobotCards(relatorios, exec) {
 
     const statusInfo = String(info.status || '').toLowerCase();
 
-    if (execStatus === 'executando' && atual === r.nome) {
-      label = 'Atualizando';
-      cls = 'status-pending';
-    } else if (execStatus === 'executando' && fila.includes(r.id)) {
-      label = 'Em andamento';
-      cls = 'status-pending';
-    } else if (statusInfo.includes('atualizando')) {
-      label = 'Atualizando';
-      cls = 'status-pending';
-    } else if (statusInfo.includes('em andamento')) {
-      label = 'Em andamento';
-      cls = 'status-pending';
-    } else if (statusInfo.includes('sucesso')) {
+    const jaConcluido = concluidos.includes(r.id) || concluidos.includes(r.nome) || statusInfo.includes('sucesso');
+
+    if (jaConcluido) {
       label = 'Sucesso';
       cls = 'status-active';
     } else if (statusInfo.includes('erro')) {
       label = 'Erro';
       cls = 'status-blocked';
+    } else if (execStatus === 'executando' && atual === r.nome) {
+      label = 'Atualizando';
+      cls = 'status-pending';
+    } else if (statusInfo.includes('atualizando')) {
+      label = 'Atualizando';
+      cls = 'status-pending';
+    } else if (execStatus === 'executando' && fila.includes(r.id)) {
+      label = 'Em andamento';
+      cls = 'status-pending';
+    } else if (statusInfo.includes('em andamento')) {
+      label = 'Em andamento';
+      cls = 'status-pending';
     }
 
     const badge = `<span class="status-badge ${cls}"><span class="status-dot"></span>${label}</span>`;
