@@ -1454,6 +1454,7 @@ Running on http://192.168.1.193:5000</pre>
                 <option value="3_dias">Últimos 3 dias</option>
                 <option value="5_dias">Últimos 5 dias</option>
                 <option value="7_dias" selected>Últimos 7 dias / 1 semana</option>
+                <option value="auto_pasta">Automático - ler pasta</option>
               </select>
             </div>
             <button onclick="executarModulo('logistica')" class="btn-sm accent" style="padding:11px 20px;font-size:13px;gap:8px">▶ Atualizar tudo Logística</button>
@@ -1525,6 +1526,7 @@ Running on http://192.168.1.193:5000</pre>
                       <option value="3_dias">Últimos 3 dias</option>
                 <option value="5_dias">Últimos 5 dias</option>
                       <option value="7_dias" selected>Últimos 7 dias / 1 semana</option>
+                      <option value="auto_pasta">Automático - ler pasta</option>
                     </select>
                   </div>
                   <button class="btn-sm accent" id="robotModalRunBtn" style="flex:1;justify-content:center;padding:11px;min-width:190px">▶ Atualizar este robô</button>
@@ -2981,7 +2983,7 @@ function getSelectedPeriod() {
 }
 
 function periodoLabel(value) {
-  return ({ hoje:'Hoje', '2_dias':'Últimos 2 dias', '3_dias':'Últimos 3 dias', '5_dias':'Últimos 5 dias', '7_dias':'Últimos 7 dias / 1 semana' })[value] || value || '—';
+  return ({ hoje:'Hoje', '2_dias':'Últimos 2 dias', '3_dias':'Últimos 3 dias', '5_dias':'Últimos 5 dias', '7_dias':'Últimos 7 dias / 1 semana', 'auto_pasta':'Automático - ler pasta' })[value] || value || '—';
 }
 
 function renderUpdateSummary(s) {
