@@ -1439,17 +1439,26 @@ Running on http://192.168.1.193:5000</pre>
 
           <div class="updates-toolbar">
             <div class="updates-field">
+              <label for="updateModule">Módulo</label>
+              <select id="updateModule" onchange="renderUpdates(portalStatus)">
+                <option value="logistica" selected>Logística</option>
+                <option value="pcp">PCP</option>
+                <option value="todos">Todos</option>
+              </select>
+            </div>
+            <div class="updates-field">
               <label for="updatePeriod">Período da atualização</label>
               <select id="updatePeriod">
                 <option value="hoje">Hoje</option>
                 <option value="2_dias">Últimos 2 dias</option>
+                <option value="3_dias">Últimos 3 dias</option>
                 <option value="5_dias">Últimos 5 dias</option>
                 <option value="7_dias" selected>Últimos 7 dias / 1 semana</option>
               </select>
             </div>
-            <button onclick="executarLogistica('completa')" class="btn-sm accent" style="padding:11px 20px;font-size:13px;gap:8px">▶ Atualizar tudo Logística</button>
-            <button onclick="executarLogistica('continuar')" class="btn-sm" style="padding:11px 20px;font-size:13px;gap:8px" id="btnContinuar">↪ Continuar de onde parou</button>
-            
+            <button onclick="executarModulo('logistica')" class="btn-sm accent" style="padding:11px 20px;font-size:13px;gap:8px">▶ Atualizar tudo Logística</button>
+            <button onclick="executarModulo('pcp')" class="btn-sm accent" style="padding:11px 20px;font-size:13px;gap:8px;background:#d4993a;border-color:#d4993a">▶ Atualizar tudo PCP</button>
+            <button onclick="executarTratamentoModulo()" class="btn-sm" style="padding:11px 16px;font-size:13px">⚙ Tratamento</button>
             <button onclick="showApiHelp()" class="btn-sm" style="padding:11px 16px;font-size:13px">❓ Ajuda</button>
             <div class="updates-kpi-line" id="updatesSummaryLine">Aguardando status da API...</div>
           </div>
@@ -1514,7 +1523,8 @@ Running on http://192.168.1.193:5000</pre>
                     <select id="robotModalPeriod">
                       <option value="hoje">Hoje</option>
                       <option value="2_dias">Últimos 2 dias</option>
-                      <option value="5_dias">Últimos 5 dias</option>
+                      <option value="3_dias">Últimos 3 dias</option>
+                <option value="5_dias">Últimos 5 dias</option>
                       <option value="7_dias" selected>Últimos 7 dias / 1 semana</option>
                     </select>
                   </div>
@@ -2646,16 +2656,28 @@ document.addEventListener('keydown', e => {
 // ═══════════════════════════════════════
 
 const ROBOTS = [
-  { id:'cadastro_vendedores',        nome:'Cadastro de Vendedores',        script:'logistica_cadastro_vendedores.py' },
-  { id:'relatorio_veiculos',         nome:'Relatório de Veículos',          script:'logistica_relatorio_veiculos.py' },
-  { id:'controle_pallets',           nome:'Controle de Pallets',            script:'logistica_controle_pallets.py' },
-  { id:'devolucoes',                 nome:'Devoluções',                     script:'logistica_devolucoes.py' },
-  { id:'frete',                      nome:'Frete',                          script:'logistica_frete.py' },
-  { id:'controle_frete',             nome:'Controle de Frete',              script:'logistica_controle_frete.py' },
-  { id:'ocorrencia_viagens_custo',   nome:'Ocorrência de Viagens e Custo',  script:'logistica_ocorrencia_viagens_custo.py' },
-  { id:'contas_a_pagar',             nome:'Contas a Pagar',                 script:'logistica_contas_a_pagar.py' },
-  { id:'faturamento_cfop',           nome:'Faturamento por CFOP',           script:'logistica_faturamento_cfop.py' },
-  { id:'tratamento_logistica',       nome:'Tratamento Logística',           script:'Tratar_Logistica.py' },
+  // LOGÍSTICA
+  { modulo:'logistica', id:'cadastro_vendedores',        nome:'Cadastro de Vendedores',        script:'logistica_cadastro_vendedores.py' },
+  { modulo:'logistica', id:'relatorio_veiculos',         nome:'Relatório de Veículos',          script:'logistica_relatorio_veiculos.py' },
+  { modulo:'logistica', id:'controle_pallets',           nome:'Controle de Pallets',            script:'logistica_controle_pallets.py' },
+  { modulo:'logistica', id:'devolucoes',                 nome:'Devoluções',                     script:'logistica_devolucoes.py' },
+  { modulo:'logistica', id:'frete',                      nome:'Frete',                          script:'logistica_frete.py' },
+  { modulo:'logistica', id:'controle_frete',             nome:'Controle de Frete',              script:'logistica_controle_frete.py' },
+  { modulo:'logistica', id:'ocorrencia_viagens_custo',   nome:'Ocorrência de Viagens e Custo',  script:'logistica_ocorrencia_viagens_custo.py' },
+  { modulo:'logistica', id:'contas_a_pagar',             nome:'Contas a Pagar',                 script:'logistica_contas_a_pagar.py' },
+  { modulo:'logistica', id:'faturamento_cfop',           nome:'Faturamento por CFOP',           script:'logistica_faturamento_cfop.py' },
+  { modulo:'logistica', id:'tratamento_logistica',       nome:'Tratamento Logística',           script:'Tratar_Logistica.py' },
+
+  // PCP
+  { modulo:'pcp', id:'pcp_desperdicio',                  nome:'PCP - Desperdício',                     script:'pcp_desperdicio.py' },
+  { modulo:'pcp', id:'pcp_devolucao',                    nome:'PCP - Devolução',                       script:'pcp_devolucao_padrao_logistica.py' },
+  { modulo:'pcp', id:'pcp_diario_industria',             nome:'PCP - Diário da Indústria',             script:'pcp_diario_industria.py' },
+  { modulo:'pcp', id:'pcp_estoque_online',               nome:'PCP - Estoque Online',                  script:'pcp_estoque_online.py' },
+  { modulo:'pcp', id:'pcp_movimento_geral',              nome:'PCP - Movimento Geral de Pesagem',      script:'pcp_movimento_geral_pesagem.py' },
+  { modulo:'pcp', id:'pcp_plano_producao',               nome:'PCP - Plano de Produção',               script:'pcp_plano_producao.py' },
+  { modulo:'pcp', id:'pcp_relatorio_condenacoes',        nome:'PCP - Relatório Geral de Condenações',  script:'pcp_relatorio_geral_condenacoes.py' },
+  { modulo:'pcp', id:'pcp_estoque_transacao',            nome:'PCP - Estoque por Transação',           script:'pcp_estoque_por_transacao.py' },
+  { modulo:'pcp', id:'tratamento_pcp',                   nome:'Tratamento PCP',                        script:'tratar_pcp.py' },
 ];
 
 let apiUrl = localStorage.getItem('api_url') || 'http://192.168.1.193:5000';
@@ -2664,6 +2686,20 @@ let timerInterval  = null;
 let execStart      = null;
 let portalStatus   = null;
 let currentRobot   = null;
+
+function getSelectedModule() {
+  return document.getElementById('updateModule')?.value || 'logistica';
+}
+
+function getVisibleRobots() {
+  const modulo = getSelectedModule();
+  if (modulo === 'todos') return ROBOTS;
+  return ROBOTS.filter(r => r.modulo === modulo);
+}
+
+function moduloLabel(modulo) {
+  return ({ logistica:'Logística', pcp:'PCP', todos:'Todos' })[modulo] || modulo || '—';
+}
 
 // ── API helpers ──
 async function apiFetch(path, opts={}) {
@@ -2744,7 +2780,8 @@ function renderUpdates(s) {
 
   // Stats
   const concluidos = exec.concluidos ? exec.concluidos.length : 0;
-  const total = ROBOTS.length;
+  const visibleRobots = getVisibleRobots();
+  const total = visibleRobots.length;
   const executando = exec.status === 'executando' ? 1 : 0;
   const erros = exec.status === 'erro' ? 1 : 0;
 
@@ -2779,20 +2816,13 @@ function renderUpdates(s) {
       setText('progressTimer', dur);
     }
   }
-
-  // Continuar button
-  const btnCont = document.getElementById('btnContinuar');
-  if (btnCont) {
-    const canContinue = exec.status === 'erro' || (exec.concluidos && exec.concluidos.length > 0 && exec.status !== 'concluido');
-    btnCont.style.opacity = canContinue ? '1' : '0.4';
-    btnCont.disabled = !canContinue;
-  }
 }
 
 function renderProgress(exec, total) {
   const section = document.getElementById('progressSection');
   if (!section) return;
-  const conc = exec.concluidos ? exec.concluidos.length : 0;
+  const visibleIds = new Set(getVisibleRobots().map(r => r.id));
+  const conc = (exec.concluidos || []).filter(x => visibleIds.has(x)).length;
   const pct = total > 0 ? Math.round((conc / total) * 100) : 0;
 
   section.style.display = 'block';
@@ -2815,10 +2845,11 @@ function renderPipeline(exec) {
   const atual = exec ? exec.etapa_atual : null;
   const status = exec ? exec.status : 'aguardando';
 
-  el.innerHTML = ROBOTS.map((r, i) => {
+  const visibleRobots = getVisibleRobots();
+  el.innerHTML = visibleRobots.map((r, i) => {
     let cls = 'ps-aguardando';
     let icon = '○';
-    if (concluidos.includes(r.nome)) { cls = 'ps-concluido'; icon = '✓'; }
+    if (concluidos.includes(r.id) || concluidos.includes(r.nome)) { cls = 'ps-concluido'; icon = '✓'; }
     else if (r.nome === atual && status === 'executando') { cls = 'ps-executando executing-pulse'; icon = '⟳'; }
     else if (r.nome === atual && status === 'erro') { cls = 'ps-erro'; icon = '✕'; }
 
@@ -2837,7 +2868,8 @@ function renderRobotCards(relatorios, exec) {
   const execStatus = exec ? exec.status : 'aguardando';
   const fila = exec && exec.fila ? exec.fila : [];
 
-  el.innerHTML = ROBOTS.map(r => {
+  const visibleRobots = getVisibleRobots();
+  el.innerHTML = visibleRobots.map(r => {
     const info = relatorios ? relatorios[r.id] || {} : {};
     let label = 'Aguardando';
     let cls = 'status-pending';
@@ -2948,17 +2980,19 @@ function getSelectedPeriod() {
 }
 
 function periodoLabel(value) {
-  return ({ hoje:'Hoje', '2_dias':'Últimos 2 dias', '5_dias':'Últimos 5 dias', '7_dias':'Últimos 7 dias / 1 semana' })[value] || value || '—';
+  return ({ hoje:'Hoje', '2_dias':'Últimos 2 dias', '3_dias':'Últimos 3 dias', '5_dias':'Últimos 5 dias', '7_dias':'Últimos 7 dias / 1 semana' })[value] || value || '—';
 }
 
 function renderUpdateSummary(s) {
   const el = document.getElementById('updatesSummaryLine');
   if (!el || !s) return;
   const exec = s.execucao || {};
-  const concluidos = exec.concluidos ? exec.concluidos.length : 0;
-  const total = ROBOTS.length;
+  const visibleRobots = getVisibleRobots();
+  const visibleIds = new Set(visibleRobots.map(r => r.id));
+  const concluidos = (exec.concluidos || []).filter(x => visibleIds.has(x)).length;
+  const total = visibleRobots.length;
   const status = exec.status || 'aguardando';
-  el.textContent = `Status: ${status} · ${concluidos}/${total} etapas · Última geral: ${s.ultima_geral || '—'}`;
+  el.textContent = `${moduloLabel(getSelectedModule())} · Status: ${status} · ${concluidos}/${total} etapas · Última geral: ${s.ultima_geral || '—'}`;
 }
 
 function renderDetailSteps(robot, info, exec) {
@@ -2984,24 +3018,52 @@ function executarRoboById(robotId) {
 }
 
 // ── Execution ──
-async function executarLogistica(modo) {
+async function executarModulo(modulo) {
   const endpoints = {
-    completa:   '/api/executar/logistica-completa',
-    continuar:  '/api/continuar',
-    tratamento: '/api/executar/tratamento-logistica'
+    logistica: '/api/executar/logistica-completa',
+    pcp:       '/api/executar/pcp-completo'
   };
   const periodo = getSelectedPeriod();
-  const body = (modo === 'continuar') ? undefined : JSON.stringify({ periodo });
-  const res = await apiFetch(endpoints[modo], { method:'POST', body });
+  const endpoint = endpoints[modulo];
+  if (!endpoint) return;
+
+  const res = await apiFetch(endpoint, { method:'POST', body: JSON.stringify({ periodo }) });
   if (!res) {
     showToast('❌ API não respondeu. Verifique se está rodando.', 'error');
     return;
   }
-  showToast('▶ Execução iniciada!', 'success');
+
+  const moduleSelect = document.getElementById('updateModule');
+  if (moduleSelect) moduleSelect.value = modulo;
+
+  showToast(`▶ Execução ${moduloLabel(modulo)} iniciada!`, 'success');
   execStart = new Date();
   startTimer();
-  terminalLog(`[${now()}] INICIANDO: ${modo === 'completa' ? 'Logística Completa' : modo === 'continuar' ? 'Continuar de onde parou' : 'Tratamento Power BI'} · Período: ${periodoLabel(periodo)}`, 'info');
+  terminalLog(`[${now()}] INICIANDO: ${moduloLabel(modulo)} Completo · Período: ${periodoLabel(periodo)}`, 'info');
   buscarLogs();
+}
+
+async function executarTratamentoModulo() {
+  const modulo = getSelectedModule() === 'todos' ? 'logistica' : getSelectedModule();
+  const endpoints = {
+    logistica: '/api/executar/tratamento-logistica',
+    pcp:       '/api/executar/tratamento-pcp'
+  };
+  const periodo = getSelectedPeriod();
+  const res = await apiFetch(endpoints[modulo], { method:'POST', body: JSON.stringify({ periodo }) });
+  if (!res) {
+    showToast('❌ API não respondeu.', 'error');
+    return;
+  }
+  showToast(`▶ Tratamento ${moduloLabel(modulo)} iniciado!`, 'success');
+  terminalLog(`[${now()}] INICIANDO: Tratamento ${moduloLabel(modulo)} · Período: ${periodoLabel(periodo)}`, 'info');
+  buscarLogs();
+}
+
+async function executarLogistica(modo) {
+  // Compatibilidade com versões antigas do botão.
+  if (modo === 'tratamento') return executarTratamentoModulo();
+  return executarModulo('logistica');
 }
 
 async function executarRobo(robot) {
