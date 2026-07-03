@@ -245,6 +245,19 @@
       ],
       "allowUpdates": false,
       "status": "active"
+    },
+    {
+      "id": 1783096828038,
+      "name": "Lucas Linhares",
+      "email": "linhares@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "logistica",
+        "comercial"
+      ],
+      "allowUpdates": false,
+      "status": "active"
     }
   ],
   "reports": [
@@ -277,5 +290,5 @@
     "diretoria"
   ],
   "sectorMeta": {},
-  "publishedAt": "2026-07-02T17:35:54.821Z"
+  "publishedAt": "2026-07-03T16:40:34.813Z"
 }
