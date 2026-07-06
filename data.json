@@ -258,6 +258,46 @@
       ],
       "allowUpdates": false,
       "status": "active"
+    },
+    {
+      "id": 1783357344062,
+      "name": "Maria Teresa Castro",
+      "email": "mtcastro@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "director",
+      "sectors": [
+        "logistica",
+        "pcp",
+        "comercial",
+        "financeiro",
+        "rh",
+        "operacional",
+        "ti",
+        "marketing",
+        "diretoria"
+      ],
+      "allowUpdates": false,
+      "status": "active"
+    },
+    {
+      "id": 1783357521350,
+      "name": "Alexandre Lopes de Freitas",
+      "email": "alfreitas@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "director",
+      "sectors": [
+        "logistica",
+        "pcp",
+        "comercial",
+        "financeiro",
+        "rh",
+        "operacional",
+        "ti",
+        "marketing",
+        "diretoria"
+      ],
+      "allowUpdates": false,
+      "status": "active"
     }
   ],
   "reports": [
@@ -290,5 +330,5 @@
     "diretoria"
   ],
   "sectorMeta": {},
-  "publishedAt": "2026-07-03T16:40:34.813Z"
+  "publishedAt": "2026-07-06T17:05:23.467Z"
 }
