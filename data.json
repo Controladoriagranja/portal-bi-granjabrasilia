@@ -315,6 +315,14 @@
       "sector": "pcp",
       "url": "https://app.powerbi.com/view?r=eyJrIjoiZGVhZDViOTAtZDc5ZS00ZmNjLTk3NDAtNTRjNzk5Y2I0Yjg5IiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
       "updatedAt": "jun. de 2026"
+    },
+    {
+      "id": 1783630194919,
+      "title": "Bi Comercial",
+      "desc": "",
+      "sector": "comercial",
+      "url": "https://app.powerbi.com/view?r=eyJrIjoiN2VjNTczNmUtM2FhZi00NWNlLThmYWQtMjllMzM3MTU1YmM3IiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
+      "updatedAt": "jul. de 2026"
     }
   ],
   "sectors": [
@@ -329,5 +337,5 @@
     "diretoria"
   ],
   "sectorMeta": {},
-  "publishedAt": "2026-07-09T11:14:20.428Z"
+  "publishedAt": "2026-07-09T20:50:06.301Z"
 }
