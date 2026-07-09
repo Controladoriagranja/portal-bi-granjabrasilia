@@ -760,104 +760,6 @@
   }
   .pbi-hint strong { color: var(--text); }
 
-  /* ══════════════ CENTRAL DE ATUALIZAÇÕES ══════════════ */
-  .pipeline-step {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 10px 14px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 12px;
-    font-weight: 500;
-    transition: border-color .2s;
-    position: relative;
-    overflow: hidden;
-  }
-  .pipeline-step::before {
-    content: '';
-    position: absolute;
-    left: 0; top: 0; bottom: 0;
-    width: 3px;
-  }
-  .pipeline-step.ps-aguardando { color: var(--text-muted); }
-  .pipeline-step.ps-aguardando::before { background: var(--border); }
-  .pipeline-step.ps-executando { border-color: var(--orange); color: #f0b429; }
-  .pipeline-step.ps-executando::before { background: var(--orange); }
-  .pipeline-step.ps-concluido { border-color: rgba(46,160,67,0.4); color: #3fb950; }
-  .pipeline-step.ps-concluido::before { background: var(--green); }
-  .pipeline-step.ps-erro { border-color: rgba(218,54,51,0.4); color: #f85149; }
-  .pipeline-step.ps-erro::before { background: var(--red); }
-
-  .robot-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 16px;
-    cursor: pointer;
-    transition: border-color .2s, transform .15s;
-  }
-  .robot-card:hover { border-color: rgba(192,57,43,0.5); transform: translateY(-1px); }
-  .robot-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-  .robot-card-name { font-size: 13px; font-weight: 600; }
-  .robot-status-badge {
-    font-size: 10px; font-weight: 700;
-    padding: 3px 8px; border-radius: 99px;
-    display: flex; align-items: center; gap: 4px;
-  }
-  .rsb-online { background: rgba(46,160,67,0.15); color: #3fb950; }
-  .rsb-executando { background: rgba(212,153,58,0.15); color: #f0b429; }
-  .rsb-erro { background: rgba(218,54,51,0.15); color: #f85149; }
-  .rsb-aguardando { background: var(--surface2); color: var(--text-muted); }
-  .robot-card-meta { font-size: 11px; color: var(--text-muted); line-height: 1.8; }
-
-  .terminal-line-ok { color: #3fb950; }
-  .terminal-line-err { color: #f85149; }
-  .terminal-line-info { color: #58a6ff; }
-  .terminal-line-warn { color: #f0b429; }
-  .terminal-line-time { color: #7d8590; }
-
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
-  .executing-pulse { animation: pulse 1.5s ease-in-out infinite; }
-
-
-
-  /* ══════════════ CENTRAL LIMPA ══════════════ */
-  .updates-shell { display:flex; flex-direction:column; gap:18px; }
-  .updates-toolbar {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 16px;
-    display:flex;
-    align-items:end;
-    gap:12px;
-    flex-wrap:wrap;
-  }
-  .updates-field { display:flex; flex-direction:column; gap:7px; min-width:210px; }
-  .updates-field label { font-size:12px; color:var(--text-muted); font-weight:600; }
-  .updates-field select {
-    background: var(--bg);
-    border:1px solid var(--border);
-    border-radius:8px;
-    padding:10px 12px;
-    color:var(--text);
-    font-family:inherit;
-    outline:none;
-  }
-  .updates-kpi-line { color:var(--text-muted); font-size:12px; margin-left:auto; }
-  .updates-table-wrap { background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
-  .robot-row { cursor:pointer; }
-  .robot-row:hover { background:var(--surface2); }
-  .clean-progress { background:var(--bg); border-radius:999px; height:10px; overflow:hidden; }
-  .clean-progress > div { height:100%; background:linear-gradient(90deg,#c0392b,#e74c3c); border-radius:999px; transition:width .35s; }
-  .detail-steps { display:flex; flex-direction:column; gap:8px; margin-top:14px; }
-  .detail-step { display:flex; align-items:center; justify-content:space-between; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:10px 12px; font-size:13px; }
-  .detail-step.ok { border-color:rgba(46,160,67,.35); color:#3fb950; }
-  .detail-step.run { border-color:rgba(212,153,58,.35); color:#f0b429; }
-  .detail-step.wait { color:var(--text-muted); }
-
   /* ══════════════ MOBILE ══════════════ */
   @media (max-width: 768px) {
 
@@ -976,18 +878,6 @@
   }
 </style>
 
-
-<style>
-#btnStatus,
-.btn-status,
-[data-action="status"],
-[data-action="atualizar-status"],
-button[onclick*="atualizarStatus"],
-button[onclick*="carregarStatus"]{
-  display:none !important;
-}
-</style>
-
 </head>
 <body>
 
@@ -1057,9 +947,6 @@ button[onclick*="carregarStatus"]{
     </div>
     <div class="nav-item" id="nav-reports" onclick="switchView('reports', this)">
       <span class="nav-icon">📈</span> Relatórios
-    </div>
-    <div class="nav-item" id="nav-updates" style="display:none" onclick="switchView('updates', this)">
-      <span class="nav-icon">⚡</span> Central de Atualizações
     </div>
     <div class="nav-item" onclick="switchView('changepass', this)">
       <span class="nav-icon">🔑</span> Trocar Senha
@@ -1188,12 +1075,6 @@ button[onclick*="carregarStatus"]{
                   <option value="sector">Setor — acesso por área</option>
                 </select>
               </div>
-              <div class="form-group">
-                <label>Permissões especiais</label>
-                <label class="check-item" id="euChkUpdates" onclick="toggleCheck(this)" style="border-color:rgba(46,160,67,0.3)">
-                  <input type="checkbox" id="euAllowUpdates" style="display:none"> ⚡ Acesso à Central de Atualizações
-                </label>
-              </div>
 
               <div class="form-group" id="euSectorField">
                 <label>Setores permitidos <span style="font-size:11px;color:var(--text-muted)">(selecione um ou mais)</span></label>
@@ -1256,12 +1137,6 @@ button[onclick*="carregarStatus"]{
           <div class="form-group" id="sectorField" style="display:none">
             <label>Setores permitidos <span style="font-size:11px;color:var(--text-muted)">(pode selecionar vários)</span></label>
             <div class="checkgroup" id="sectorCheckGroup"></div>
-            <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
-              <label style="font-size:13px;color:var(--text-muted);font-weight:500;display:block;margin-bottom:8px">Permissões especiais</label>
-              <label class="check-item" id="chkUpdates" onclick="toggleCheck(this)" style="border-color:rgba(46,160,67,0.3)">
-                <input type="checkbox" id="allowUpdates" style="display:none"> ⚡ Acesso à Central de Atualizações
-              </label>
-            </div>
           </div>
           <button class="btn-sm accent" onclick="addUser()" style="margin-top:4px">✔ Liberar Acesso</button>
         </div>
@@ -1364,178 +1239,6 @@ button[onclick*="carregarStatus"]{
           </div>
         </div>
 
-      </div>
-
-      <!-- VIEW: CENTRAL DE ATUALIZAÇÕES -->
-      <div class="view" id="view-updates">
-        <div class="updates-shell">
-
-          <div id="apiStatusBar" style="background:rgba(218,54,51,0.1);border:1px solid rgba(218,54,51,0.3);border-radius:8px;padding:10px 16px;font-size:13px;display:flex;align-items:center;gap:10px">
-            <div id="apiDot" style="width:8px;height:8px;border-radius:50%;background:var(--red);flex-shrink:0"></div>
-            <span id="apiStatusText">API desconectada — configure o endereço da API abaixo para conectar</span>
-            <button onclick="showApiConfig()" style="margin-left:auto;background:none;border:1px solid var(--border);border-radius:6px;color:var(--text-muted);padding:4px 12px;font-size:12px;cursor:pointer;font-family:inherit">⚙ Configurar</button>
-          </div>
-
-          <div id="apiConfigModal" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;max-width:500px">
-            <div style="font-size:14px;font-weight:600;margin-bottom:12px">⚙ Configuração da API</div>
-            <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;line-height:1.6">
-              Informe o endereço onde a API Python está rodando.<br>
-              Ex: <span style="font-family:monospace;color:var(--accent2)">http://localhost:5000</span>
-            </div>
-            <div style="display:flex;gap:10px">
-              <input type="text" id="apiUrlInput" placeholder="http://localhost:5000" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:9px 12px;color:var(--text);font-size:13px;font-family:monospace;outline:none">
-              <button onclick="saveApiUrl()" class="btn-sm accent">Salvar</button>
-              <button onclick="document.getElementById('apiConfigModal').style.display='none'" class="btn-sm">Fechar</button>
-            </div>
-          </div>
-
-
-          <div id="apiHelpModal" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;max-width:760px">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px">
-              <div style="font-size:15px;font-weight:700">❓ Ajuda — Como ligar a API</div>
-              <button onclick="document.getElementById('apiHelpModal').style.display='none'" class="btn-sm">Fechar</button>
-            </div>
-
-            <div style="font-size:13px;color:var(--text-muted);line-height:1.7">
-              Use este guia quando aparecer <strong style="color:var(--text)">API desconectada</strong> ou quando outro usuário autorizado precisar ligar a Central.
-            </div>
-
-            <div style="margin-top:14px;display:grid;gap:12px">
-              <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px">
-                <strong>1) Abra o PowerShell</strong>
-                <div style="font-size:12px;color:var(--text-muted);margin-top:5px">Pesquise por PowerShell no Windows e abra.</div>
-              </div>
-
-              <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px">
-                <strong>2) Entre na pasta do Portal</strong>
-                <pre style="margin-top:8px;background:#05070b;border:1px solid var(--border);border-radius:6px;padding:10px;color:#e2e8f0;white-space:pre-wrap">cd X:\BI_Granja\PortalBI</pre>
-              </div>
-
-              <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px">
-                <strong>3) Ligue a API</strong>
-                <pre style="margin-top:8px;background:#05070b;border:1px solid var(--border);border-radius:6px;padding:10px;color:#e2e8f0;white-space:pre-wrap">py api\app.py</pre>
-              </div>
-
-              <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px">
-                <strong>4) Aguarde aparecer</strong>
-                <pre style="margin-top:8px;background:#05070b;border:1px solid var(--border);border-radius:6px;padding:10px;color:#e2e8f0;white-space:pre-wrap">Running on http://127.0.0.1:5000
-Running on http://192.168.1.193:5000</pre>
-              </div>
-
-              <div style="background:rgba(212,153,58,0.08);border:1px solid rgba(212,153,58,0.28);border-radius:8px;padding:12px;color:#f0b429">
-                <strong>Importante:</strong> não feche o PowerShell. Enquanto ele estiver aberto, todos os usuários autorizados conseguem atualizar os relatórios.
-              </div>
-
-              <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px">
-                <strong>5) Abra o Portal</strong>
-                <pre style="margin-top:8px;background:#05070b;border:1px solid var(--border);border-radius:6px;padding:10px;color:#e2e8f0;white-space:pre-wrap">http://192.168.1.193:5000/</pre>
-              </div>
-
-              <div style="font-size:12px;color:var(--text-muted);line-height:1.7">
-                Depois que instalarmos o NSSM, a API vai iniciar automaticamente com o Windows e esta etapa manual poderá ser removida.
-              </div>
-            </div>
-          </div>
-
-          <div class="updates-toolbar">
-            <div class="updates-field">
-              <label for="updateModule">Módulo</label>
-              <select id="updateModule" onchange="renderUpdates(portalStatus); atualizarBotaoModulo()">
-                <option value="logistica" selected>Logística</option>
-                <option value="pcp">PCP</option>
-                <option value="todos">Todos</option>
-              </select>
-            </div>
-            <div class="updates-field">
-              <label for="updatePeriod">Período da atualização</label>
-              <select id="updatePeriod">
-                <option value="hoje">Hoje</option>
-                <option value="2_dias">Últimos 2 dias</option>
-                <option value="3_dias">Últimos 3 dias</option>
-                <option value="5_dias">Últimos 5 dias</option>
-                <option value="7_dias" selected>Últimos 7 dias / 1 semana</option>
-                <option value="auto_pasta">Automático - ler pasta</option>
-              </select>
-            </div>
-            <button id="btnAtualizarModulo" onclick="executarModuloSelecionado()" class="btn-sm accent" style="padding:11px 22px;font-size:13px;gap:8px">▶ Atualizar tudo</button>
-            <button onclick="showApiHelp()" class="btn-sm" style="padding:11px 16px;font-size:13px">❓ Ajuda</button>
-            <div class="updates-kpi-line" id="updatesSummaryLine">Aguardando status da API...</div>
-          </div>
-
-          <div id="progressSection" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:12px">
-              <div style="font-size:13px;font-weight:600" id="progressLabel">Aguardando...</div>
-              <div style="font-size:12px;color:var(--text-muted);font-family:'JetBrains Mono',monospace" id="progressTimer">00:00:00</div>
-            </div>
-            <div class="clean-progress"><div id="progressBar" style="width:0%"></div></div>
-            <div style="font-size:12px;color:var(--text-muted);margin-top:9px" id="progressSub"></div>
-          </div>
-
-          <div class="updates-table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Relatório</th>
-                  <th>Status</th>
-                  <th>Última atualização</th>
-                  <th>Duração</th>
-                  <th>Período</th>
-                  <th style="text-align:center">Ação</th>
-                </tr>
-              </thead>
-              <tbody id="robotCards"></tbody>
-            </table>
-          </div>
-
-          <div style="background:#0a0d12;border:1px solid var(--border);border-radius:10px;overflow:hidden">
-            <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;background:var(--surface)">
-              <div style="display:flex;gap:6px">
-                <div style="width:12px;height:12px;border-radius:50%;background:#ff5f57"></div>
-                <div style="width:12px;height:12px;border-radius:50%;background:#febc2e"></div>
-                <div style="width:12px;height:12px;border-radius:50%;background:#28c840"></div>
-              </div>
-              <div style="font-size:12px;color:var(--text-muted);font-family:monospace">Terminal em tempo real</div>
-              <button onclick="limparTerminal()" style="margin-left:auto;background:none;border:none;color:var(--text-dim);font-size:11px;cursor:pointer;font-family:inherit">Limpar</button>
-            </div>
-            <div id="terminal" style="padding:16px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#e2e8f0;height:260px;overflow-y:auto;line-height:1.7;white-space:pre-wrap;word-break:break-all"></div>
-          </div>
-
-          <details style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px">
-            <summary style="cursor:pointer;font-size:13px;font-weight:600">Histórico de execuções</summary>
-            <div class="table-wrapper" id="historyTable" style="margin-top:14px"></div>
-          </details>
-
-          <div class="modal-overlay" id="robotModal" onclick="closeRobotModal(event)">
-            <div class="modal" style="max-width:760px;height:auto;max-height:90vh;overflow-y:auto">
-              <div class="modal-header">
-                <span>🤖</span>
-                <span class="modal-title" id="robotModalTitle">Robô</span>
-                <button class="modal-close" onclick="closeRobotModal()">✕</button>
-              </div>
-              <div style="padding:24px">
-                <div id="robotModalContent"></div>
-                <div class="detail-steps" id="robotDetailSteps"></div>
-                <div style="margin-top:16px;background:#0a0d12;border:1px solid var(--border);border-radius:8px;padding:14px;font-family:monospace;font-size:12px;color:#e2e8f0;max-height:250px;overflow-y:auto;white-space:pre-wrap;line-height:1.6" id="robotModalTerminal">Aguardando execução...</div>
-                <div style="display:flex;gap:10px;margin-top:16px;align-items:end;flex-wrap:wrap">
-                  <div class="updates-field" style="min-width:200px;flex:1">
-                    <label for="robotModalPeriod">Período</label>
-                    <select id="robotModalPeriod">
-                      <option value="hoje">Hoje</option>
-                      <option value="2_dias">Últimos 2 dias</option>
-                      <option value="3_dias">Últimos 3 dias</option>
-                <option value="5_dias">Últimos 5 dias</option>
-                      <option value="7_dias" selected>Últimos 7 dias / 1 semana</option>
-                      <option value="auto_pasta">Automático - ler pasta</option>
-                    </select>
-                  </div>
-                  <button class="btn-sm accent" id="robotModalRunBtn" style="flex:1;justify-content:center;padding:11px;min-width:190px">▶ Atualizar este robô</button>
-                  <button class="btn-sm" onclick="closeRobotModal()">Fechar</button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-        </div>
       </div>
 
       <!-- VIEW: SETORES -->
@@ -1662,10 +1365,6 @@ Running on http://192.168.1.193:5000</pre>
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
       <span>Relatórios</span>
     </button>
-    <button class="mob-nav-btn" id="mnUpdates" style="display:none" onclick="switchView('updates', null); setMobNav('mnUpdates')">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-      <span>Atualiz.</span>
-    </button>
     <button class="mob-nav-btn" id="mnPwd" onclick="switchView('changepass', null); setMobNav('mnPwd')">
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
       <span>Senha</span>
@@ -1701,7 +1400,7 @@ Running on http://192.168.1.193:5000</pre>
         <h3 style="font-size:17px;margin-bottom:10px;color:var(--text)">Não foi possível carregar o relatório</h3>
         <p style="font-size:13px;color:var(--text-muted);max-width:420px;line-height:1.7;margin-bottom:20px">
           A URL configurada pode estar bloqueando a exibição em iframe.<br>
-          Certifique-se de usar a URL gerada por <strong>"Publicar na Web"</strong> no Power BI Service.
+          Certifique-se de usar uma URL válida do Power BI. O Portal agora força <strong>filterPaneEnabled=true</strong> para tentar exibir o painel de filtros.
         </p>
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 20px;text-align:left;max-width:480px;margin-bottom:20px;font-size:12px;color:var(--text-muted);line-height:1.8">
           <strong style="color:var(--text)">Como gerar a URL correta:</strong><br>
@@ -1809,21 +1508,11 @@ function initApp() {
   } catch(e) {}
 
   // 2. Garantir admin
-  const adminPadrao = db.users.find(u => u.email === 'admin@granjabrasilia.com.br');
-  if (!adminPadrao) {
+  if (!db.users.find(u => u.email === 'admin@granjabrasilia.com.br')) {
     db.users.unshift({ id:1, name:'Admin Sistema', email:'admin@granjabrasilia.com.br',
-      pass:'admin123', role:'admin', sectors:[...DEFAULT_SECTORS], allowUpdates:true, status:'active' });
-  } else {
-    adminPadrao.role = 'admin';
-    adminPadrao.status = 'active';
-    adminPadrao.sectors = [...DEFAULT_SECTORS];
-    adminPadrao.allowUpdates = true;
+      pass:'admin123', role:'admin', sectors:[...DEFAULT_SECTORS], status:'active' });
+    try { localStorage.setItem('granjabi_db', JSON.stringify(db)); } catch(e) {}
   }
-
-  // Todo usuário admin deve enxergar a Central de Atualizações, inclusive bases antigas do localStorage
-  db.users.forEach(u => { if (u.role === 'admin') u.allowUpdates = true; });
-  try { localStorage.setItem('granjabi_db', JSON.stringify(db)); } catch(e) {}
-
   if (!db.sectors || db.sectors.length === 0) db.sectors = [...DEFAULT_SECTORS];
   syncSectors();
 
@@ -1939,19 +1628,11 @@ function initPortal() {
 
   // Admin nav — somente role 'admin' vê o painel de administração
   const isAdmin = (u.role === 'admin');
-  const canSeeUpdates = isAdmin || !!u.allowUpdates;
-
   document.getElementById('adminSection').style.display = isAdmin ? 'block' : 'none';
-
-  // Itens exclusivos de administração
   ['nav-users','nav-access','nav-reportsmgr','nav-sectors','nav-publish','nav-resetdb'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = isAdmin ? 'flex' : 'none';
   });
-
-  // Central de Atualizações: admin sempre vê; outros usuários só com permissão explícita
-  const navUpdates = document.getElementById('nav-updates');
-  if (navUpdates) navUpdates.style.display = canSeeUpdates ? 'flex' : 'none';
   // Se for admin, garantir que as views admin estão acessíveis (remover display:none inline)
   if (isAdmin) {
     const adminViews = ['view-users','view-access','view-reportsmgr','view-sectors'];
@@ -1988,9 +1669,8 @@ function initPortal() {
   document.getElementById('topbarTitle').textContent = 'Dashboard';
   document.getElementById('topbarSub').textContent = 'Visão geral dos seus relatórios';
 
-  // Mobile nav buttons
+  // Mobile nav admin button
   showMobileAdminBtn(isAdmin);
-  showMobileUpdatesBtn(canSeeUpdates);
   setMobNav('mnDash');
 }
 
@@ -2088,14 +1768,50 @@ function reportCard(r) {
   </div>`;
 }
 
+// Ajuste Power BI: força o painel de filtros e a navegação de páginas no iframe do portal.
+// Observação: em links "Publicar na Web" (view?r=...), o Power BI pode limitar alguns painéis.
+// Mesmo assim, deixamos o parâmetro ativo. Para controle total, prefira reportEmbed/Power BI Embedded.
+function powerBIUrlWithVisiblePanes(url) {
+  const raw = String(url || '').trim();
+  if (!raw) return '';
+
+  try {
+    const u = new URL(raw);
+    if (u.hostname.includes('powerbi.com')) {
+      u.searchParams.set('filterPaneEnabled', 'true');
+      u.searchParams.set('navContentPaneEnabled', 'true');
+    }
+    return u.toString();
+  } catch (e) {
+    const sep = raw.includes('?') ? '&' : '?';
+    let adjusted = raw;
+
+    if (!/filterPaneEnabled=/i.test(adjusted)) {
+      adjusted += sep + 'filterPaneEnabled=true';
+    } else {
+      adjusted = adjusted.replace(/filterPaneEnabled=(true|false)/ig, 'filterPaneEnabled=true');
+    }
+
+    if (!/navContentPaneEnabled=/i.test(adjusted)) {
+      adjusted += (adjusted.includes('?') ? '&' : '?') + 'navContentPaneEnabled=true';
+    } else {
+      adjusted = adjusted.replace(/navContentPaneEnabled=(true|false)/ig, 'navContentPaneEnabled=true');
+    }
+
+    return adjusted;
+  }
+}
+
 let currentReportUrl = '';
+let originalReportUrl = '';
 function openReport(id) {
   const r = db.reports.find(x => x.id === id);
   if (!r) return;
-  currentReportUrl = r.url || '';
+  originalReportUrl = r.url || '';
+  currentReportUrl = powerBIUrlWithVisiblePanes(originalReportUrl);
   document.getElementById('modalTitle').textContent = r.title;
-  document.getElementById('modalOpenBtn').href = currentReportUrl;
-  document.getElementById('errorOpenBtn').href = currentReportUrl;
+  document.getElementById('modalOpenBtn').href = originalReportUrl || currentReportUrl;
+  document.getElementById('errorOpenBtn').href = originalReportUrl || currentReportUrl;
 
   // Reset states
   document.getElementById('iframeLoader').style.display = 'flex';
@@ -2296,17 +2012,15 @@ function addUser() {
 
   if (role === 'sector' && sectors.length === 0) { showToast('Selecione pelo menos um setor para liberar.', 'error'); return; }
 
-  const allowUpdates = (role === 'admin') ? true : (document.getElementById('allowUpdates') && document.getElementById('allowUpdates').checked);
   const existing = db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
   if (existing) {
     existing.status = 'active';
     existing.role = role;
     existing.sectors = sectors;
-    existing.allowUpdates = allowUpdates;
     saveDB();
     showToast(`Acesso de ${name} atualizado!`, 'success');
   } else {
-    db.users.push({ id: Date.now(), name, email, pass: 'temp123', role, sectors, allowUpdates, status: 'active' });
+    db.users.push({ id: Date.now(), name, email, pass: 'temp123', role, sectors, status: 'active' });
     saveDB();
     showToast(`Usuário ${name} adicionado com sucesso!`, 'success');
   }
@@ -2467,7 +2181,6 @@ const viewMeta = {
   access:     { title: 'Controle de Acesso',    sub: 'Libere e configure permissões de usuários' },
   reportsmgr: { title: 'Gerenciar Relatórios',  sub: 'Adicione, edite e remova relatórios Power BI' },
   changepass:  { title: 'Trocar Senha',           sub: 'Altere a senha da sua conta' },
-  updates:     { title: 'Central de Atualizações', sub: 'Monitoramento e execução dos robôs de atualização do Power BI' },
   sectors:     { title: 'Gerenciar Setores',      sub: 'Crie, edite e remova setores do portal' },
 };
 
@@ -2476,11 +2189,6 @@ function switchView(viewId, navEl) {
   const adminOnlyViews = ['users','access','reportsmgr','sectors'];
   if (adminOnlyViews.includes(viewId) && currentUser && currentUser.role !== 'admin') {
     showToast('Acesso restrito ao administrador.', 'error');
-    return;
-  }
-  // Proteger Central de Atualizações
-  if (viewId === 'updates' && currentUser && currentUser.role !== 'admin' && !currentUser.allowUpdates) {
-    showToast('Acesso restrito. Solicite permissão ao administrador.', 'error');
     return;
   }
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -2494,8 +2202,6 @@ function switchView(viewId, navEl) {
   }
   if (viewId === 'changepass') initAdminResetPanel();
   if (viewId === 'sectors') renderSectorsList();
-  if (viewId === 'updates') { buscarStatus(); startStatusPolling(); }
-  else stopStatusPolling();
 }
 
 function switchUserTab(tab, el) {
@@ -2570,12 +2276,6 @@ function openEditUser(id) {
   }).join('');
 
   toggleEuSectors();
-  const euChk = document.getElementById('euChkUpdates');
-  const euInp = document.getElementById('euAllowUpdates');
-  if (euChk && euInp) {
-    euInp.checked = !!u.allowUpdates;
-    euChk.classList.toggle('checked', !!u.allowUpdates);
-  }
   document.getElementById('editUserOverlay').classList.add('open');
 }
 
@@ -2611,12 +2311,11 @@ function saveEditUser() {
   const u = db.users.find(x => x.id === id);
   if (!u) return;
 
-  u.name        = name;
-  u.email       = email;
-  u.role        = role;
-  u.status      = status;
-  u.sectors     = sectors;
-  u.allowUpdates = (role === 'admin') ? true : (document.getElementById('euAllowUpdates') ? document.getElementById('euAllowUpdates').checked : false);
+  u.name    = name;
+  u.email   = email;
+  u.role    = role;
+  u.status  = status;
+  u.sectors = sectors;
   if (newPwd && newPwd.length >= 6) u.pass = newPwd;
 
   saveDB();
@@ -2651,553 +2350,9 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Enter' && document.getElementById('screen-login').classList.contains('active')) handleLogin();
 });
 
-// ═══════════════════════════════════════
-// CENTRAL DE ATUALIZAÇÕES
-// ═══════════════════════════════════════
-
-const ROBOTS = [
-  // LOGÍSTICA
-  { modulo:'logistica', id:'cadastro_vendedores',        nome:'Cadastro de Vendedores',        script:'logistica_cadastro_vendedores.py' },
-  { modulo:'logistica', id:'relatorio_veiculos',         nome:'Relatório de Veículos',          script:'logistica_relatorio_veiculos.py' },
-  { modulo:'logistica', id:'controle_pallets',           nome:'Controle de Pallets',            script:'logistica_controle_pallets.py' },
-  { modulo:'logistica', id:'devolucoes',                 nome:'Devoluções',                     script:'logistica_devolucoes.py' },
-  { modulo:'logistica', id:'frete',                      nome:'Frete',                          script:'logistica_frete.py' },
-  { modulo:'logistica', id:'controle_frete',             nome:'Controle de Frete',              script:'logistica_controle_frete.py' },
-  { modulo:'logistica', id:'ocorrencia_viagens_custo',   nome:'Ocorrência de Viagens e Custo',  script:'logistica_ocorrencia_viagens_custo.py' },
-  { modulo:'logistica', id:'contas_a_pagar',             nome:'Contas a Pagar',                 script:'logistica_contas_a_pagar.py' },
-  { modulo:'logistica', id:'faturamento_cfop',           nome:'Faturamento por CFOP',           script:'logistica_faturamento_cfop.py' },
-  { modulo:'logistica', id:'tratamento_logistica',       nome:'Tratamento Logística',           script:'Tratar_Logistica.py' },
-
-  // PCP
-  { modulo:'pcp', id:'pcp_desperdicio',                  nome:'PCP - Desperdício',                     script:'pcp_desperdicio.py' },
-  { modulo:'pcp', id:'pcp_devolucao',                    nome:'PCP - Devolução',                       script:'pcp_devolucao.py' },
-  { modulo:'pcp', id:'pcp_diario_industria',             nome:'PCP - Diário da Indústria',             script:'pcp_diario_industria.py' },
-  { modulo:'pcp', id:'pcp_estoque_online',               nome:'PCP - Estoque Online',                  script:'pcp_estoque_online.py' },
-  { modulo:'pcp', id:'pcp_movimento_geral',              nome:'PCP - Movimento Geral de Pesagem',      script:'pcp_movimento_geral_pesagem.py' },
-  { modulo:'pcp', id:'pcp_plano_producao',               nome:'PCP - Plano de Produção',               script:'pcp_plano_producao.py' },
-  { modulo:'pcp', id:'pcp_relatorio_condenacoes',        nome:'PCP - Relatório Geral de Condenações',  script:'pcp_relatorio_geral_condenacoes.py' },
-  { modulo:'pcp', id:'pcp_estoque_transacao',            nome:'PCP - Estoque por Transação',           script:'pcp_estoque_por_transacao.py' },
-  { modulo:'pcp', id:'tratamento_pcp',                   nome:'Tratamento PCP',                        script:'tratar_pcp.py' },
-];
-
-let apiUrl = localStorage.getItem('api_url') || 'http://192.168.1.193:5000';
-let statusInterval = null;
-let timerInterval  = null;
-let execStart      = null;
-let portalStatus   = null;
-let currentRobot   = null;
-
-function getSelectedModule() {
-  return document.getElementById('updateModule')?.value || 'logistica';
-}
-
-function getVisibleRobots() {
-  const modulo = getSelectedModule();
-  if (modulo === 'todos') return ROBOTS;
-  return ROBOTS.filter(r => r.modulo === modulo);
-}
-
-function moduloLabel(modulo) {
-  return ({ logistica:'Logística', pcp:'PCP', todos:'Todos' })[modulo] || modulo || '—';
-}
-
-function atualizarBotaoModulo() {
-  const btn = document.getElementById('btnAtualizarModulo');
-  if (!btn) return;
-  const modulo = getSelectedModule();
-  const label = moduloLabel(modulo);
-  btn.textContent = `▶ Atualizar tudo ${label}`;
-
-  // Mantém um único botão, mas muda levemente a cor conforme o módulo selecionado.
-  if (modulo === 'pcp') {
-    btn.style.background = '#d4993a';
-    btn.style.borderColor = '#d4993a';
-  } else {
-    btn.style.background = '';
-    btn.style.borderColor = '';
-  }
-}
-
-
-// ── API helpers ──
-async function apiFetch(path, opts={}) {
-  try {
-    const res = await fetch(apiUrl + path, { ...opts, headers: { 'Content-Type':'application/json' } });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    return await res.json();
-  } catch(e) {
-    return null;
-  }
-}
-
-
-function showApiHelp() {
-  const modal = document.getElementById('apiHelpModal');
-  if (!modal) return;
-  modal.style.display = modal.style.display === 'none' ? 'block' : 'none';
-}
-
-function showApiConfig() {
-  const modal = document.getElementById('apiConfigModal');
-  modal.style.display = modal.style.display === 'none' ? 'block' : 'none';
-  document.getElementById('apiUrlInput').value = apiUrl;
-}
-
-function saveApiUrl() {
-  apiUrl = document.getElementById('apiUrlInput').value.trim().replace(/\/$/, '');
-  localStorage.setItem('api_url', apiUrl);
-  document.getElementById('apiConfigModal').style.display = 'none';
-  buscarStatus();
-  showToast('URL da API salva!', 'success');
-}
-
-// ── Status polling ──
-async function buscarStatus() {
-  const data = await apiFetch('/api/status');
-  if (!data) {
-    setApiStatus(false);
-    renderUpdatesOffline();
-    return;
-  }
-  setApiStatus(true);
-  portalStatus = data;
-  renderUpdates(data);
-}
-
-function setApiStatus(online) {
-  const bar  = document.getElementById('apiStatusBar');
-  const dot  = document.getElementById('apiDot');
-  const text = document.getElementById('apiStatusText');
-  if (!bar) return;
-  if (online) {
-    bar.style.background = 'rgba(46,160,67,0.08)';
-    bar.style.borderColor = 'rgba(46,160,67,0.25)';
-    dot.style.background = '#3fb950';
-    text.textContent = '✅ API conectada — ' + apiUrl;
-  } else {
-    bar.style.background = 'rgba(218,54,51,0.1)';
-    bar.style.borderColor = 'rgba(218,54,51,0.3)';
-    dot.style.background = '#f85149';
-    text.textContent = '❌ API desconectada — ' + apiUrl + ' (clique em Configurar)';
-  }
-}
-
-function renderUpdatesOffline() {
-  // Show empty state but still render structure
-  renderPipeline(null);
-  renderRobotCards(null);
-  renderHistory([]);
-  terminalLog('[AVISO] API não conectada. Configure o endereço da API para monitorar os robôs.', 'warn');
-}
-
-// ── Main render ──
-function renderUpdates(s) {
-  if (!s) return;
-  const exec = s.execucao || {};
-  const relatorios = s.relatorios || {};
-
-  // Stats
-  const concluidos = exec.concluidos ? exec.concluidos.length : 0;
-  const visibleRobots = getVisibleRobots();
-  const total = visibleRobots.length;
-  const executando = exec.status === 'executando' ? 1 : 0;
-  const erros = exec.status === 'erro' ? 1 : 0;
-
-  setText('statUltimaGeral', s.ultima_geral || '—');
-  setText('statConcluidos', concluidos);
-  setText('statExecutando', executando);
-  setText('statErros', erros);
-  setText('statUltimoTratamento', s.ultimo_tratamento || '—');
-
-  renderUpdateSummary(s);
-
-  // Progress
-  renderProgress(exec, total);
-
-  // Pipeline
-  renderPipeline(exec);
-
-  // Robot cards
-  renderRobotCards(relatorios, exec);
-
-  // History
-  renderHistory(s.historico || []);
-
-  // Timer
-  if (exec.status === 'executando' && exec.inicio) {
-    if (!execStart) execStart = new Date(exec.inicio);
-    startTimer();
-  } else {
-    stopTimer();
-    if (exec.fim) {
-      const dur = calcDuration(exec.inicio, exec.fim);
-      setText('progressTimer', dur);
-    }
-  }
-}
-
-function renderProgress(exec, total) {
-  const section = document.getElementById('progressSection');
-  if (!section) return;
-  const visibleIds = new Set(getVisibleRobots().map(r => r.id));
-  const conc = (exec.concluidos || []).filter(x => visibleIds.has(x)).length;
-  const pct = total > 0 ? Math.round((conc / total) * 100) : 0;
-
-  section.style.display = 'block';
-  document.getElementById('progressBar').style.width = pct + '%';
-
-  const statusMap = {
-    aguardando: 'Aguardando...',
-    executando: `⏳ Executando: ${exec.etapa_atual || '...'}`,
-    concluido:  '✅ Concluído com sucesso!',
-    erro:       `❌ Erro em: ${exec.etapa_atual || '?'}`
-  };
-  setText('progressLabel', statusMap[exec.status] || 'Aguardando...');
-  setText('progressSub', `${pct}% · ${conc} de ${total} etapas` + (exec.erro ? ` · ${exec.erro}` : ''));
-}
-
-function renderPipeline(exec) {
-  const el = document.getElementById('pipelineGrid');
-  if (!el) return;
-  const concluidos = exec && exec.concluidos ? exec.concluidos : [];
-  const atual = exec ? exec.etapa_atual : null;
-  const status = exec ? exec.status : 'aguardando';
-
-  const visibleRobots = getVisibleRobots();
-  el.innerHTML = visibleRobots.map((r, i) => {
-    let cls = 'ps-aguardando';
-    let icon = '○';
-    if (concluidos.includes(r.id) || concluidos.includes(r.nome)) { cls = 'ps-concluido'; icon = '✓'; }
-    else if (r.nome === atual && status === 'executando') { cls = 'ps-executando executing-pulse'; icon = '⟳'; }
-    else if (r.nome === atual && status === 'erro') { cls = 'ps-erro'; icon = '✕'; }
-
-    return `<div class="pipeline-step ${cls}">
-      <span style="font-size:14px;flex-shrink:0">${icon}</span>
-      <span>${r.nome}</span>
-    </div>`;
-  }).join('');
-}
-
-function renderRobotCards(relatorios, exec) {
-  const el = document.getElementById('robotCards');
-  if (!el) return;
-  const concluidos = exec && exec.concluidos ? exec.concluidos : [];
-  const atual = exec ? exec.etapa_atual : null;
-  const execStatus = exec ? exec.status : 'aguardando';
-  const fila = exec && exec.fila ? exec.fila : [];
-
-  const visibleRobots = getVisibleRobots();
-  el.innerHTML = visibleRobots.map(r => {
-    const info = relatorios ? relatorios[r.id] || {} : {};
-    let label = 'Aguardando';
-    let cls = 'status-pending';
-
-    const statusInfo = String(info.status || '').toLowerCase();
-
-    const jaConcluido = concluidos.includes(r.id) || concluidos.includes(r.nome) || statusInfo.includes('sucesso');
-
-    if (jaConcluido) {
-      label = 'Sucesso';
-      cls = 'status-active';
-    } else if (statusInfo.includes('erro')) {
-      label = 'Erro';
-      cls = 'status-blocked';
-    } else if (execStatus === 'executando' && atual === r.nome) {
-      label = 'Atualizando';
-      cls = 'status-pending';
-    } else if (statusInfo.includes('atualizando')) {
-      label = 'Atualizando';
-      cls = 'status-pending';
-    } else if (execStatus === 'executando' && fila.includes(r.id)) {
-      label = 'Em andamento';
-      cls = 'status-pending';
-    } else if (statusInfo.includes('em andamento')) {
-      label = 'Em andamento';
-      cls = 'status-pending';
-    }
-
-    const badge = `<span class="status-badge ${cls}"><span class="status-dot"></span>${label}</span>`;
-
-    const periodo = info.periodo_label || info.periodo || '—';
-    return `<tr class="robot-row" onclick="openRobotModal('${r.id}')">
-      <td><strong>${r.nome}</strong><div style="font-size:11px;color:var(--text-muted);margin-top:3px">${r.script}</div></td>
-      <td>${badge}</td>
-      <td style="font-size:12px;font-family:'JetBrains Mono',monospace">${info.ultima || '—'}</td>
-      <td style="font-size:12px">${info.duracao || '—'}</td>
-      <td style="font-size:12px;color:var(--text-muted)">${periodo}</td>
-      <td style="text-align:center"><button class="action-btn edit" onclick="event.stopPropagation(); executarRoboById('${r.id}')">Atualizar</button></td>
-    </tr>`;
-  }).join('');
-}
-
-function renderHistory(historico) {
-  const el = document.getElementById('historyTable');
-  if (!el) return;
-  if (!historico || historico.length === 0) {
-    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><h3>Sem histórico</h3><p>As execuções aparecerão aqui.</p></div>';
-    return;
-  }
-  const rows = [...historico].reverse().slice(0,20);
-  el.innerHTML = `<table><thead><tr>
-    <th>Status</th><th>Data</th><th>Tipo</th><th>Duração</th><th>Etapa final</th><th>Erro</th>
-  </tr></thead><tbody>${rows.map(h => {
-    const ok = h.status === 'concluido';
-    const badge = ok
-      ? '<span class="status-badge status-active"><span class="status-dot"></span>Sucesso</span>'
-      : '<span class="status-badge status-blocked"><span class="status-dot"></span>Erro</span>';
-    return `<tr>
-      <td>${badge}</td>
-      <td style="font-size:12px;font-family:monospace">${h.fim || h.inicio || '—'}</td>
-      <td style="font-size:12px;color:var(--text-muted)">${h.modo || '—'}</td>
-      <td style="font-size:12px">${h.duracao || '—'}</td>
-      <td style="font-size:12px;color:var(--text-muted)">${h.etapa_final || '—'}</td>
-      <td style="font-size:12px;color:var(--red);max-width:200px;overflow:hidden;text-overflow:ellipsis">${h.erro || ''}</td>
-    </tr>`;
-  }).join('')}</tbody></table>`;
-}
-
-// ── Robot modal ──
-function openRobotModal(robotId) {
-  const robot = ROBOTS.find(r => r.id === robotId);
-  if (!robot) return;
-  currentRobot = robot;
-  document.getElementById('robotModalTitle').textContent = robot.nome;
-
-  const info = portalStatus && portalStatus.relatorios ? portalStatus.relatorios[robotId] || {} : {};
-  const exec = portalStatus ? portalStatus.execucao || {} : {};
-  const pct = info.status === 'Sucesso' ? 100 : (exec.etapa_atual === robot.nome && exec.status === 'executando' ? 40 : 0);
-  document.getElementById('robotModalContent').innerHTML = `
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
-      <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px"><div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Status</div><div style="font-size:14px;font-weight:600">${info.status || 'Aguardando'}</div></div>
-      <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px"><div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Última execução</div><div style="font-size:13px;font-weight:600">${info.ultima || '—'}</div></div>
-      <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px"><div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Duração</div><div style="font-size:14px;font-weight:600">${info.duracao || '—'}</div></div>
-      <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px"><div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Período</div><div style="font-size:13px;font-weight:600">${info.periodo_label || info.periodo || periodoLabel(getSelectedPeriod())}</div></div>
-    </div>
-    <div style="margin:8px 0 12px"><div class="clean-progress"><div style="width:${pct}%"></div></div><div style="font-size:12px;color:var(--text-muted);margin-top:8px">${pct}% · ${info.data_inicio && info.data_fim ? `Dados: ${info.data_inicio} até ${info.data_fim}` : 'Aguardando execução'}</div></div>
-    <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px">Script: <span style="font-family:monospace;color:var(--accent2)">${robot.script}</span></div>`;
-
-  const periodSel = document.getElementById('robotModalPeriod');
-  if (periodSel) periodSel.value = document.getElementById('updatePeriod')?.value || '7_dias';
-  renderDetailSteps(robot, info, exec);
-  document.getElementById('robotModalTerminal').textContent = info.ultimo_log || 'Aguardando execução...';
-  document.getElementById('robotModalRunBtn').onclick = () => executarRobo(robot);
-  document.getElementById('robotModal').classList.add('open');
-}
-
-function closeRobotModal(e) {
-  if (!e || e.target === document.getElementById('robotModal')) {
-    document.getElementById('robotModal').classList.remove('open');
-  }
-}
-
-
-function getSelectedPeriod() {
-  const modalOpen = document.getElementById('robotModal') && document.getElementById('robotModal').classList.contains('open');
-  const modalSel = document.getElementById('robotModalPeriod');
-  const mainSel = document.getElementById('updatePeriod');
-  if (modalOpen && modalSel) return modalSel.value;
-  return mainSel ? mainSel.value : '7_dias';
-}
-
-function periodoLabel(value) {
-  return ({ hoje:'Hoje', '2_dias':'Últimos 2 dias', '3_dias':'Últimos 3 dias', '5_dias':'Últimos 5 dias', '7_dias':'Últimos 7 dias / 1 semana', 'auto_pasta':'Automático - ler pasta' })[value] || value || '—';
-}
-
-function renderUpdateSummary(s) {
-  const el = document.getElementById('updatesSummaryLine');
-  if (!el || !s) return;
-  const exec = s.execucao || {};
-  const visibleRobots = getVisibleRobots();
-  const visibleIds = new Set(visibleRobots.map(r => r.id));
-  const concluidos = (exec.concluidos || []).filter(x => visibleIds.has(x)).length;
-  const total = visibleRobots.length;
-  const status = exec.status || 'aguardando';
-  el.textContent = `${moduloLabel(getSelectedModule())} · Status: ${status} · ${concluidos}/${total} etapas · Última geral: ${s.ultima_geral || '—'}`;
-}
-
-function renderDetailSteps(robot, info, exec) {
-  const el = document.getElementById('robotDetailSteps');
-  if (!el) return;
-  const steps = ['Conectando ao Agrosys', 'Abrindo relatório', 'Baixando dados', 'Tratando Excel', 'Convertendo parquet', 'Atualizando Power BI', 'Finalizado'];
-  const isRunning = exec && exec.status === 'executando' && exec.etapa_atual === robot.nome;
-  const isDone = info && info.status === 'Sucesso';
-  const isError = info && info.status === 'Erro';
-  el.innerHTML = steps.map((step, idx) => {
-    let cls = 'wait', right = 'Aguardando';
-    if (isDone) { cls = 'ok'; right = 'OK'; }
-    else if (isError && idx < 3) { cls = 'ok'; right = 'OK'; }
-    else if (isError && idx === 3) { cls = 'run'; right = 'ERRO'; }
-    else if (isRunning && idx === 0) { cls = 'run'; right = 'Executando'; }
-    return `<div class="detail-step ${cls}"><span>${step}</span><strong>${right}</strong></div>`;
-  }).join('');
-}
-
-function executarRoboById(robotId) {
-  const robot = ROBOTS.find(r => r.id === robotId);
-  if (robot) executarRobo(robot);
-}
-
-// ── Execution ──
-function executarModuloSelecionado() {
-  return executarModulo(getSelectedModule());
-}
-
-async function executarModulo(modulo) {
-  const endpoints = {
-    logistica: '/api/executar/logistica-completa',
-    pcp:       '/api/executar/pcp-completo',
-    todos:     '/api/executar/todos'
-  };
-  const periodo = getSelectedPeriod();
-  const endpoint = endpoints[modulo];
-  if (!endpoint) return;
-
-  const res = await apiFetch(endpoint, { method:'POST', body: JSON.stringify({ periodo }) });
-  if (!res) {
-    showToast('❌ API não respondeu. Verifique se está rodando.', 'error');
-    return;
-  }
-
-  const moduleSelect = document.getElementById('updateModule');
-  if (moduleSelect) moduleSelect.value = modulo;
-
-  showToast(`▶ Execução ${moduloLabel(modulo)} iniciada!`, 'success');
-  execStart = new Date();
-  startTimer();
-  terminalLog(`[${now()}] INICIANDO: ${moduloLabel(modulo)} Completo · Período: ${periodoLabel(periodo)}`, 'info');
-  buscarLogs();
-}
-
-async function executarTratamentoModulo() {
-  const modulo = getSelectedModule() === 'todos' ? 'logistica' : getSelectedModule();
-  const endpoints = {
-    logistica: '/api/executar/tratamento-logistica',
-    pcp:       '/api/executar/tratamento-pcp'
-  };
-  const periodo = getSelectedPeriod();
-  const res = await apiFetch(endpoints[modulo], { method:'POST', body: JSON.stringify({ periodo }) });
-  if (!res) {
-    showToast('❌ API não respondeu.', 'error');
-    return;
-  }
-  showToast(`▶ Tratamento ${moduloLabel(modulo)} iniciado!`, 'success');
-  terminalLog(`[${now()}] INICIANDO: Tratamento ${moduloLabel(modulo)} · Período: ${periodoLabel(periodo)}`, 'info');
-  buscarLogs();
-}
-
-async function executarLogistica(modo) {
-  // Compatibilidade com versões antigas do botão.
-  if (modo === 'tratamento') return executarTratamentoModulo();
-  return executarModulo('logistica');
-}
-
-async function executarRobo(robot) {
-  const periodo = getSelectedPeriod();
-  const res = await apiFetch('/api/executar/relatorio', { method:'POST', body: JSON.stringify({ id: robot.id, nome: robot.nome, periodo }) });
-  if (!res) { showToast('❌ API não respondeu.', 'error'); return; }
-  showToast(`▶ Executando: ${robot.nome}`, 'success');
-  terminalLog(`[${now()}] INICIANDO: ${robot.nome} · Período: ${periodoLabel(periodo)}`, 'info');
-  document.getElementById('robotModalTerminal').textContent = 'Executando...';
-}
-
-async function buscarLogs() {
-  const data = await apiFetch('/api/logs');
-  if (!data || !data.logs) return;
-  const term = document.getElementById('terminal');
-  if (!term) return;
-  // Append new log lines
-  const lines = data.logs.split('\n');
-  lines.forEach(line => {
-    if (line.trim()) terminalLog(line, detectLineType(line));
-  });
-}
-
-function detectLineType(line) {
-  const l = line.toLowerCase();
-  if (l.includes('erro') || l.includes('error') || l.includes('falha') || l.includes('fail')) return 'err';
-  if (l.includes('ok') || l.includes('sucesso') || l.includes('finalizado') || l.includes('conclu')) return 'ok';
-  if (l.includes('aviso') || l.includes('warn')) return 'warn';
-  if (l.startsWith('[')) return 'time';
-  return 'info';
-}
-
-// ── Terminal ──
-let terminalBuffer = [];
-function terminalLog(text, type='info') {
-  const term = document.getElementById('terminal');
-  if (!term) return;
-  const cls = { ok:'terminal-line-ok', err:'terminal-line-err', warn:'terminal-line-warn', time:'terminal-line-time', info:'' }[type] || '';
-  const span = document.createElement('span');
-  span.className = cls;
-  span.textContent = text + '\n';
-  term.appendChild(span);
-  // Limit 500 lines
-  while (term.children.length > 500) term.removeChild(term.firstChild);
-  term.scrollTop = term.scrollHeight;
-}
-
-function limparTerminal() {
-  const term = document.getElementById('terminal');
-  if (term) term.innerHTML = '';
-}
-
-// ── Timer ──
-function startTimer() {
-  if (timerInterval) return;
-  timerInterval = setInterval(() => {
-    if (!execStart) return;
-    const diff = Date.now() - execStart.getTime();
-    const h = Math.floor(diff/3600000).toString().padStart(2,'0');
-    const m = Math.floor((diff%3600000)/60000).toString().padStart(2,'0');
-    const s = Math.floor((diff%60000)/1000).toString().padStart(2,'0');
-    setText('progressTimer', `${h}:${m}:${s}`);
-  }, 1000);
-}
-
-function stopTimer() {
-  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
-  execStart = null;
-}
-
-function startStatusPolling() {
-  if (statusInterval) return;
-  statusInterval = setInterval(() => {
-    buscarStatus();
-    if (portalStatus && portalStatus.execucao && portalStatus.execucao.status === 'executando') {
-      buscarLogs();
-    }
-  }, 3000);
-}
-
-function stopStatusPolling() {
-  if (statusInterval) { clearInterval(statusInterval); statusInterval = null; }
-}
-
-// ── Helpers ──
-function setText(id, val) {
-  const el = document.getElementById(id);
-  if (el) el.textContent = val;
-}
-
-function now() {
-  return new Date().toLocaleString('pt-BR');
-}
-
-function calcDuration(inicio, fim) {
-  if (!inicio || !fim) return '—';
-  try {
-    const diff = new Date(fim) - new Date(inicio);
-    const h = Math.floor(diff/3600000).toString().padStart(2,'0');
-    const m = Math.floor((diff%3600000)/60000).toString().padStart(2,'0');
-    const s = Math.floor((diff%60000)/1000).toString().padStart(2,'0');
-    return `${h}:${m}:${s}`;
-  } catch { return '—'; }
-}
-
-
 // ── Mobile nav ──
 function setMobNav(activeId) {
-  ['mnDash','mnReports','mnUpdates','mnPwd','mnAdmin'].forEach(id => {
+  ['mnDash','mnReports','mnPwd','mnAdmin'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.classList.toggle('active', el.id === activeId);
   });
@@ -3205,11 +2360,6 @@ function setMobNav(activeId) {
 
 function showMobileAdminBtn(show) {
   const el = document.getElementById('mnAdmin');
-  if (el) el.style.display = show ? 'flex' : 'none';
-}
-
-function showMobileUpdatesBtn(show) {
-  const el = document.getElementById('mnUpdates');
   if (el) el.style.display = show ? 'flex' : 'none';
 }
 
@@ -3503,23 +2653,5 @@ function rebuildSectorCheckboxes() {
     </label>`).join('');
 }
 </script>
-
-<script>
-(function removerBotaoAtualizarStatus(){
-  function limpar(){
-    document.querySelectorAll('button,a').forEach(el=>{
-      const t=(el.textContent||'').trim().toLowerCase();
-      if(t.includes('atualizar status')){
-        el.remove();
-      }
-    });
-  }
-  limpar();
-  setInterval(limpar, 1000);
-})();
-</script>
-
 </body>
 </html>
-
-<script>atualizarBotaoModulo();</script>
