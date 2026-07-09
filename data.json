@@ -253,7 +253,6 @@
       "pass": "temp123",
       "role": "sector",
       "sectors": [
-        "logistica",
         "comercial"
       ],
       "allowUpdates": false,
@@ -330,5 +329,5 @@
     "diretoria"
   ],
   "sectorMeta": {},
-  "publishedAt": "2026-07-06T17:05:23.467Z"
+  "publishedAt": "2026-07-09T11:14:20.428Z"
 }
