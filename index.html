@@ -2841,7 +2841,7 @@ function statusBadgeUpdate(status){
 }
 async function loadUpdateStatus(){
   try{
-    const data=await apiUpdate('/');
+    const data=await apiUpdate('/api/status');
     const banner=document.getElementById('updateApiBanner');
     banner.classList.remove('offline'); banner.textContent='● API conectada — '+UPDATE_API;
     const modulo=document.getElementById('updateModule').value;
