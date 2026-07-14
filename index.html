@@ -876,6 +876,25 @@
     .stats-grid { grid-template-columns: 1fr; }
     .stat-card { padding: 12px; }
   }
+
+  /* CENTRAL DE ATUALIZAÇÕES */
+  .update-panel { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:18px; margin-bottom:18px; }
+  .update-controls { display:grid; grid-template-columns:190px 240px minmax(320px,1fr) auto; gap:12px; align-items:end; }
+  .update-field label { display:block; font-size:11px; color:var(--text-muted); margin-bottom:7px; font-weight:600; text-transform:uppercase; letter-spacing:.4px; }
+  .update-field select,.update-field input { width:100%; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:10px 12px; color:var(--text); font-family:inherit; outline:none; }
+  .manual-period { display:none; grid-template-columns:1fr 1fr; gap:10px; }
+  .manual-period.show { display:grid; }
+  .api-banner { display:flex; align-items:center; gap:10px; padding:13px 16px; border-radius:8px; margin-bottom:16px; background:rgba(46,160,67,.09); border:1px solid rgba(46,160,67,.28); font-size:13px; }
+  .api-banner.offline { background:rgba(218,54,51,.09); border-color:rgba(218,54,51,.28); }
+  .update-progress { height:10px; background:var(--bg); border-radius:99px; overflow:hidden; margin:10px 0 6px; }
+  .update-progress > div { height:100%; width:0%; background:var(--accent2); transition:width .35s ease; }
+  .update-table-name { font-weight:600; }
+  .update-table-file { display:block; color:var(--text-muted); font-size:11px; margin-top:4px; }
+  .update-action { color:var(--accent2); cursor:pointer; font-weight:600; background:none; border:none; font-family:inherit; }
+  .terminal-box { margin-top:18px; background:#070a0f; border:1px solid var(--border); border-radius:8px; min-height:180px; max-height:340px; overflow:auto; padding:14px; white-space:pre-wrap; font-family:'JetBrains Mono',monospace; font-size:11px; line-height:1.55; color:#aeb8c4; }
+  @media(max-width:1050px){ .update-controls{grid-template-columns:1fr 1fr;} }
+  @media(max-width:768px){ .update-controls{grid-template-columns:1fr;} .manual-period{grid-template-columns:1fr;} }
+
 </style>
 
 </head>
@@ -947,6 +966,10 @@
     </div>
     <div class="nav-item" id="nav-reports" onclick="switchView('reports', this)">
       <span class="nav-icon">📈</span> Relatórios
+    </div>
+
+    <div class="nav-item" id="nav-updates" style="display:none" onclick="switchView('updates', this)">
+      <span class="nav-icon">⚡</span> Central de Atualizações
     </div>
     <div class="nav-item" onclick="switchView('changepass', this)">
       <span class="nav-icon">🔑</span> Trocar Senha
@@ -1021,6 +1044,58 @@
       <div class="view" id="view-reports">
         <div class="tabs" id="reportTabs"></div>
         <div class="report-grid" id="allReportGrid"></div>
+      </div>
+
+
+      <!-- VIEW: CENTRAL DE ATUALIZAÇÕES (admin) -->
+      <div class="view" id="view-updates">
+        <div id="updateApiBanner" class="api-banner offline">● Verificando conexão com a API...</div>
+
+        <div class="update-panel">
+          <div class="update-controls">
+            <div class="update-field">
+              <label>Módulo</label>
+              <select id="updateModule" onchange="loadUpdateStatus()">
+                <option value="pcp">PCP</option>
+                <option value="logistica">Logística</option>
+                <option value="todos">Todos</option>
+              </select>
+            </div>
+            <div class="update-field">
+              <label>Período da atualização</label>
+              <select id="updatePeriod" onchange="toggleManualPeriod()">
+                <option value="auto_pasta">Automático - ler pasta</option>
+                <option value="hoje">Hoje</option>
+                <option value="2_dias">Últimos 2 dias</option>
+                <option value="3_dias">Últimos 3 dias</option>
+                <option value="5_dias">Últimos 5 dias</option>
+                <option value="7_dias">Últimos 7 dias</option>
+                <option value="15_dias">Últimos 15 dias</option>
+                <option value="30_dias">Últimos 30 dias</option>
+                <option value="manual">Personalizado</option>
+              </select>
+            </div>
+            <div id="manualPeriodFields" class="manual-period">
+              <div class="update-field"><label>Data inicial</label><input type="date" id="updateStart"></div>
+              <div class="update-field"><label>Data final</label><input type="date" id="updateEnd"></div>
+            </div>
+            <button class="btn-sm accent" style="height:40px;justify-content:center" onclick="runModuleUpdate()">▶ Atualizar</button>
+          </div>
+        </div>
+
+        <div class="update-panel" id="updateProgressPanel" style="display:none">
+          <div style="display:flex;justify-content:space-between;gap:12px"><strong id="updateProgressTitle">Aguardando...</strong><span id="updateProgressTime" style="color:var(--text-muted);font-size:12px"></span></div>
+          <div class="update-progress"><div id="updateProgressBar"></div></div>
+          <div id="updateProgressText" style="font-size:12px;color:var(--text-muted)"></div>
+        </div>
+
+        <div class="table-wrapper">
+          <table>
+            <thead><tr><th>Relatório</th><th>Status</th><th>Última atualização</th><th>Duração</th><th>Período</th><th>Ação</th></tr></thead>
+            <tbody id="updateReportsBody"><tr><td colspan="6">Carregando...</td></tr></tbody>
+          </table>
+        </div>
+        <div class="terminal-box" id="updateTerminal">Terminal aguardando execução...</div>
       </div>
 
       <!-- VIEW: USERS (admin) -->
@@ -1167,12 +1242,16 @@
             </div>
             <div class="form-group"><label>Descrição</label><input type="text" id="rDesc" placeholder="Breve descrição do que o relatório mostra"></div>
             <div class="form-group">
-              <label>URL de Incorporação (Embed) do Power BI *</label>
-              <input type="text" id="rUrl" placeholder="https://app.powerbi.com/reportEmbed?reportId=..." oninput="previewUrl()">
+              <label>HTML de incorporação ou URL do Power BI *</label>
+              <textarea id="rUrl" rows="5"
+                placeholder='<iframe title="Relatório" width="1140" height="541" src="https://app.powerbi.com/view?r=..." frameborder="0" allowFullScreen="true"></iframe>'
+                oninput="previewUrl()"
+                style="width:100%;resize:vertical;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;color:var(--text);font-size:13px;font-family:JetBrains Mono,monospace;outline:none"></textarea>
               <div class="pbi-hint">
-                <strong>✅ URL correta (abre dentro do portal):</strong><br>
-                Acesse app.powerbi.com → abra o relatório → <strong>Arquivo → Publicar na Web → Criar código de inserção</strong><br>
-                Copie a URL que começa com <span style="color:#3fb950;font-family:monospace">https://app.powerbi.com/view?r=...</span>
+                <strong>✅ Agora você pode colar o HTML completo fornecido pelo Power BI.</strong><br>
+                No Power BI, copie o código de incorporação para <strong>site ou portal</strong> e cole aqui.<br>
+                O Portal localizará automaticamente o endereço existente em <span style="color:#3fb950;font-family:monospace">src="..."</span>.<br>
+                Também continua aceitando somente a URL do relatório.
               </div>
             </div>
             <div id="urlPreviewBox" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 14px;margin-bottom:14px;font-size:12px">
@@ -1224,12 +1303,13 @@
               </div>
               <div class="form-group"><label>Descrição</label><input type="text" id="eDesc"></div>
               <div class="form-group">
-                <label>URL de Embed do Power BI *</label>
-                <input type="text" id="eUrl" placeholder="https://app.powerbi.com/reportEmbed?...">
+                <label>HTML de incorporação ou URL do Power BI *</label>
+                <textarea id="eUrl" rows="5"
+                  placeholder='<iframe src="https://app.powerbi.com/view?r=..."></iframe>'
+                  style="width:100%;resize:vertical;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;color:var(--text);font-size:13px;font-family:JetBrains Mono,monospace;outline:none"></textarea>
               </div>
               <div class="pbi-hint" style="margin-top:8px;margin-bottom:16px">
-                <strong>✅ URL correta:</strong> app.powerbi.com → relatório → <strong>Arquivo → Publicar na Web → Criar código de inserção</strong><br>
-                Use a URL <span style="color:#3fb950;font-family:monospace">https://app.powerbi.com/view?r=...</span>
+                Cole o <strong>HTML completo de incorporação</strong> ou apenas a URL. O Portal extrai automaticamente o conteúdo do atributo <span style="color:#3fb950;font-family:monospace">src</span>.
               </div>
               <div style="display:flex;gap:10px">
                 <button class="btn-sm accent" onclick="saveEditReport()">💾 Salvar Alterações</button>
@@ -1399,8 +1479,8 @@
         <div style="font-size:48px;margin-bottom:16px">⚠️</div>
         <h3 style="font-size:17px;margin-bottom:10px;color:var(--text)">Não foi possível carregar o relatório</h3>
         <p style="font-size:13px;color:var(--text-muted);max-width:420px;line-height:1.7;margin-bottom:20px">
-          A URL configurada pode estar bloqueando a exibição em iframe.<br>
-          Certifique-se de usar uma URL válida do Power BI. O Portal agora força <strong>filterPaneEnabled=true</strong> para tentar exibir o painel de filtros.
+          O código ou a URL configurada não pôde ser carregado no iframe.<br>
+          Cole novamente o HTML de incorporação fornecido pelo Power BI ou uma URL válida.
         </p>
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 20px;text-align:left;max-width:480px;margin-bottom:20px;font-size:12px;color:var(--text-muted);line-height:1.8">
           <strong style="color:var(--text)">Como gerar a URL correta:</strong><br>
@@ -1629,13 +1709,13 @@ function initPortal() {
   // Admin nav — somente role 'admin' vê o painel de administração
   const isAdmin = (u.role === 'admin');
   document.getElementById('adminSection').style.display = isAdmin ? 'block' : 'none';
-  ['nav-users','nav-access','nav-reportsmgr','nav-sectors','nav-publish','nav-resetdb'].forEach(id => {
+  ['nav-users','nav-access','nav-reportsmgr','nav-sectors','nav-publish','nav-resetdb','nav-updates'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = isAdmin ? 'flex' : 'none';
   });
   // Se for admin, garantir que as views admin estão acessíveis (remover display:none inline)
   if (isAdmin) {
-    const adminViews = ['view-users','view-access','view-reportsmgr','view-sectors'];
+    const adminViews = ['view-users','view-access','view-reportsmgr','view-sectors','view-updates'];
     adminViews.forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.removeProperty('display');
@@ -1768,11 +1848,40 @@ function reportCard(r) {
   </div>`;
 }
 
+
+// Aceita tanto uma URL quanto o HTML completo de incorporação do Power BI.
+// Quando recebe <iframe ... src="...">, extrai e decodifica automaticamente o src.
+function extractPowerBIEmbedUrl(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+
+  // Conteúdo colado como iframe/HTML.
+  if (/<iframe[\s>]/i.test(raw) || /\bsrc\s*=/i.test(raw)) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(raw, 'text/html');
+    const iframe = doc.querySelector('iframe[src]');
+    if (iframe) {
+      return String(iframe.getAttribute('src') || '').trim();
+    }
+
+    // Fallback para HTML incompleto.
+    const match = raw.match(/\bsrc\s*=\s*["']([^"']+)["']/i);
+    if (match && match[1]) {
+      const textarea = document.createElement('textarea');
+      textarea.innerHTML = match[1];
+      return textarea.value.trim();
+    }
+  }
+
+  // Conteúdo colado como URL pura.
+  return raw;
+}
+
 // Ajuste Power BI: força o painel de filtros e a navegação de páginas no iframe do portal.
 // Observação: em links "Publicar na Web" (view?r=...), o Power BI pode limitar alguns painéis.
 // Mesmo assim, deixamos o parâmetro ativo. Para controle total, prefira reportEmbed/Power BI Embedded.
 function powerBIUrlWithVisiblePanes(url) {
-  const raw = String(url || '').trim();
+  const raw = extractPowerBIEmbedUrl(url);
   if (!raw) return '';
 
   try {
@@ -1807,7 +1916,7 @@ let originalReportUrl = '';
 function openReport(id) {
   const r = db.reports.find(x => x.id === id);
   if (!r) return;
-  originalReportUrl = r.url || '';
+  originalReportUrl = extractPowerBIEmbedUrl(r.url || '');
   currentReportUrl = powerBIUrlWithVisiblePanes(originalReportUrl);
   document.getElementById('modalTitle').textContent = r.title;
   document.getElementById('modalOpenBtn').href = originalReportUrl || currentReportUrl;
@@ -2045,7 +2154,7 @@ function renderReportsMgr() {
     return;
   }
   el.innerHTML = `<table><thead><tr>
-    <th>Título / Descrição</th><th>Setor</th><th>URL Power BI</th><th>Atualizado</th><th style="text-align:center">Ações</th>
+    <th>Título / Descrição</th><th>Setor</th><th>Incorporação Power BI</th><th>Atualizado</th><th style="text-align:center">Ações</th>
   </tr></thead><tbody>${db.reports.map(r => `<tr>
     <td>
       <strong>${r.title}</strong>
@@ -2083,7 +2192,8 @@ function previewUrl() {
   const url = document.getElementById('rUrl').value.trim();
   const box = document.getElementById('urlPreviewBox');
   if (url.length > 10) {
-    document.getElementById('urlPreviewText').textContent = url;
+    const extractedUrl = extractPowerBIEmbedUrl(url);
+    document.getElementById('urlPreviewText').textContent = extractedUrl || 'Não foi possível localizar o atributo src.';
     box.style.display = 'block';
   } else {
     box.style.display = 'none';
@@ -2093,10 +2203,12 @@ function previewUrl() {
 function saveReport() {
   const title  = document.getElementById('rTitle').value.trim();
   const desc   = document.getElementById('rDesc').value.trim();
-  const url    = document.getElementById('rUrl').value.trim();
+  const embedInput = document.getElementById('rUrl').value.trim();
+  const url = extractPowerBIEmbedUrl(embedInput);
   const sector = document.getElementById('rSector').value;
   if (!title) { showToast('Informe o título do relatório!', 'error'); return; }
-  if (!url)   { showToast('Informe a URL de embed do Power BI!', 'error'); return; }
+  if (!url)   { showToast('Cole o HTML de incorporação ou uma URL válida do Power BI!', 'error'); return; }
+  if (!/^https?:\/\//i.test(url)) { showToast('Não foi possível encontrar uma URL válida no HTML colado.', 'error'); return; }
   const now = new Date();
   const updatedAt = now.toLocaleDateString('pt-BR', {month:'short', year:'numeric'});
   db.reports.push({ id: Date.now(), title, desc, sector, url, updatedAt });
@@ -2114,7 +2226,10 @@ function openEditReport(id) {
   document.getElementById('eId').value = r.id;
   document.getElementById('eTitle').value = r.title;
   document.getElementById('eDesc').value = r.desc || '';
-  document.getElementById('eUrl').value = r.url || '';
+  const savedUrl = extractPowerBIEmbedUrl(r.url || '');
+  document.getElementById('eUrl').value = savedUrl
+    ? `<iframe title="${String(r.title || 'Relatório Power BI').replace(/"/g, '&quot;')}" width="100%" height="100%" src="${savedUrl}" frameborder="0" allowFullScreen="true"></iframe>`
+    : (r.url || '');
   document.getElementById('eSector').value = r.sector;
   document.getElementById('editModalOverlay').classList.add('open');
 }
@@ -2123,10 +2238,12 @@ function saveEditReport() {
   const id     = parseInt(document.getElementById('eId').value);
   const title  = document.getElementById('eTitle').value.trim();
   const desc   = document.getElementById('eDesc').value.trim();
-  const url    = document.getElementById('eUrl').value.trim();
+  const embedInput = document.getElementById('eUrl').value.trim();
+  const url = extractPowerBIEmbedUrl(embedInput);
   const sector = document.getElementById('eSector').value;
   if (!title) { showToast('Informe o título!', 'error'); return; }
-  if (!url)   { showToast('Informe a URL de embed!', 'error'); return; }
+  if (!url)   { showToast('Cole o HTML de incorporação ou uma URL válida!', 'error'); return; }
+  if (!/^https?:\/\//i.test(url)) { showToast('Não foi possível encontrar uma URL válida no HTML colado.', 'error'); return; }
   const r = db.reports.find(x => x.id === id);
   if (!r) return;
   const now = new Date();
@@ -2175,6 +2292,7 @@ function removeReport(id) {
 // NAV
 // ═══════════════════════════════════════
 const viewMeta = {
+  updates: { title:'Central de Atualizações', sub:'Monitore e execute os robôs de atualização do Power BI' },
   dashboard:  { title: 'Dashboard',            sub: 'Visão geral dos seus relatórios' },
   reports:    { title: 'Relatórios',            sub: 'Todos os relatórios disponíveis para você' },
   users:      { title: 'Gerenciar Usuários',    sub: 'Aprovações e controle de acesso' },
@@ -2186,7 +2304,7 @@ const viewMeta = {
 
 function switchView(viewId, navEl) {
   // Proteger rotas de admin para não-admins
-  const adminOnlyViews = ['users','access','reportsmgr','sectors'];
+  const adminOnlyViews = ['users','access','reportsmgr','sectors','updates'];
   if (adminOnlyViews.includes(viewId) && currentUser && currentUser.role !== 'admin') {
     showToast('Acesso restrito ao administrador.', 'error');
     return;
@@ -2202,6 +2320,7 @@ function switchView(viewId, navEl) {
   }
   if (viewId === 'changepass') initAdminResetPanel();
   if (viewId === 'sectors') renderSectorsList();
+  if (viewId === 'updates') startUpdateMonitor();
 }
 
 function switchUserTab(tab, el) {
@@ -2652,6 +2771,94 @@ function rebuildSectorCheckboxes() {
       <input type="checkbox" value="${s}" style="display:none"> ${sectorLabel(s)}
     </label>`).join('');
 }
+
+// ═══════════════════════════════════════
+// CENTRAL DE ATUALIZAÇÕES
+// ═══════════════════════════════════════
+const UPDATE_API = localStorage.getItem('granjabi_update_api') || 'http://192.168.1.193:5000';
+let updateTimer = null;
+
+function isoToday(){ return new Date().toISOString().slice(0,10); }
+function toggleManualPeriod(){
+  const manual = document.getElementById('updatePeriod').value === 'manual';
+  document.getElementById('manualPeriodFields').classList.toggle('show', manual);
+  if (manual) {
+    const end=document.getElementById('updateEnd');
+    const start=document.getElementById('updateStart');
+    if(!end.value) end.value=isoToday();
+    if(!start.value){ const d=new Date(); d.setDate(d.getDate()-7); start.value=d.toISOString().slice(0,10); }
+    end.max=isoToday(); start.max=isoToday();
+  }
+}
+function updatePayload(){
+  const periodo=document.getElementById('updatePeriod').value;
+  const payload={periodo};
+  if(periodo==='manual'){
+    payload.data_inicio=document.getElementById('updateStart').value;
+    payload.data_fim=document.getElementById('updateEnd').value;
+    if(!payload.data_inicio || !payload.data_fim) throw new Error('Informe a data inicial e a data final.');
+    if(payload.data_inicio>payload.data_fim) throw new Error('A data inicial não pode ser maior que a data final.');
+  }
+  return payload;
+}
+async function apiUpdate(path, options={}){
+  const res=await fetch(UPDATE_API+path,{...options,headers:{'Content-Type':'application/json',...(options.headers||{})}});
+  let data={}; try{data=await res.json();}catch(e){}
+  if(!res.ok) throw new Error(data.erro || ('Erro HTTP '+res.status));
+  return data;
+}
+function startUpdateMonitor(){
+  toggleManualPeriod(); loadUpdateStatus();
+  clearInterval(updateTimer); updateTimer=setInterval(loadUpdateStatus,2000);
+}
+async function runModuleUpdate(){
+  try{
+    const modulo=document.getElementById('updateModule').value;
+    const payload=updatePayload();
+    const nomePeriodo=document.getElementById('updatePeriod').selectedOptions[0].text;
+    let detalhe=nomePeriodo;
+    if(payload.periodo==='manual') detalhe=`${payload.data_inicio.split('-').reverse().join('/')} até ${payload.data_fim.split('-').reverse().join('/')}`;
+    if(!confirm(`Atualizar ${modulo.toUpperCase()}?
+
+Período: ${detalhe}`)) return;
+    await apiUpdate('/api/executar/'+modulo,{method:'POST',body:JSON.stringify(payload)});
+    showToast('Atualização iniciada com sucesso.','success');
+    document.getElementById('updateProgressPanel').style.display='block';
+    loadUpdateStatus();
+  }catch(e){ showToast(e.message,'error'); }
+}
+async function runSingleUpdate(id){
+  try{
+    const payload=updatePayload(); payload.id=id;
+    await apiUpdate('/api/executar/relatorio',{method:'POST',body:JSON.stringify(payload)});
+    showToast('Relatório iniciado.','success'); loadUpdateStatus();
+  }catch(e){showToast(e.message,'error');}
+}
+function statusBadgeUpdate(status){
+  const s=String(status||'Aguardando').toLowerCase();
+  let cls='status-pending'; if(s.includes('sucesso')||s.includes('conclu')) cls='status-active'; if(s.includes('erro')) cls='status-blocked';
+  return `<span class="status-badge ${cls}"><span class="status-dot"></span>${status||'Aguardando'}</span>`;
+}
+async function loadUpdateStatus(){
+  try{
+    const data=await apiUpdate('/');
+    const banner=document.getElementById('updateApiBanner');
+    banner.classList.remove('offline'); banner.textContent='● API conectada — '+UPDATE_API;
+    const modulo=document.getElementById('updateModule').value;
+    const rels=Object.values(data.relatorios||{}).filter(r=> modulo==='todos' || (r.id||'').startsWith(modulo==='pcp'?'pcp_':'') || (modulo==='logistica' && !(r.id||'').startsWith('pcp_') && r.id!=='tratamento_pcp'));
+    document.getElementById('updateReportsBody').innerHTML=rels.map(r=>`<tr><td><span class="update-table-name">${r.nome}</span><span class="update-table-file">${String(r.arquivo||'').split('\\').pop()}</span></td><td>${statusBadgeUpdate(r.status)}</td><td>${r.ultima||'—'}</td><td>${r.duracao||'—'}</td><td>${r.periodo||'—'}</td><td><button class="update-action" onclick="runSingleUpdate('${r.id}')">Atualizar</button></td></tr>`).join('') || '<tr><td colspan="6">Nenhum relatório encontrado.</td></tr>';
+    const ex=data.execucao||{}; const running=ex.status==='executando';
+    const panel=document.getElementById('updateProgressPanel'); panel.style.display=(running||ex.status==='concluido'||ex.status==='erro')?'block':'none';
+    const pct=Number(ex.percentual||0); document.getElementById('updateProgressBar').style.width=Math.min(100,Math.max(0,pct))+'%';
+    document.getElementById('updateProgressTitle').textContent=running?('Executando: '+(ex.etapa_atual||'preparando')):(ex.status==='concluido'?'✅ Concluído com sucesso!':ex.status==='erro'?'❌ Erro na atualização':'Aguardando');
+    document.getElementById('updateProgressText').textContent=`${pct}% · ${ex.concluidos_qtd||0} de ${ex.total||0} etapas`;
+    document.getElementById('updateProgressTime').textContent=ex.fim||'';
+    try{ const logs=await apiUpdate('/api/logs'); const term=document.getElementById('updateTerminal'); term.textContent=logs.logs||'Terminal aguardando execução...'; term.scrollTop=term.scrollHeight; }catch(e){}
+  }catch(e){
+    const banner=document.getElementById('updateApiBanner'); if(banner){banner.classList.add('offline');banner.textContent='● API desconectada — '+e.message;}
+  }
+}
+
 </script>
 </body>
 </html>
