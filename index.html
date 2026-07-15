@@ -2829,10 +2829,31 @@ Período: ${detalhe}`)) return;
 }
 async function runSingleUpdate(id){
   try{
-    const payload=updatePayload(); payload.id=id;
-    await apiUpdate('/api/executar/relatorio',{method:'POST',body:JSON.stringify(payload)});
-    showToast('Relatório iniciado.','success'); loadUpdateStatus();
-  }catch(e){showToast(e.message,'error');}
+    const payload=updatePayload();
+    payload.id=id;
+
+    // Abre imediatamente o mesmo painel de acompanhamento usado na atualização geral.
+    const panel=document.getElementById('updateProgressPanel');
+    if(panel) panel.style.display='block';
+
+    // Atualiza o status agora e mantém a consulta automática a cada 2 segundos.
+    clearInterval(updateTimer);
+    await loadUpdateStatus();
+    updateTimer=setInterval(loadUpdateStatus,2000);
+
+    await apiUpdate('/api/executar/relatorio',{
+      method:'POST',
+      body:JSON.stringify(payload)
+    });
+
+    showToast('Relatório, tratamento e Power BI iniciados.','success');
+
+    // Busca novamente para mostrar "Em andamento" sem esperar o próximo intervalo.
+    await loadUpdateStatus();
+  }catch(e){
+    showToast(e.message,'error');
+    await loadUpdateStatus();
+  }
 }
 function statusBadgeUpdate(status){
   const s=String(status||'Aguardando').toLowerCase();
@@ -2845,8 +2866,46 @@ async function loadUpdateStatus(){
     const banner=document.getElementById('updateApiBanner');
     banner.classList.remove('offline'); banner.textContent='● API conectada — '+UPDATE_API;
     const modulo=document.getElementById('updateModule').value;
-    const rels=Object.values(data.relatorios||{}).filter(r=> modulo==='todos' || (r.id||'').startsWith(modulo==='pcp'?'pcp_':'') || (modulo==='logistica' && !(r.id||'').startsWith('pcp_') && r.id!=='tratamento_pcp'));
-    document.getElementById('updateReportsBody').innerHTML=rels.map(r=>`<tr><td><span class="update-table-name">${r.nome}</span><span class="update-table-file">${String(r.arquivo||'').split('\\').pop()}</span></td><td>${statusBadgeUpdate(r.status)}</td><td>${r.ultima||'—'}</td><td>${r.duracao||'—'}</td><td>${r.periodo||'—'}</td><td><button class="update-action" onclick="runSingleUpdate('${r.id}')">Atualizar</button></td></tr>`).join('') || '<tr><td colspan="6">Nenhum relatório encontrado.</td></tr>';
+    const rels=Object.values(data.relatorios||{}).filter(r=>{
+      const id=String(r.id||'');
+
+      if(modulo==='todos') return true;
+
+      if(modulo==='pcp'){
+        // Exibe os relatórios do PCP e também a etapa de tratamento/Parquet/Power BI.
+        return id.startsWith('pcp_') || id==='tratamento_pcp';
+      }
+
+      if(modulo==='logistica'){
+        // Exibe os relatórios da Logística e também seu tratamento.
+        return !id.startsWith('pcp_') && id!=='tratamento_pcp';
+      }
+
+      return false;
+    });
+    document.getElementById('updateReportsBody').innerHTML=rels.map(r=>{
+      const id=String(r.id||'');
+      const ehTratamento=id==='tratamento_pcp' || id==='tratamento_logistica';
+      const nomeExibicao=id==='tratamento_pcp'
+        ? 'Tratamento PCP / Power BI'
+        : (id==='tratamento_logistica' ? 'Tratamento Logística / Power BI' : r.nome);
+
+      const acao=ehTratamento
+        ? '<span style="color:var(--text-muted);font-size:11px">Automático</span>'
+        : `<button class="update-action" onclick="runSingleUpdate('${id}')">Atualizar</button>`;
+
+      return `<tr>
+        <td>
+          <span class="update-table-name">${nomeExibicao}</span>
+          <span class="update-table-file">${String(r.arquivo||'').split('\\').pop()}</span>
+        </td>
+        <td>${statusBadgeUpdate(r.status)}</td>
+        <td>${r.ultima||'—'}</td>
+        <td>${r.duracao||'—'}</td>
+        <td>${r.periodo||'—'}</td>
+        <td>${acao}</td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="6">Nenhum relatório encontrado.</td></tr>';
     const ex=data.execucao||{}; const running=ex.status==='executando';
     const panel=document.getElementById('updateProgressPanel'); panel.style.display=(running||ex.status==='concluido'||ex.status==='erro')?'block':'none';
     const pct=Number(ex.percentual||0); document.getElementById('updateProgressBar').style.width=Math.min(100,Math.max(0,pct))+'%';
