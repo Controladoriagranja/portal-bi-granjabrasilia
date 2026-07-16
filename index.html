@@ -2847,12 +2847,21 @@ async function runSingleUpdate(id){
       body:JSON.stringify(payload)
     });
 
-    showToast('Relatório, tratamento e Power BI iniciados.','success');
+    const mensagem = String(id).startsWith('tratamento_')
+      ? 'Tratamento iniciado individualmente.'
+      : 'Relatório e tratamento iniciados.';
+    showToast(mensagem,'success');
 
     // Busca novamente para mostrar "Em andamento" sem esperar o próximo intervalo.
     await loadUpdateStatus();
   }catch(e){
-    showToast(e.message,'error');
+    const detalhe = String(e.message || e);
+    showToast(detalhe,'error');
+
+    if(detalhe.toLowerCase().includes('arquivo não encontrado')){
+      console.error('Confira http://192.168.1.193:5000/api/versao para saber qual app.py está rodando.');
+    }
+
     await loadUpdateStatus();
   }
 }
@@ -2929,9 +2938,8 @@ async function loadUpdateStatus(){
 
       const nomeExibicao=nomesTratamento[id] || r.nome;
 
-      const acao=ehTratamento
-        ? '<span style="color:var(--text-muted);font-size:11px">Automático</span>'
-        : `<button class="update-action" onclick="runSingleUpdate('${id}')">Atualizar</button>`;
+      const textoAcao=ehTratamento ? 'Tratar' : 'Atualizar';
+      const acao=`<button class="update-action" onclick="runSingleUpdate('${id}')">${textoAcao}</button>`;
 
       return `<tr>
         <td>
