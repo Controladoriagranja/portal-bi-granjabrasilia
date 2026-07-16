@@ -1058,6 +1058,7 @@
               <select id="updateModule" onchange="loadUpdateStatus()">
                 <option value="pcp">PCP</option>
                 <option value="logistica">Logística</option>
+                <option value="comercial">Comercial</option>
                 <option value="todos">Todos</option>
               </select>
             </div>
@@ -2856,9 +2857,17 @@ async function runSingleUpdate(id){
   }
 }
 function statusBadgeUpdate(status){
-  const s=String(status||'Aguardando').toLowerCase();
-  let cls='status-pending'; if(s.includes('sucesso')||s.includes('conclu')) cls='status-active'; if(s.includes('erro')) cls='status-blocked';
-  return `<span class="status-badge ${cls}"><span class="status-dot"></span>${status||'Aguardando'}</span>`;
+  const texto=String(status||'Aguardando');
+  const s=texto.toLowerCase();
+  let cls='status-pending';
+
+  if(s.includes('sucesso') || s.includes('conclu') || s.includes('atualizado')){
+    cls='status-active';
+  }else if(s.includes('erro') || s.includes('falha') || s.includes('offline')){
+    cls='status-blocked';
+  }
+
+  return `<span class="status-badge ${cls}"><span class="status-dot"></span>${texto}</span>`;
 }
 async function loadUpdateStatus(){
   try{
@@ -2868,27 +2877,57 @@ async function loadUpdateStatus(){
     const modulo=document.getElementById('updateModule').value;
     const rels=Object.values(data.relatorios||{}).filter(r=>{
       const id=String(r.id||'');
+      const moduloRelatorio=String(r.modulo||'').toLowerCase();
 
       if(modulo==='todos') return true;
 
+      // Forma principal: usa o módulo enviado pelo app.py.
+      if(moduloRelatorio){
+        return moduloRelatorio===modulo;
+      }
+
+      // Compatibilidade com status.json antigo, ainda sem o campo "modulo".
       if(modulo==='pcp'){
-        // Exibe os relatórios do PCP e também a etapa de tratamento/Parquet/Power BI.
         return id.startsWith('pcp_') || id==='tratamento_pcp';
       }
 
       if(modulo==='logistica'){
-        // Exibe os relatórios da Logística e também seu tratamento.
-        return !id.startsWith('pcp_') && id!=='tratamento_pcp';
+        const idsLogistica=[
+          'cadastro_vendedores',
+          'relatorio_veiculos',
+          'controle_pallets',
+          'devolucoes',
+          'frete',
+          'controle_frete',
+          'ocorrencia_viagens_custo',
+          'contas_a_pagar',
+          'faturamento_cfop',
+          'tratamento_logistica'
+        ];
+        return idsLogistica.includes(id);
+      }
+
+      if(modulo==='comercial'){
+        return id.startsWith('comercial_') || id==='tratamento_comercial';
       }
 
       return false;
     });
     document.getElementById('updateReportsBody').innerHTML=rels.map(r=>{
       const id=String(r.id||'');
-      const ehTratamento=id==='tratamento_pcp' || id==='tratamento_logistica';
-      const nomeExibicao=id==='tratamento_pcp'
-        ? 'Tratamento PCP / Power BI'
-        : (id==='tratamento_logistica' ? 'Tratamento Logística / Power BI' : r.nome);
+      const ehTratamento=[
+        'tratamento_pcp',
+        'tratamento_logistica',
+        'tratamento_comercial'
+      ].includes(id);
+
+      const nomesTratamento={
+        tratamento_pcp:'Tratamento PCP / Power BI',
+        tratamento_logistica:'Tratamento Logística / Power BI',
+        tratamento_comercial:'Tratamento Comercial / Power BI'
+      };
+
+      const nomeExibicao=nomesTratamento[id] || r.nome;
 
       const acao=ehTratamento
         ? '<span style="color:var(--text-muted);font-size:11px">Automático</span>'
@@ -2905,7 +2944,12 @@ async function loadUpdateStatus(){
         <td>${r.periodo||'—'}</td>
         <td>${acao}</td>
       </tr>`;
-    }).join('') || '<tr><td colspan="6">Nenhum relatório encontrado.</td></tr>';
+    }).join('') || `<tr>
+      <td colspan="6" style="padding:18px;color:var(--text-muted)">
+        Nenhum relatório encontrado para <strong>${modulo}</strong>.
+        Reinicie a API usando o app.py atualizado para carregar os novos relatórios.
+      </td>
+    </tr>`;
     const ex=data.execucao||{}; const running=ex.status==='executando';
     const panel=document.getElementById('updateProgressPanel'); panel.style.display=(running||ex.status==='concluido'||ex.status==='erro')?'block':'none';
     const pct=Number(ex.percentual||0); document.getElementById('updateProgressBar').style.width=Math.min(100,Math.max(0,pct))+'%';
