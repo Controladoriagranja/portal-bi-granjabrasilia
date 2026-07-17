@@ -297,6 +297,17 @@
       ],
       "allowUpdates": false,
       "status": "active"
+    },
+    {
+      "id": 1784286256876,
+      "name": "Lara Eduarda Silva Santos",
+      "email": "analistacomercialgb@granjabrasilia.com",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "comercial"
+      ],
+      "status": "active"
     }
   ],
   "reports": [
@@ -337,5 +348,5 @@
     "diretoria"
   ],
   "sectorMeta": {},
-  "publishedAt": "2026-07-09T20:50:06.301Z"
+  "publishedAt": "2026-07-17T11:04:22.668Z"
 }
