@@ -1152,29 +1152,25 @@
                 </select>
               </div>
 
-              <div class="form-group" id="euSupervisorCodeField">
-                <label>Código do supervisor <span style="font-size:11px;color:var(--text-muted)">(ex.: 681)</span></label>
-                <input type="number" id="euSupervisorCode" min="1" step="1" placeholder="Código usado na Dim_Vendedor">
-              </div>
 
               <div class="form-group" id="euSectorField">
-                <label>Setores permitidos <span style="font-size:11px;color:var(--text-muted)">(selecione um ou mais)</span></label>
+                <label>Setores permitidos</label>
                 <div class="checkgroup" id="euSectorCheckGroup"></div>
                 <div id="euSectorWarn" style="font-size:12px;color:var(--orange);margin-top:6px;display:none">⚠️ Selecione pelo menos um setor.</div>
               </div>
 
               <div class="form-group" id="euReportModeField">
-                <label>Liberação das telas</label>
+                <label>Liberação dos relatórios</label>
                 <select id="euReportMode" onchange="toggleEuReportMode()">
                   <option value="sector">Todas as páginas dos relatórios dos setores selecionados</option>
-                  <option value="specific">Somente as telas marcadas abaixo</option>
+                  <option value="specific">Somente os relatórios marcados abaixo</option>
                 </select>
               </div>
 
               <div class="form-group" id="euReportsField" style="display:none">
-                <label>Páginas específicas permitidas <span style="font-size:11px;color:var(--text-muted)">(selecione uma ou mais)</span></label>
+                <label>Relatórios específicos permitidos <span style="font-size:11px;color:var(--text-muted)">(selecione uma ou mais)</span></label>
                 <div class="checkgroup" id="euReportCheckGroup"></div>
-                <div id="euReportWarn" style="font-size:12px;color:var(--orange);margin-top:6px;display:none">⚠️ Selecione pelo menos uma tela.</div>
+                <div id="euReportWarn" style="font-size:12px;color:var(--orange);margin-top:6px;display:none">⚠️ Selecione pelo menos um relatório.</div>
               </div>
 
               <div class="form-group">
@@ -1229,26 +1225,22 @@
               <option value="sector">Setor — acesso restrito por área</option>
             </select>
           </div>
-          <div class="form-group" id="supervisorCodeField" style="display:none">
-            <label>Código do supervisor <span style="font-size:11px;color:var(--text-muted)">(ex.: 681)</span></label>
-            <input type="number" id="newUserSupervisorCode" min="1" step="1" placeholder="Código usado na Dim_Vendedor">
-            <div style="font-size:11px;color:var(--text-muted);margin-top:5px">Obrigatório para usuários que abrirão a página Supervisor com RLS.</div>
-          </div>
+
           <div class="form-group" id="sectorField" style="display:none">
             <label>Setores permitidos <span style="font-size:11px;color:var(--text-muted)">(pode selecionar vários)</span></label>
             <div class="checkgroup" id="sectorCheckGroup"></div>
           </div>
           <div class="form-group" id="reportAccessModeField" style="display:none">
-            <label>Liberação das telas</label>
+            <label>Liberação dos relatórios</label>
             <select id="newUserReportMode" onchange="toggleNewUserReportMode()">
               <option value="sector">Todas as páginas dos relatórios dos setores selecionados</option>
-              <option value="specific">Somente as telas marcadas abaixo</option>
+              <option value="specific">Somente os relatórios marcados abaixo</option>
             </select>
           </div>
           <div class="form-group" id="newUserReportsField" style="display:none">
-            <label>Páginas específicas permitidas <span style="font-size:11px;color:var(--text-muted)">(selecione uma ou mais)</span></label>
+            <label>Relatórios específicos permitidos <span style="font-size:11px;color:var(--text-muted)">(selecione uma ou mais)</span></label>
             <div class="checkgroup" id="newUserReportCheckGroup"></div>
-            <div id="newUserReportWarn" style="font-size:12px;color:var(--orange);margin-top:6px;display:none">⚠️ Selecione pelo menos uma tela.</div>
+            <div id="newUserReportWarn" style="font-size:12px;color:var(--orange);margin-top:6px;display:none">⚠️ Selecione pelo menos um relatório.</div>
           </div>
           <button class="btn-sm accent" onclick="addUser()" style="margin-top:4px">✔ Liberar Acesso</button>
         </div>
@@ -1548,7 +1540,6 @@
 <!-- TOAST -->
 <div class="toast" id="toast"><span id="toastIcon">✓</span><span id="toastMsg"></span></div>
 
-<script src="https://cdn.jsdelivr.net/npm/powerbi-client@2.23.1/dist/powerbi.min.js"></script>
 <script>
 // ═══════════════════════════════════════
 // DATA STORE + LOCALSTORAGE
@@ -1607,7 +1598,7 @@ function pagePermissionKey(reportId, pageId) {
 const DEFAULT_DB = {
   sectors: [...DEFAULT_SECTORS],
   users: [
-    { id:1, name:'Admin Sistema', email:'admin@granjabrasilia.com.br', pass:'admin123', role:'admin', sectors:[...DEFAULT_SECTORS], reportAccessMode:'sector', reportIds:[], supervisorCode:'', status:'active' },
+    { id:1, name:'Admin Sistema', email:'admin@granjabrasilia.com.br', pass:'admin123', role:'admin', sectors:[...DEFAULT_SECTORS], reportAccessMode:'sector', reportIds:[], status:'active' },
   ],
   reports: []
 };
@@ -1622,6 +1613,23 @@ function saveDB() {
 
 function syncSectors() {
   if (db.sectors) SECTORS = [...db.sectors];
+}
+
+function formatPortalDate(value) {
+  if (!value) return 'Ainda não publicado';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+function reportPortalUpdateText(report) {
+  return formatPortalDate(report?.updatedAt || '');
 }
 
 function saveSession(userId) {
@@ -1654,8 +1662,12 @@ db.users.forEach(u => {
   if (!u.reportAccessMode) u.reportAccessMode = 'sector';
   if (!Array.isArray(u.reportIds)) u.reportIds = [];
   if (!Array.isArray(u.pageIds)) u.pageIds = [];
-  if (u.supervisorCode === undefined || u.supervisorCode === null) u.supervisorCode = '';
-  u.supervisorCode = String(u.supervisorCode || '').trim();
+
+  if ((u.reportAccessMode || 'sector') === 'specific' && u.reportIds.length === 0 && u.pageIds.length) {
+    u.reportIds = [...new Set(
+      u.pageIds.map(key => Number(String(key).split('::')[0])).filter(Number.isFinite)
+    )];
+  }
 });
 syncSectors();
 
@@ -1668,6 +1680,8 @@ function applyLoadedData(loaded) {
   if (loaded.reports)                              db.reports    = loaded.reports;
   if (loaded.sectors    && loaded.sectors.length)  db.sectors    = loaded.sectors;
   if (loaded.sectorMeta)                           db.sectorMeta = loaded.sectorMeta;
+
+
 }
 
 function initApp() {
@@ -1680,7 +1694,7 @@ function initApp() {
   // 2. Garantir admin
   if (!db.users.find(u => u.email === 'admin@granjabrasilia.com.br')) {
     db.users.unshift({ id:1, name:'Admin Sistema', email:'admin@granjabrasilia.com.br',
-      pass:'admin123', role:'admin', sectors:[...DEFAULT_SECTORS], reportAccessMode:'sector', reportIds:[], supervisorCode:'', status:'active' });
+      pass:'admin123', role:'admin', sectors:[...DEFAULT_SECTORS], reportAccessMode:'sector', reportIds:[], status:'active' });
     try { localStorage.setItem('granjabi_db', JSON.stringify(db)); } catch(e) {}
   }
   if (!db.sectors || db.sectors.length === 0) db.sectors = [...DEFAULT_SECTORS];
@@ -1851,11 +1865,8 @@ function getUserReports() {
 
   const mode = u.reportAccessMode || 'sector';
   if (mode === 'specific') {
-    const pageIds = Array.isArray(u.pageIds) ? u.pageIds.map(String) : [];
-    // No modo específico, NÃO considerar reportIds antigos, pois isso libera o relatório inteiro.
-    return db.reports.filter(r =>
-      pageIds.some(key => key.startsWith(`${Number(r.id)}::`))
-    );
+    const allowed = new Set((u.reportIds || []).map(Number));
+    return db.reports.filter(r => allowed.has(Number(r.id)));
   }
 
   const sectors = Array.isArray(u.sectors) ? u.sectors : [];
@@ -1863,35 +1874,14 @@ function getUserReports() {
 }
 
 function getUserAccessItems() {
-  const u = currentUser;
-  if (!u) return [];
-
-  // Admin e diretor continuam abrindo o relatório completo.
-  if (u.role === 'admin' || u.role === 'director' || (u.reportAccessMode || 'sector') !== 'specific') {
-    return getUserReports().map(report => ({ report, page: null }));
-  }
-
-  const allowed = new Set((u.pageIds || []).map(String));
-  const items = [];
-  getUserReports().forEach(report => {
-    reportPages(report).forEach(page => {
-      if (allowed.has(pagePermissionKey(report.id, page.id))) {
-        items.push({ report, page });
-      }
-    });
-  });
-  return items;
+  return getUserReports().map(report => ({ report, page: null }));
 }
 
 function canOpenReportPage(reportId, pageId = '') {
   const u = currentUser;
   if (!u) return false;
   if (u.role === 'admin' || u.role === 'director') return true;
-  if ((u.reportAccessMode || 'sector') !== 'specific') {
-    return getUserReports().some(r => Number(r.id) === Number(reportId));
-  }
-  if (!pageId) return false;
-  return (u.pageIds || []).map(String).includes(pagePermissionKey(reportId, pageId));
+  return getUserReports().some(r => Number(r.id) === Number(reportId));
 }
 
 // ═══════════════════════════════════════
@@ -1981,7 +1971,6 @@ function accessCard(item) {
     <div class="report-sector-tag tag-${r.sector}">${sectorLabel(r.sector)}</div>
     <div class="report-title">${title}</div>
     <div class="report-desc">${desc}</div>
-    <div class="report-meta"><span>📅 ${r.updatedAt}</span></div>
     <button class="btn-open" onclick="openReport(${r.id}${pageArg})">🔗 Abrir Tela</button>
   </div>`;
 }
@@ -2056,9 +2045,9 @@ function powerBIUrlWithVisiblePanes(url) {
 function powerBIUrlForPage(url, pageName) {
   const raw = powerBIUrlWithVisiblePanes(url);
   if (!raw) return '';
+
   try {
     const u = new URL(raw);
-    // Oculta a navegação nativa de páginas para usuários com acesso específico.
     u.searchParams.set('navContentPaneEnabled', 'false');
     u.searchParams.set('filterPaneEnabled', 'false');
     if (pageName) u.searchParams.set('pageName', pageName);
@@ -2093,6 +2082,7 @@ async function openReport(id, pageId = '') {
   const iframe = document.getElementById('reportIframe');
   const embedContainer = document.getElementById('powerbiEmbedContainer');
   originalReportUrl = extractPowerBIEmbedUrl((page && page.url) || r.url || '');
+
   currentReportUrl = page
     ? powerBIUrlForPage(originalReportUrl, page.pageName || '')
     : powerBIUrlWithVisiblePanes(originalReportUrl);
@@ -2109,74 +2099,9 @@ async function openReport(id, pageId = '') {
   embedContainer.style.display = 'none';
   document.getElementById('modalOverlay').classList.add('open');
 
-  const isSupervisorPage = page && String(page.id) === 'supervisor';
-  const supervisorCode = String(currentUser?.supervisorCode || '').trim();
+  // Todos os relatórios continuam abrindo diretamente no iframe público.
+  // Na página Supervisor, a URL já contém o filtro do usuário logado.
 
-  // Usuário com página Supervisor usa Embed Token + RLS dinâmica.
-  if (isSupervisorPage && /^\d+$/.test(supervisorCode)) {
-    try {
-      const response = await fetch('/api/powerbi/embed-token', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({
-          supervisor_code: supervisorCode,
-          page_name: page.pageName || page.title || 'Supervisor'
-        })
-      });
-      const data = await response.json();
-      if (!response.ok || !data.ok) throw new Error(data.erro || 'Falha ao gerar Embed Token.');
-      if (!window.powerbi || !window['powerbi-client']) throw new Error('Biblioteca powerbi-client não carregada.');
-
-      const models = window['powerbi-client'].models;
-      powerbi.reset(embedContainer);
-      embedContainer.style.display = 'block';
-      const config = {
-        type: 'report',
-        id: data.reportId,
-        embedUrl: data.embedUrl,
-        accessToken: data.embedToken,
-        tokenType: models.TokenType.Embed,
-        pageName: data.pageName || undefined,
-        permissions: models.Permissions.Read,
-        settings: {
-          panes: {
-            filters: { visible: false, expanded: false },
-            pageNavigation: { visible: false }
-          },
-          bars: { statusBar: { visible: false } },
-          navContentPaneEnabled: false,
-          filterPaneEnabled: false
-        }
-      };
-      const embeddedReport = powerbi.embed(embedContainer, config);
-      embeddedReport.on('loaded', async () => {
-        document.getElementById('iframeLoader').style.display = 'none';
-        if (data.pageName) {
-          try { await embeddedReport.setPage(data.pageName); } catch(e) {}
-        }
-      });
-      embeddedReport.on('pageChanged', async event => {
-        const current = event?.detail?.newPage?.name;
-        if (data.pageName && current && current !== data.pageName) {
-          try { await embeddedReport.setPage(data.pageName); } catch(e) {}
-        }
-      });
-      embeddedReport.on('error', event => {
-        console.error('Power BI Embedded:', event?.detail || event);
-        document.getElementById('iframeLoader').style.display = 'none';
-        document.getElementById('iframeError').style.display = 'flex';
-      });
-      return;
-    } catch (e) {
-      console.error(e);
-      document.getElementById('iframeLoader').style.display = 'none';
-      document.getElementById('iframeError').style.display = 'flex';
-      showToast(e.message || 'Erro ao abrir o relatório com RLS.', 'error');
-      return;
-    }
-  }
-
-  // Admin/Diretor ou relatórios antigos continuam no iframe legado.
   if (!currentReportUrl) {
     document.getElementById('iframeLoader').style.display = 'none';
     document.getElementById('iframeError').style.display = 'flex';
@@ -2280,7 +2205,7 @@ function renderAllUsersTable() {
     <td style="font-size:12px;color:var(--text-muted);max-width:180px">
       ${u.role==='sector'
         ? ((u.reportAccessMode || 'sector') === 'specific'
-            ? `<span style="color:var(--accent2);font-size:11px">${(u.pageIds || []).length} tela(s) específica(s)</span>`
+            ? `<span style="color:var(--accent2);font-size:11px">${(u.reportIds || []).length} relatório(s) específico(s)</span>`
             : (u.sectors && u.sectors.length
                 ? u.sectors.map(s => `<span class="report-sector-tag" style="margin:2px;font-size:10px;${sectorTagStyle(s)}">${sectorLabel(s)}</span>`).join('')
                 : '<span style="color:var(--red);font-size:11px">Nenhum setor</span>'))
@@ -2341,7 +2266,7 @@ function selectedSectorsFromGroup(groupId) {
 }
 
 function pagePermissionItems(selectedIds = [], sectors = []) {
-  const selected = new Set((selectedIds || []).map(String));
+  const selected = new Set((selectedIds || []).map(Number));
   const allowedSectors = new Set(sectors || []);
   const reports = db.reports.filter(r => allowedSectors.has(r.sector));
 
@@ -2352,24 +2277,15 @@ function pagePermissionItems(selectedIds = [], sectors = []) {
     return '<span style="font-size:12px;color:var(--text-muted)">Não existem relatórios cadastrados para os setores selecionados.</span>';
   }
 
-  return reports.map(r => {
-    const pages = reportPages(r);
-    return `<div style="width:100%;margin:4px 0 12px">
-      <div style="font-size:12px;font-weight:700;margin-bottom:7px;color:var(--text)">${r.title}
-        <span style="font-size:10px;color:var(--text-muted);font-weight:400">(${sectorLabel(r.sector)})</span>
-      </div>
-      <div class="checkgroup">
-        ${pages.map(pg => {
-          const key = pagePermissionKey(r.id, pg.id);
-          const checked = selected.has(key);
-          return `<label class="check-item ${checked ? 'checked' : ''}" onclick="toggleCheck(this)">
-            <input type="checkbox" value="${key}" style="display:none" ${checked ? 'checked' : ''}>
-            ${pg.title}
-          </label>`;
-        }).join('')}
-      </div>
-    </div>`;
-  }).join('');
+  return `<div class="checkgroup" style="align-items:stretch">
+    ${reports.map(r => {
+      const checked = selected.has(Number(r.id));
+      return `<label class="check-item ${checked ? 'checked' : ''}" onclick="toggleCheck(this)" style="min-width:220px">
+        <input type="checkbox" value="${Number(r.id)}" style="display:none" ${checked ? 'checked' : ''}>
+        <span><strong>${r.title}</strong><small style="display:block;color:var(--text-muted);margin-top:3px">${sectorLabel(r.sector)}</small></span>
+      </label>`;
+    }).join('')}
+  </div>`;
 }
 
 function rebuildNewUserPageChecks(selectedIds = []) {
@@ -2390,7 +2306,6 @@ function toggleSectorField() {
   const role = document.getElementById('newUserRole').value;
   const isSector = role === 'sector';
   document.getElementById('sectorField').style.display = isSector ? 'block' : 'none';
-  document.getElementById('supervisorCodeField').style.display = isSector ? 'block' : 'none';
   document.getElementById('reportAccessModeField').style.display = isSector ? 'block' : 'none';
   if (isSector) rebuildNewUserPageChecks();
   toggleNewUserReportMode();
@@ -2416,7 +2331,6 @@ function addUser() {
   const name  = document.getElementById('newUserName').value.trim();
   const email = document.getElementById('newUserEmail').value.trim();
   const role  = document.getElementById('newUserRole').value;
-  const supervisorCode = String(document.getElementById('newUserSupervisorCode')?.value || '').trim();
 
   if (!name || !email || !role) { showToast('Preencha todos os campos!', 'error'); return; }
 
@@ -2428,19 +2342,16 @@ function addUser() {
     ? document.getElementById('newUserReportMode').value
     : 'sector';
 
-  const pageIds = reportAccessMode === 'specific'
-    ? [...document.querySelectorAll('#newUserReportCheckGroup input:checked')].map(i => String(i.value))
+  const reportIds = reportAccessMode === 'specific'
+    ? [...document.querySelectorAll('#newUserReportCheckGroup input:checked')].map(i => Number(i.value))
     : [];
 
   if (role === 'sector' && reportAccessMode === 'sector' && sectors.length === 0) {
     showToast('Selecione pelo menos um setor para liberar.', 'error'); return;
   }
-  if (role === 'sector' && reportAccessMode === 'specific' && pageIds.length === 0) {
+  if (role === 'sector' && reportAccessMode === 'specific' && reportIds.length === 0) {
     document.getElementById('newUserReportWarn').style.display = 'block';
-    showToast('Selecione pelo menos uma tela específica.', 'error'); return;
-  }
-  if (role === 'sector' && reportAccessMode === 'specific' && pageIds.some(k => k.endsWith('::supervisor')) && !/^\d+$/.test(supervisorCode)) {
-    showToast('Informe o Código do Supervisor para liberar a página Supervisor.', 'error'); return;
+    showToast('Selecione pelo menos um relatório específico.', 'error'); return;
   }
 
   const existing = db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
@@ -2450,15 +2361,14 @@ function addUser() {
     existing.role = role;
     existing.sectors = sectors;
     existing.reportAccessMode = reportAccessMode;
-    existing.pageIds = pageIds;
-    existing.reportIds = [];
-    existing.supervisorCode = supervisorCode;
+    existing.pageIds = [];
+    existing.reportIds = reportIds;
     saveDB();
     showToast(`Acesso de ${name} atualizado!`, 'success');
   } else {
     db.users.push({
       id: Date.now(), name, email, pass: 'temp123', role, sectors,
-      reportAccessMode, pageIds, reportIds:[], supervisorCode, status: 'active'
+      reportAccessMode, pageIds:[], reportIds, status: 'active'
     });
     saveDB();
     showToast(`Usuário ${name} adicionado com sucesso!`, 'success');
@@ -2466,12 +2376,10 @@ function addUser() {
 
   document.getElementById('newUserName').value = '';
   document.getElementById('newUserEmail').value = '';
-  document.getElementById('newUserSupervisorCode').value = '';
   document.getElementById('newUserRole').value = '';
   document.getElementById('newUserReportMode').value = 'sector';
   document.getElementById('sectorField').style.display = 'none';
   document.getElementById('reportAccessModeField').style.display = 'none';
-  document.getElementById('supervisorCodeField').style.display = 'none';
   document.getElementById('newUserReportsField').style.display = 'none';
   document.getElementById('newUserReportWarn').style.display = 'none';
   document.querySelectorAll('#sectorCheckGroup .check-item, #newUserReportCheckGroup .check-item').forEach(el => el.classList.remove('checked'));
@@ -2490,7 +2398,7 @@ function renderReportsMgr() {
     return;
   }
   el.innerHTML = `<table><thead><tr>
-    <th>Título / Descrição</th><th>Setor</th><th>Incorporação Power BI</th><th>Atualizado</th><th style="text-align:center">Ações</th>
+    <th>Título / Descrição</th><th>Setor</th><th>Incorporação Power BI</th><th>Última atualização</th><th style="text-align:center">Ações</th>
   </tr></thead><tbody>${db.reports.map(r => `<tr>
     <td>
       <strong>${r.title}</strong>
@@ -2500,7 +2408,7 @@ function renderReportsMgr() {
     <td style="max-width:200px">
       ${r.url ? `<span style="font-size:11px;font-family:monospace;color:var(--text-muted);word-break:break-all;display:block;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.url}">${r.url}</span>` : '<span style="font-size:11px;color:var(--red)">Não configurada</span>'}
     </td>
-    <td style="color:var(--text-muted);font-size:12px;white-space:nowrap">${r.updatedAt}</td>
+    <td style="color:var(--text-muted);font-size:12px;white-space:nowrap">${reportPortalUpdateText(r)}</td>
     <td style="text-align:center;white-space:nowrap">
       <button class="action-btn edit" onclick="openEditReport(${r.id})">✏ Editar</button>
       <button class="action-btn approve" onclick="testReport(${r.id})" title="Testar abertura">👁 Testar</button>
@@ -2546,8 +2454,15 @@ function saveReport() {
   if (!url)   { showToast('Cole o HTML de incorporação ou uma URL válida do Power BI!', 'error'); return; }
   if (!/^https?:\/\//i.test(url)) { showToast('Não foi possível encontrar uma URL válida no HTML colado.', 'error'); return; }
   const now = new Date();
-  const updatedAt = now.toLocaleDateString('pt-BR', {month:'short', year:'numeric'});
-  db.reports.push({ id: Date.now(), title, desc, sector, url, updatedAt });
+  const updatedAt = now.toISOString();
+  db.reports.push({
+    id: Date.now(),
+    title,
+    desc,
+    sector,
+    url,
+    updatedAt
+  });
   saveDB();
   document.getElementById('rFormPanel').style.display = 'none';
   renderReportsMgr();
@@ -2584,7 +2499,7 @@ function saveEditReport() {
   if (!r) return;
   const now = new Date();
   r.title = title; r.desc = desc; r.url = url; r.sector = sector;
-  r.updatedAt = now.toLocaleDateString('pt-BR', {month:'short', year:'numeric'});
+  r.updatedAt = now.toISOString();
   saveDB();
   closeEditModal();
   renderReportsMgr();
@@ -2711,7 +2626,6 @@ function openEditUser(id) {
   document.getElementById('euName').value = u.name;
   document.getElementById('euEmail').value = u.email;
   document.getElementById('euRole').value = u.role;
-  document.getElementById('euSupervisorCode').value = u.supervisorCode || '';
   document.getElementById('euNewPwd').value = '';
   document.getElementById('euAvatar').textContent = u.name[0].toUpperCase();
   document.getElementById('euNameDisplay').textContent = u.name;
@@ -2733,7 +2647,7 @@ function openEditUser(id) {
 
   document.getElementById('euReportMode').value = u.reportAccessMode || 'sector';
   document.getElementById('euReportWarn').style.display = 'none';
-  rebuildEditUserPageChecks(u.pageIds || []);
+  rebuildEditUserPageChecks(u.reportIds || []);
 
   toggleEuSectors();
   toggleEuReportMode();
@@ -2741,11 +2655,17 @@ function openEditUser(id) {
 }
 
 function toggleEuSectors() {
-  const role = document.getElementById('euRole').value;
+  const roleEl = document.getElementById('euRole');
+  if (!roleEl) return;
+
+  const role = roleEl.value;
   const isSector = role === 'sector';
-  document.getElementById('euSectorField').style.display = isSector ? 'block' : 'none';
-  document.getElementById('euSupervisorCodeField').style.display = isSector ? 'block' : 'none';
-  document.getElementById('euReportModeField').style.display = isSector ? 'block' : 'none';
+  const sectorField = document.getElementById('euSectorField');
+  const reportModeField = document.getElementById('euReportModeField');
+
+  if (sectorField) sectorField.style.display = isSector ? 'block' : 'none';
+  if (reportModeField) reportModeField.style.display = isSector ? 'block' : 'none';
+
   toggleEuReportMode();
 }
 
@@ -2762,20 +2682,16 @@ function saveEditUser() {
   const role   = document.getElementById('euRole').value;
   const status = document.querySelector('input[name="euStatus"]:checked')?.value;
   const newPwd = document.getElementById('euNewPwd').value.trim();
-  const supervisorCode = String(document.getElementById('euSupervisorCode').value || '').trim();
   const warn   = document.getElementById('euSectorWarn');
   const reportWarn = document.getElementById('euReportWarn');
   const reportAccessMode = role === 'sector' ? document.getElementById('euReportMode').value : 'sector';
-  const pageIds = reportAccessMode === 'specific'
-    ? [...document.querySelectorAll('#euReportCheckGroup input:checked')].map(i => String(i.value))
+  const reportIds = reportAccessMode === 'specific'
+    ? [...document.querySelectorAll('#euReportCheckGroup input:checked')].map(i => Number(i.value))
     : [];
 
   if (!name)   { showToast('Informe o nome!', 'error'); return; }
   if (!email)  { showToast('Informe o e-mail!', 'error'); return; }
   if (!status) { showToast('Selecione o status!', 'error'); return; }
-  if (role === 'sector' && reportAccessMode === 'specific' && pageIds.some(k => k.endsWith('::supervisor')) && !/^\d+$/.test(supervisorCode)) {
-    showToast('Informe o Código do Supervisor para liberar a página Supervisor.', 'error'); return;
-  }
 
   let sectors = role === 'sector'
     ? [...document.querySelectorAll('#euSectorCheckGroup input:checked')].map(i => i.value)
@@ -2786,7 +2702,7 @@ function saveEditUser() {
     showToast('Selecione pelo menos um setor!', 'error');
     return;
   }
-  if (role === 'sector' && reportAccessMode === 'specific' && pageIds.length === 0) {
+  if (role === 'sector' && reportAccessMode === 'specific' && reportIds.length === 0) {
     reportWarn.style.display = 'block';
     showToast('Selecione pelo menos uma tela específica!', 'error');
     return;
@@ -2803,9 +2719,8 @@ function saveEditUser() {
   u.status  = status;
   u.sectors = sectors;
   u.reportAccessMode = reportAccessMode;
-  u.pageIds = pageIds;
-  u.reportIds = [];
-  u.supervisorCode = supervisorCode;
+  u.pageIds = [];
+  u.reportIds = reportIds;
   if (newPwd && newPwd.length >= 6) u.pass = newPwd;
 
   saveDB();
@@ -2994,13 +2909,17 @@ function resetDB() {
 // PUBLICAR DADOS — gera data.json para GitHub
 // ═══════════════════════════════════════
 function publishData() {
-  // Gerar o arquivo data.json com todos os dados
+  // A data abaixo identifica apenas quando o arquivo data.json foi gerado.
+  // Ela NÃO altera a última atualização individual de cada relatório.
+  const publishedAt = new Date().toISOString();
+
+  // Gerar o arquivo data.json com os dados e as datas individuais dos relatórios.
   const data = {
     users:      db.users,
     reports:    db.reports,
     sectors:    db.sectors,
     sectorMeta: db.sectorMeta || {},
-    publishedAt: new Date().toISOString()
+    publishedAt
   };
 
   const json = JSON.stringify(data, null, 2);
