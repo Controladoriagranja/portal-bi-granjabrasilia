@@ -576,13 +576,21 @@
   .action-btn.edit:hover { background: rgba(14,165,233,0.15); }
 
   /* SEARCH */
+  .user-filters {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
   .search-bar {
     position: relative;
-    margin-bottom: 20px;
+    flex: 1;
+    min-width: 240px;
+    max-width: 360px;
   }
   .search-bar input {
     width: 100%;
-    max-width: 360px;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
@@ -598,6 +606,21 @@
     position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
     color: var(--text-dim); font-size: 15px;
   }
+  .user-sector-filter {
+    min-width: 200px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 9px 34px 9px 12px;
+    color: var(--text);
+    font-size: 13.5px;
+    font-family: inherit;
+    outline: none;
+    cursor: pointer;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  .user-sector-filter:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+  .user-sector-filter option { background: var(--surface); }
 
   /* TABS */
   .tabs {
@@ -1109,7 +1132,15 @@
           <div class="table-wrapper" id="pendingTable"></div>
         </div>
         <div id="usersAllView" style="display:none">
-          <div class="search-bar"><span class="search-icon">🔍</span><input type="text" placeholder="Buscar usuário..." oninput="filterUsers(this.value)"></div>
+          <div class="user-filters">
+            <div class="search-bar">
+              <span class="search-icon">🔍</span>
+              <input type="text" placeholder="Buscar usuário..." oninput="filterUsers(this.value)">
+            </div>
+            <select id="userSectorFilter" class="user-sector-filter" onchange="filterUsersBySector(this.value)" aria-label="Filtrar usuários por setor">
+              <option value="">Todos os setores</option>
+            </select>
+          </div>
           <div class="table-wrapper" id="allUsersTable"></div>
         </div>
       <!-- EDIT USER MODAL -->
@@ -2180,10 +2211,43 @@ function renderPendingTable() {
 }
 
 let userFilter = '';
-function filterUsers(v) { userFilter = v.toLowerCase(); renderAllUsersTable(); }
+let userSectorFilter = '';
+
+function filterUsers(v) {
+  userFilter = String(v || '').toLowerCase();
+  renderAllUsersTable();
+}
+
+function filterUsersBySector(v) {
+  userSectorFilter = String(v || '').toLowerCase();
+  renderAllUsersTable();
+}
+
+function updateUserSectorFilterOptions() {
+  const select = document.getElementById('userSectorFilter');
+  if (!select) return;
+
+  const currentValue = userSectorFilter;
+  select.innerHTML = '<option value="">Todos os setores</option>' +
+    SECTORS.map(s => `<option value="${s}">${sectorLabel(s)}</option>`).join('');
+
+  select.value = SECTORS.includes(currentValue) ? currentValue : '';
+  userSectorFilter = select.value;
+}
 
 function renderAllUsersTable() {
-  const users = db.users.filter(u => !userFilter || u.name.toLowerCase().includes(userFilter) || u.email.toLowerCase().includes(userFilter));
+  updateUserSectorFilterOptions();
+
+  const users = db.users.filter(u => {
+    const matchesText = !userFilter ||
+      u.name.toLowerCase().includes(userFilter) ||
+      u.email.toLowerCase().includes(userFilter);
+
+    const userSectors = Array.isArray(u.sectors) ? u.sectors : [];
+    const matchesSector = !userSectorFilter || userSectors.includes(userSectorFilter);
+
+    return matchesText && matchesSector;
+  });
   const el = document.getElementById('allUsersTable');
   if (users.length === 0) {
     el.innerHTML = '<div class="empty-state"><div class="empty-icon">👥</div><h3>Nenhum usuário encontrado</h3><p>Tente outro termo de busca.</p></div>';
