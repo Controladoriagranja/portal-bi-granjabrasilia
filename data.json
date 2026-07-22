@@ -351,6 +351,14 @@
       "sector": "comercial",
       "url": "https://app.powerbi.com/view?r=eyJrIjoiN2VjNTczNmUtM2FhZi00NWNlLThmYWQtMjllMzM3MTU1YmM3IiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
       "updatedAt": "jul. de 2026"
+    },
+    {
+      "id": 1784735350937,
+      "title": "BI Comercial - Supervisor",
+      "desc": "",
+      "sector": "comercial",
+      "url": "https://app.powerbi.com/view?r=eyJrIjoiYWI5YWE2ZTQtM2FlMi00MmI5LTlmMjItNWYxMDdiMDdiYmNlIiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
+      "updatedAt": "jul. de 2026"
     }
   ],
   "sectors": [
@@ -365,5 +373,5 @@
     "diretoria"
   ],
   "sectorMeta": {},
-  "publishedAt": "2026-07-22T15:21:12.460Z"
+  "publishedAt": "2026-07-22T15:49:17.780Z"
 }
