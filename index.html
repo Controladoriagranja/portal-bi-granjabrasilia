@@ -1161,13 +1161,13 @@
               <div class="form-group" id="euReportModeField">
                 <label>Liberação das telas</label>
                 <select id="euReportMode" onchange="toggleEuReportMode()">
-                  <option value="sector">Todas as telas dos setores selecionados</option>
+                  <option value="sector">Todas as páginas dos relatórios dos setores selecionados</option>
                   <option value="specific">Somente as telas marcadas abaixo</option>
                 </select>
               </div>
 
               <div class="form-group" id="euReportsField" style="display:none">
-                <label>Telas específicas permitidas <span style="font-size:11px;color:var(--text-muted)">(selecione uma ou mais)</span></label>
+                <label>Páginas específicas permitidas <span style="font-size:11px;color:var(--text-muted)">(selecione uma ou mais)</span></label>
                 <div class="checkgroup" id="euReportCheckGroup"></div>
                 <div id="euReportWarn" style="font-size:12px;color:var(--orange);margin-top:6px;display:none">⚠️ Selecione pelo menos uma tela.</div>
               </div>
@@ -1231,12 +1231,12 @@
           <div class="form-group" id="reportAccessModeField" style="display:none">
             <label>Liberação das telas</label>
             <select id="newUserReportMode" onchange="toggleNewUserReportMode()">
-              <option value="sector">Todas as telas dos setores selecionados</option>
+              <option value="sector">Todas as páginas dos relatórios dos setores selecionados</option>
               <option value="specific">Somente as telas marcadas abaixo</option>
             </select>
           </div>
           <div class="form-group" id="newUserReportsField" style="display:none">
-            <label>Telas específicas permitidas <span style="font-size:11px;color:var(--text-muted)">(selecione uma ou mais)</span></label>
+            <label>Páginas específicas permitidas <span style="font-size:11px;color:var(--text-muted)">(selecione uma ou mais)</span></label>
             <div class="checkgroup" id="newUserReportCheckGroup"></div>
             <div id="newUserReportWarn" style="font-size:12px;color:var(--orange);margin-top:6px;display:none">⚠️ Selecione pelo menos uma tela.</div>
           </div>
@@ -1549,6 +1549,47 @@ const SECTOR_LABELS = {
   rh:'RH', operacional:'Operacional', ti:'TI', marketing:'Marketing', diretoria:'Diretoria'
 };
 
+// Páginas internas disponíveis em cada relatório/setor.
+// O campo pageName pode receber depois o identificador técnico do Power BI
+// (ex.: ReportSectionabc123) para abrir diretamente na página.
+const REPORT_PAGE_CATALOG = {
+  comercial: [
+    { id:'faturamento', title:'Faturamento', pageName:'' },
+    { id:'detalhamento-cliente', title:'Detalhamento Cliente', pageName:'' },
+    { id:'detalhamento-vendedores', title:'Detalhamento Vendedores', pageName:'' },
+    { id:'detalhamento-vendas-produtos', title:'Detalhamento Vendas/Produtos', pageName:'' },
+    { id:'vendedores-metas', title:'Vendedores & Metas', pageName:'' }
+  ],
+  logistica: [
+    { id:'visao-geral', title:'Visão Geral', pageName:'' },
+    { id:'fretes', title:'Fretes', pageName:'' },
+    { id:'devolucoes', title:'Devoluções', pageName:'' },
+    { id:'pallets', title:'Controle de Pallets', pageName:'' }
+  ],
+  pcp: [
+    { id:'visao-geral', title:'Visão Geral', pageName:'' },
+    { id:'diario-industria', title:'Diário da Indústria', pageName:'' },
+    { id:'estoque', title:'Estoque', pageName:'' },
+    { id:'producao', title:'Produção', pageName:'' }
+  ],
+  financeiro: [{ id:'visao-geral', title:'Visão Geral', pageName:'' }],
+  rh: [{ id:'visao-geral', title:'Visão Geral', pageName:'' }],
+  operacional: [{ id:'visao-geral', title:'Visão Geral', pageName:'' }],
+  ti: [{ id:'visao-geral', title:'Visão Geral', pageName:'' }],
+  marketing: [{ id:'visao-geral', title:'Visão Geral', pageName:'' }],
+  diretoria: [{ id:'visao-geral', title:'Visão Geral', pageName:'' }]
+};
+
+function reportPages(report) {
+  if (Array.isArray(report.pages) && report.pages.length) return report.pages;
+  return REPORT_PAGE_CATALOG[report.sector] || [{ id:'visao-geral', title:'Visão Geral', pageName:'' }];
+}
+
+function pagePermissionKey(reportId, pageId) {
+  return `${Number(reportId)}::${pageId}`;
+}
+
+
 const DEFAULT_DB = {
   sectors: [...DEFAULT_SECTORS],
   users: [
@@ -1598,6 +1639,7 @@ if (!db.sectorMeta) db.sectorMeta = {};
 db.users.forEach(u => {
   if (!u.reportAccessMode) u.reportAccessMode = 'sector';
   if (!Array.isArray(u.reportIds)) u.reportIds = [];
+  if (!Array.isArray(u.pageIds)) u.pageIds = [];
 });
 syncSectors();
 
@@ -1793,8 +1835,13 @@ function getUserReports() {
 
   const mode = u.reportAccessMode || 'sector';
   if (mode === 'specific') {
-    const ids = Array.isArray(u.reportIds) ? u.reportIds.map(Number) : [];
-    return db.reports.filter(r => ids.includes(Number(r.id)));
+    const pageIds = Array.isArray(u.pageIds) ? u.pageIds.map(String) : [];
+    // Compatibilidade com a versão anterior, que guardava relatórios inteiros.
+    const oldReportIds = Array.isArray(u.reportIds) ? u.reportIds.map(Number) : [];
+    return db.reports.filter(r =>
+      oldReportIds.includes(Number(r.id)) ||
+      pageIds.some(key => key.startsWith(`${Number(r.id)}::`))
+    );
   }
 
   const sectors = Array.isArray(u.sectors) ? u.sectors : [];
@@ -2087,7 +2134,7 @@ function renderAllUsersTable() {
     <td style="font-size:12px;color:var(--text-muted);max-width:180px">
       ${u.role==='sector'
         ? ((u.reportAccessMode || 'sector') === 'specific'
-            ? `<span style="color:var(--accent2);font-size:11px">${(u.reportIds || []).length} tela(s) específica(s)</span>`
+            ? `<span style="color:var(--accent2);font-size:11px">${(u.pageIds || []).length} tela(s) específica(s)</span>`
             : (u.sectors && u.sectors.length
                 ? u.sectors.map(s => `<span class="report-sector-tag" style="margin:2px;font-size:10px;${sectorTagStyle(s)}">${sectorLabel(s)}</span>`).join('')
                 : '<span style="color:var(--red);font-size:11px">Nenhum setor</span>'))
@@ -2143,21 +2190,54 @@ function configUser(id) {
 // ═══════════════════════════════════════
 // ACCESS CONTROL
 // ═══════════════════════════════════════
-function reportPermissionItems(selectedIds = []) {
-  const selected = new Set((selectedIds || []).map(Number));
-  if (!db.reports.length) {
-    return '<span style="font-size:12px;color:var(--text-muted)">Cadastre primeiro os relatórios em “Gerir Relatórios”.</span>';
-  }
-  return db.reports.map(r => `
-    <label class="check-item ${selected.has(Number(r.id)) ? 'checked' : ''}" onclick="toggleCheck(this)">
-      <input type="checkbox" value="${r.id}" style="display:none" ${selected.has(Number(r.id)) ? 'checked' : ''}>
-      ${r.title} <span style="font-size:10px;color:var(--text-muted)">(${sectorLabel(r.sector)})</span>
-    </label>`).join('');
+function selectedSectorsFromGroup(groupId) {
+  return [...document.querySelectorAll(`#${groupId} input:checked`)].map(i => i.value);
 }
 
-function rebuildNewUserReportChecks(selectedIds = []) {
+function pagePermissionItems(selectedIds = [], sectors = []) {
+  const selected = new Set((selectedIds || []).map(String));
+  const allowedSectors = new Set(sectors || []);
+  const reports = db.reports.filter(r => allowedSectors.has(r.sector));
+
+  if (!allowedSectors.size) {
+    return '<span style="font-size:12px;color:var(--text-muted)">Selecione primeiro um ou mais setores acima.</span>';
+  }
+  if (!reports.length) {
+    return '<span style="font-size:12px;color:var(--text-muted)">Não existem relatórios cadastrados para os setores selecionados.</span>';
+  }
+
+  return reports.map(r => {
+    const pages = reportPages(r);
+    return `<div style="width:100%;margin:4px 0 12px">
+      <div style="font-size:12px;font-weight:700;margin-bottom:7px;color:var(--text)">${r.title}
+        <span style="font-size:10px;color:var(--text-muted);font-weight:400">(${sectorLabel(r.sector)})</span>
+      </div>
+      <div class="checkgroup">
+        ${pages.map(pg => {
+          const key = pagePermissionKey(r.id, pg.id);
+          const checked = selected.has(key);
+          return `<label class="check-item ${checked ? 'checked' : ''}" onclick="toggleCheck(this)">
+            <input type="checkbox" value="${key}" style="display:none" ${checked ? 'checked' : ''}>
+            ${pg.title}
+          </label>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function rebuildNewUserPageChecks(selectedIds = []) {
   const el = document.getElementById('newUserReportCheckGroup');
-  if (el) el.innerHTML = reportPermissionItems(selectedIds);
+  if (!el) return;
+  const sectors = selectedSectorsFromGroup('sectorCheckGroup');
+  el.innerHTML = pagePermissionItems(selectedIds, sectors);
+}
+
+function rebuildEditUserPageChecks(selectedIds = []) {
+  const el = document.getElementById('euReportCheckGroup');
+  if (!el) return;
+  const sectors = selectedSectorsFromGroup('euSectorCheckGroup');
+  el.innerHTML = pagePermissionItems(selectedIds, sectors);
 }
 
 function toggleSectorField() {
@@ -2165,7 +2245,7 @@ function toggleSectorField() {
   const isSector = role === 'sector';
   document.getElementById('sectorField').style.display = isSector ? 'block' : 'none';
   document.getElementById('reportAccessModeField').style.display = isSector ? 'block' : 'none';
-  if (isSector) rebuildNewUserReportChecks();
+  if (isSector) rebuildNewUserPageChecks();
   toggleNewUserReportMode();
 }
 
@@ -2177,7 +2257,12 @@ function toggleNewUserReportMode() {
 
 function toggleCheck(el) {
   el.classList.toggle('checked');
-  el.querySelector('input').checked = el.classList.contains('checked');
+  const input = el.querySelector('input');
+  input.checked = el.classList.contains('checked');
+
+  // Ao marcar/desmarcar um setor, atualiza imediatamente as páginas disponíveis.
+  if (el.closest('#sectorCheckGroup')) rebuildNewUserPageChecks();
+  if (el.closest('#euSectorCheckGroup')) rebuildEditUserPageChecks();
 }
 
 function addUser() {
@@ -2195,14 +2280,14 @@ function addUser() {
     ? document.getElementById('newUserReportMode').value
     : 'sector';
 
-  const reportIds = reportAccessMode === 'specific'
-    ? [...document.querySelectorAll('#newUserReportCheckGroup input:checked')].map(i => Number(i.value))
+  const pageIds = reportAccessMode === 'specific'
+    ? [...document.querySelectorAll('#newUserReportCheckGroup input:checked')].map(i => String(i.value))
     : [];
 
   if (role === 'sector' && reportAccessMode === 'sector' && sectors.length === 0) {
     showToast('Selecione pelo menos um setor para liberar.', 'error'); return;
   }
-  if (role === 'sector' && reportAccessMode === 'specific' && reportIds.length === 0) {
+  if (role === 'sector' && reportAccessMode === 'specific' && pageIds.length === 0) {
     document.getElementById('newUserReportWarn').style.display = 'block';
     showToast('Selecione pelo menos uma tela específica.', 'error'); return;
   }
@@ -2214,13 +2299,14 @@ function addUser() {
     existing.role = role;
     existing.sectors = sectors;
     existing.reportAccessMode = reportAccessMode;
-    existing.reportIds = reportIds;
+    existing.pageIds = pageIds;
+    existing.reportIds = [];
     saveDB();
     showToast(`Acesso de ${name} atualizado!`, 'success');
   } else {
     db.users.push({
       id: Date.now(), name, email, pass: 'temp123', role, sectors,
-      reportAccessMode, reportIds, status: 'active'
+      reportAccessMode, pageIds, reportIds:[], status: 'active'
     });
     saveDB();
     showToast(`Usuário ${name} adicionado com sucesso!`, 'success');
@@ -2492,7 +2578,7 @@ function openEditUser(id) {
 
   document.getElementById('euReportMode').value = u.reportAccessMode || 'sector';
   document.getElementById('euReportWarn').style.display = 'none';
-  document.getElementById('euReportCheckGroup').innerHTML = reportPermissionItems(u.reportIds || []);
+  rebuildEditUserPageChecks(u.pageIds || []);
 
   toggleEuSectors();
   toggleEuReportMode();
@@ -2523,8 +2609,8 @@ function saveEditUser() {
   const warn   = document.getElementById('euSectorWarn');
   const reportWarn = document.getElementById('euReportWarn');
   const reportAccessMode = role === 'sector' ? document.getElementById('euReportMode').value : 'sector';
-  const reportIds = reportAccessMode === 'specific'
-    ? [...document.querySelectorAll('#euReportCheckGroup input:checked')].map(i => Number(i.value))
+  const pageIds = reportAccessMode === 'specific'
+    ? [...document.querySelectorAll('#euReportCheckGroup input:checked')].map(i => String(i.value))
     : [];
 
   if (!name)   { showToast('Informe o nome!', 'error'); return; }
@@ -2540,7 +2626,7 @@ function saveEditUser() {
     showToast('Selecione pelo menos um setor!', 'error');
     return;
   }
-  if (role === 'sector' && reportAccessMode === 'specific' && reportIds.length === 0) {
+  if (role === 'sector' && reportAccessMode === 'specific' && pageIds.length === 0) {
     reportWarn.style.display = 'block';
     showToast('Selecione pelo menos uma tela específica!', 'error');
     return;
@@ -2557,7 +2643,8 @@ function saveEditUser() {
   u.status  = status;
   u.sectors = sectors;
   u.reportAccessMode = reportAccessMode;
-  u.reportIds = reportIds;
+  u.pageIds = pageIds;
+  u.reportIds = [];
   if (newPwd && newPwd.length >= 6) u.pass = newPwd;
 
   saveDB();
