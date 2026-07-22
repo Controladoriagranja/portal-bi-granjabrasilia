@@ -308,6 +308,22 @@
         "comercial"
       ],
       "status": "active"
+    },
+    {
+      "id": 1784728197820,
+      "name": "Willian de Almeida",
+      "email": "walmeida@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "comercial"
+      ],
+      "reportAccessMode": "specific",
+      "pageIds": [
+        "1783630194919::vendedores-metas"
+      ],
+      "reportIds": [],
+      "status": "active"
     }
   ],
   "reports": [
@@ -348,5 +364,5 @@
     "diretoria"
   ],
   "sectorMeta": {},
-  "publishedAt": "2026-07-17T11:04:22.668Z"
+  "publishedAt": "2026-07-22T13:50:00.556Z"
 }
