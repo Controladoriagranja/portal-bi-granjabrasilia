@@ -1158,6 +1158,20 @@
                 <div id="euSectorWarn" style="font-size:12px;color:var(--orange);margin-top:6px;display:none">⚠️ Selecione pelo menos um setor.</div>
               </div>
 
+              <div class="form-group" id="euReportModeField">
+                <label>Liberação das telas</label>
+                <select id="euReportMode" onchange="toggleEuReportMode()">
+                  <option value="sector">Todas as telas dos setores selecionados</option>
+                  <option value="specific">Somente as telas marcadas abaixo</option>
+                </select>
+              </div>
+
+              <div class="form-group" id="euReportsField" style="display:none">
+                <label>Telas específicas permitidas <span style="font-size:11px;color:var(--text-muted)">(selecione uma ou mais)</span></label>
+                <div class="checkgroup" id="euReportCheckGroup"></div>
+                <div id="euReportWarn" style="font-size:12px;color:var(--orange);margin-top:6px;display:none">⚠️ Selecione pelo menos uma tela.</div>
+              </div>
+
               <div class="form-group">
                 <label>Status</label>
                 <div style="display:flex;gap:10px;flex-wrap:wrap">
@@ -1213,6 +1227,18 @@
           <div class="form-group" id="sectorField" style="display:none">
             <label>Setores permitidos <span style="font-size:11px;color:var(--text-muted)">(pode selecionar vários)</span></label>
             <div class="checkgroup" id="sectorCheckGroup"></div>
+          </div>
+          <div class="form-group" id="reportAccessModeField" style="display:none">
+            <label>Liberação das telas</label>
+            <select id="newUserReportMode" onchange="toggleNewUserReportMode()">
+              <option value="sector">Todas as telas dos setores selecionados</option>
+              <option value="specific">Somente as telas marcadas abaixo</option>
+            </select>
+          </div>
+          <div class="form-group" id="newUserReportsField" style="display:none">
+            <label>Telas específicas permitidas <span style="font-size:11px;color:var(--text-muted)">(selecione uma ou mais)</span></label>
+            <div class="checkgroup" id="newUserReportCheckGroup"></div>
+            <div id="newUserReportWarn" style="font-size:12px;color:var(--orange);margin-top:6px;display:none">⚠️ Selecione pelo menos uma tela.</div>
           </div>
           <button class="btn-sm accent" onclick="addUser()" style="margin-top:4px">✔ Liberar Acesso</button>
         </div>
@@ -1526,7 +1552,7 @@ const SECTOR_LABELS = {
 const DEFAULT_DB = {
   sectors: [...DEFAULT_SECTORS],
   users: [
-    { id:1, name:'Admin Sistema', email:'admin@granjabrasilia.com.br', pass:'admin123', role:'admin', sectors:[...DEFAULT_SECTORS], status:'active' },
+    { id:1, name:'Admin Sistema', email:'admin@granjabrasilia.com.br', pass:'admin123', role:'admin', sectors:[...DEFAULT_SECTORS], reportAccessMode:'sector', reportIds:[], status:'active' },
   ],
   reports: []
 };
@@ -1568,6 +1594,11 @@ let db = (function() {
 })();
 if (!db.sectors || !db.sectors.length) db.sectors = [...DEFAULT_SECTORS];
 if (!db.sectorMeta) db.sectorMeta = {};
+// Compatibilidade: usuários antigos continuam com acesso por setor.
+db.users.forEach(u => {
+  if (!u.reportAccessMode) u.reportAccessMode = 'sector';
+  if (!Array.isArray(u.reportIds)) u.reportIds = [];
+});
 syncSectors();
 
 let currentUser = null;
@@ -1591,7 +1622,7 @@ function initApp() {
   // 2. Garantir admin
   if (!db.users.find(u => u.email === 'admin@granjabrasilia.com.br')) {
     db.users.unshift({ id:1, name:'Admin Sistema', email:'admin@granjabrasilia.com.br',
-      pass:'admin123', role:'admin', sectors:[...DEFAULT_SECTORS], status:'active' });
+      pass:'admin123', role:'admin', sectors:[...DEFAULT_SECTORS], reportAccessMode:'sector', reportIds:[], status:'active' });
     try { localStorage.setItem('granjabi_db', JSON.stringify(db)); } catch(e) {}
   }
   if (!db.sectors || db.sectors.length === 0) db.sectors = [...DEFAULT_SECTORS];
@@ -1757,8 +1788,17 @@ function initPortal() {
 
 function getUserReports() {
   const u = currentUser;
+  if (!u) return [];
   if (u.role === 'admin' || u.role === 'director') return db.reports;
-  return db.reports.filter(r => u.sectors.includes(r.sector));
+
+  const mode = u.reportAccessMode || 'sector';
+  if (mode === 'specific') {
+    const ids = Array.isArray(u.reportIds) ? u.reportIds.map(Number) : [];
+    return db.reports.filter(r => ids.includes(Number(r.id)));
+  }
+
+  const sectors = Array.isArray(u.sectors) ? u.sectors : [];
+  return db.reports.filter(r => sectors.includes(r.sector));
 }
 
 // ═══════════════════════════════════════
@@ -1915,8 +1955,11 @@ function powerBIUrlWithVisiblePanes(url) {
 let currentReportUrl = '';
 let originalReportUrl = '';
 function openReport(id) {
-  const r = db.reports.find(x => x.id === id);
-  if (!r) return;
+  const r = getUserReports().find(x => Number(x.id) === Number(id));
+  if (!r) {
+    showToast('Você não possui acesso a esta tela.', 'error');
+    return;
+  }
   originalReportUrl = extractPowerBIEmbedUrl(r.url || '');
   currentReportUrl = powerBIUrlWithVisiblePanes(originalReportUrl);
   document.getElementById('modalTitle').textContent = r.title;
@@ -2029,7 +2072,7 @@ function renderAllUsersTable() {
     return;
   }
   el.innerHTML = `<table><thead><tr>
-    <th>Usuário</th><th>Perfil</th><th>Setores</th><th>Status</th><th style="text-align:center">Ações</th>
+    <th>Usuário</th><th>Perfil</th><th>Setores / Telas</th><th>Status</th><th style="text-align:center">Ações</th>
   </tr></thead><tbody>${users.map(u => `<tr>
     <td>
       <div style="display:flex;align-items:center;gap:10px">
@@ -2043,9 +2086,11 @@ function renderAllUsersTable() {
     <td>${roleLabel(u.role)}</td>
     <td style="font-size:12px;color:var(--text-muted);max-width:180px">
       ${u.role==='sector'
-        ? (u.sectors && u.sectors.length
-            ? u.sectors.map(s => `<span class="report-sector-tag" style="margin:2px;font-size:10px;${sectorTagStyle(s)}">${sectorLabel(s)}</span>`).join('')
-            : '<span style="color:var(--red);font-size:11px">Nenhum setor</span>')
+        ? ((u.reportAccessMode || 'sector') === 'specific'
+            ? `<span style="color:var(--accent2);font-size:11px">${(u.reportIds || []).length} tela(s) específica(s)</span>`
+            : (u.sectors && u.sectors.length
+                ? u.sectors.map(s => `<span class="report-sector-tag" style="margin:2px;font-size:10px;${sectorTagStyle(s)}">${sectorLabel(s)}</span>`).join('')
+                : '<span style="color:var(--red);font-size:11px">Nenhum setor</span>'))
         : '<span style="color:var(--text-dim);font-size:11px">Todos</span>'}
     </td>
     <td>${statusBadge(u.status)}</td>
@@ -2098,10 +2143,36 @@ function configUser(id) {
 // ═══════════════════════════════════════
 // ACCESS CONTROL
 // ═══════════════════════════════════════
+function reportPermissionItems(selectedIds = []) {
+  const selected = new Set((selectedIds || []).map(Number));
+  if (!db.reports.length) {
+    return '<span style="font-size:12px;color:var(--text-muted)">Cadastre primeiro os relatórios em “Gerir Relatórios”.</span>';
+  }
+  return db.reports.map(r => `
+    <label class="check-item ${selected.has(Number(r.id)) ? 'checked' : ''}" onclick="toggleCheck(this)">
+      <input type="checkbox" value="${r.id}" style="display:none" ${selected.has(Number(r.id)) ? 'checked' : ''}>
+      ${r.title} <span style="font-size:10px;color:var(--text-muted)">(${sectorLabel(r.sector)})</span>
+    </label>`).join('');
+}
+
+function rebuildNewUserReportChecks(selectedIds = []) {
+  const el = document.getElementById('newUserReportCheckGroup');
+  if (el) el.innerHTML = reportPermissionItems(selectedIds);
+}
+
 function toggleSectorField() {
   const role = document.getElementById('newUserRole').value;
-  // Show sector selection for 'sector' role; directors get all automatically
-  document.getElementById('sectorField').style.display = (role === 'sector') ? 'block' : 'none';
+  const isSector = role === 'sector';
+  document.getElementById('sectorField').style.display = isSector ? 'block' : 'none';
+  document.getElementById('reportAccessModeField').style.display = isSector ? 'block' : 'none';
+  if (isSector) rebuildNewUserReportChecks();
+  toggleNewUserReportMode();
+}
+
+function toggleNewUserReportMode() {
+  const role = document.getElementById('newUserRole').value;
+  const mode = document.getElementById('newUserReportMode').value;
+  document.getElementById('newUserReportsField').style.display = (role === 'sector' && mode === 'specific') ? 'block' : 'none';
 }
 
 function toggleCheck(el) {
@@ -2118,19 +2189,39 @@ function addUser() {
 
   const sectors = (role === 'sector')
     ? [...document.querySelectorAll('#sectorCheckGroup input:checked')].map(i => i.value)
-    : SECTORS;
+    : [...SECTORS];
 
-  if (role === 'sector' && sectors.length === 0) { showToast('Selecione pelo menos um setor para liberar.', 'error'); return; }
+  const reportAccessMode = role === 'sector'
+    ? document.getElementById('newUserReportMode').value
+    : 'sector';
+
+  const reportIds = reportAccessMode === 'specific'
+    ? [...document.querySelectorAll('#newUserReportCheckGroup input:checked')].map(i => Number(i.value))
+    : [];
+
+  if (role === 'sector' && reportAccessMode === 'sector' && sectors.length === 0) {
+    showToast('Selecione pelo menos um setor para liberar.', 'error'); return;
+  }
+  if (role === 'sector' && reportAccessMode === 'specific' && reportIds.length === 0) {
+    document.getElementById('newUserReportWarn').style.display = 'block';
+    showToast('Selecione pelo menos uma tela específica.', 'error'); return;
+  }
 
   const existing = db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
   if (existing) {
+    existing.name = name;
     existing.status = 'active';
     existing.role = role;
     existing.sectors = sectors;
+    existing.reportAccessMode = reportAccessMode;
+    existing.reportIds = reportIds;
     saveDB();
     showToast(`Acesso de ${name} atualizado!`, 'success');
   } else {
-    db.users.push({ id: Date.now(), name, email, pass: 'temp123', role, sectors, status: 'active' });
+    db.users.push({
+      id: Date.now(), name, email, pass: 'temp123', role, sectors,
+      reportAccessMode, reportIds, status: 'active'
+    });
     saveDB();
     showToast(`Usuário ${name} adicionado com sucesso!`, 'success');
   }
@@ -2138,8 +2229,12 @@ function addUser() {
   document.getElementById('newUserName').value = '';
   document.getElementById('newUserEmail').value = '';
   document.getElementById('newUserRole').value = '';
+  document.getElementById('newUserReportMode').value = 'sector';
   document.getElementById('sectorField').style.display = 'none';
-  document.querySelectorAll('#sectorCheckGroup .check-item').forEach(el => el.classList.remove('checked'));
+  document.getElementById('reportAccessModeField').style.display = 'none';
+  document.getElementById('newUserReportsField').style.display = 'none';
+  document.getElementById('newUserReportWarn').style.display = 'none';
+  document.querySelectorAll('#sectorCheckGroup .check-item, #newUserReportCheckGroup .check-item').forEach(el => el.classList.remove('checked'));
   renderUsersTable();
 }
 
@@ -2395,13 +2490,27 @@ function openEditUser(id) {
     </label>`;
   }).join('');
 
+  document.getElementById('euReportMode').value = u.reportAccessMode || 'sector';
+  document.getElementById('euReportWarn').style.display = 'none';
+  document.getElementById('euReportCheckGroup').innerHTML = reportPermissionItems(u.reportIds || []);
+
   toggleEuSectors();
+  toggleEuReportMode();
   document.getElementById('editUserOverlay').classList.add('open');
 }
 
 function toggleEuSectors() {
   const role = document.getElementById('euRole').value;
-  document.getElementById('euSectorField').style.display = role === 'sector' ? 'block' : 'none';
+  const isSector = role === 'sector';
+  document.getElementById('euSectorField').style.display = isSector ? 'block' : 'none';
+  document.getElementById('euReportModeField').style.display = isSector ? 'block' : 'none';
+  toggleEuReportMode();
+}
+
+function toggleEuReportMode() {
+  const role = document.getElementById('euRole').value;
+  const mode = document.getElementById('euReportMode').value;
+  document.getElementById('euReportsField').style.display = (role === 'sector' && mode === 'specific') ? 'block' : 'none';
 }
 
 function saveEditUser() {
@@ -2412,6 +2521,11 @@ function saveEditUser() {
   const status = document.querySelector('input[name="euStatus"]:checked')?.value;
   const newPwd = document.getElementById('euNewPwd').value.trim();
   const warn   = document.getElementById('euSectorWarn');
+  const reportWarn = document.getElementById('euReportWarn');
+  const reportAccessMode = role === 'sector' ? document.getElementById('euReportMode').value : 'sector';
+  const reportIds = reportAccessMode === 'specific'
+    ? [...document.querySelectorAll('#euReportCheckGroup input:checked')].map(i => Number(i.value))
+    : [];
 
   if (!name)   { showToast('Informe o nome!', 'error'); return; }
   if (!email)  { showToast('Informe o e-mail!', 'error'); return; }
@@ -2421,12 +2535,18 @@ function saveEditUser() {
     ? [...document.querySelectorAll('#euSectorCheckGroup input:checked')].map(i => i.value)
     : [...SECTORS];
 
-  if (role === 'sector' && sectors.length === 0) {
+  if (role === 'sector' && reportAccessMode === 'sector' && sectors.length === 0) {
     warn.style.display = 'block';
     showToast('Selecione pelo menos um setor!', 'error');
     return;
   }
+  if (role === 'sector' && reportAccessMode === 'specific' && reportIds.length === 0) {
+    reportWarn.style.display = 'block';
+    showToast('Selecione pelo menos uma tela específica!', 'error');
+    return;
+  }
   warn.style.display = 'none';
+  reportWarn.style.display = 'none';
 
   const u = db.users.find(x => x.id === id);
   if (!u) return;
@@ -2436,6 +2556,8 @@ function saveEditUser() {
   u.role    = role;
   u.status  = status;
   u.sectors = sectors;
+  u.reportAccessMode = reportAccessMode;
+  u.reportIds = reportIds;
   if (newPwd && newPwd.length >= 6) u.pass = newPwd;
 
   saveDB();
