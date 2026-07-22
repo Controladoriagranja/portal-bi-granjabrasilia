@@ -319,10 +319,10 @@
         "comercial"
       ],
       "reportAccessMode": "specific",
-      "pageIds": [
-        "1783630194919::supervisor"
+      "pageIds": [],
+      "reportIds": [
+        1784735350937
       ],
-      "reportIds": [],
       "status": "active",
       "supervisorCode": "681"
     }
@@ -373,5 +373,5 @@
     "diretoria"
   ],
   "sectorMeta": {},
-  "publishedAt": "2026-07-22T15:49:17.780Z"
+  "publishedAt": "2026-07-22T17:06:29.490Z"
 }
