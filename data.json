@@ -321,7 +321,7 @@
       "reportAccessMode": "specific",
       "pageIds": [],
       "reportIds": [
-        1784735350937
+        1784742001937
       ],
       "status": "active",
       "supervisorCode": "681"
@@ -359,6 +359,14 @@
       "sector": "comercial",
       "url": "https://app.powerbi.com/view?r=eyJrIjoiYWI5YWE2ZTQtM2FlMi00MmI5LTlmMjItNWYxMDdiMDdiYmNlIiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
       "updatedAt": "jul. de 2026"
+    },
+    {
+      "id": 1784742001937,
+      "title": "Visão do Supervisor - 681 Willian de Almeida",
+      "desc": "",
+      "sector": "comercial",
+      "url": "https://app.powerbi.com/view?r=eyJrIjoiMzQ0NTczN2ItMjcwNy00NDEwLThjMjQtZjQ1ZWFhNzRhMTMxIiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
+      "updatedAt": "jul. de 2026"
     }
   ],
   "sectors": [
@@ -373,5 +381,5 @@
     "diretoria"
   ],
   "sectorMeta": {},
-  "publishedAt": "2026-07-22T17:06:29.490Z"
+  "publishedAt": "2026-07-22T17:40:57.578Z"
 }
