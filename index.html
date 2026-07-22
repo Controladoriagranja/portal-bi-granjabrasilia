@@ -1152,6 +1152,11 @@
                 </select>
               </div>
 
+              <div class="form-group" id="euSupervisorCodeField">
+                <label>Código do supervisor <span style="font-size:11px;color:var(--text-muted)">(ex.: 681)</span></label>
+                <input type="number" id="euSupervisorCode" min="1" step="1" placeholder="Código usado na Dim_Vendedor">
+              </div>
+
               <div class="form-group" id="euSectorField">
                 <label>Setores permitidos <span style="font-size:11px;color:var(--text-muted)">(selecione um ou mais)</span></label>
                 <div class="checkgroup" id="euSectorCheckGroup"></div>
@@ -1223,6 +1228,11 @@
               <option value="director">Diretor — acesso a todos os relatórios</option>
               <option value="sector">Setor — acesso restrito por área</option>
             </select>
+          </div>
+          <div class="form-group" id="supervisorCodeField" style="display:none">
+            <label>Código do supervisor <span style="font-size:11px;color:var(--text-muted)">(ex.: 681)</span></label>
+            <input type="number" id="newUserSupervisorCode" min="1" step="1" placeholder="Código usado na Dim_Vendedor">
+            <div style="font-size:11px;color:var(--text-muted);margin-top:5px">Obrigatório para usuários que abrirão a página Supervisor com RLS.</div>
           </div>
           <div class="form-group" id="sectorField" style="display:none">
             <label>Setores permitidos <span style="font-size:11px;color:var(--text-muted)">(pode selecionar vários)</span></label>
@@ -1522,7 +1532,9 @@
           <button class="btn-sm" onclick="retryIframe()" style="padding:10px 22px">↺ Tentar novamente</button>
         </div>
       </div>
-      <!-- Iframe -->
+      <!-- Power BI Embedded (RLS) -->
+      <div id="powerbiEmbedContainer" style="width:100%;height:100%;display:none;position:relative;z-index:1"></div>
+      <!-- Iframe legado para Admin/Diretor e relatórios ainda públicos -->
       <iframe id="reportIframe"
         style="width:100%;height:100%;border:none;display:block;position:relative;z-index:1"
         allowfullscreen="true"
@@ -1536,6 +1548,7 @@
 <!-- TOAST -->
 <div class="toast" id="toast"><span id="toastIcon">✓</span><span id="toastMsg"></span></div>
 
+<script src="https://cdn.jsdelivr.net/npm/powerbi-client@2.23.1/dist/powerbi.min.js"></script>
 <script>
 // ═══════════════════════════════════════
 // DATA STORE + LOCALSTORAGE
@@ -1554,11 +1567,12 @@ const SECTOR_LABELS = {
 // (ex.: ReportSectionabc123) para abrir diretamente na página.
 const REPORT_PAGE_CATALOG = {
   comercial: [
-    { id:'faturamento', title:'Faturamento', pageName:'' },
-    { id:'detalhamento-cliente', title:'Detalhamento Cliente', pageName:'' },
-    { id:'detalhamento-vendedores', title:'Detalhamento Vendedores', pageName:'' },
-    { id:'detalhamento-vendas-produtos', title:'Detalhamento Vendas/Produtos', pageName:'' },
-    { id:'vendedores-metas', title:'Vendedores & Metas', pageName:'' }
+    { id:'faturamento', title:'Faturamento', pageName:'012e23abe1a909a9fa9e' },
+    { id:'detalhamento-cliente', title:'Detalhamento Cliente', pageName:'82c8aa69e2a0acb9805f' },
+    { id:'detalhamento-vendedores', title:'Detalhamento Vendedores', pageName:'00a85f54d440d045fcad' },
+    { id:'detalhamento-vendas-produtos', title:'Detalhamento Vendas/Produtos', pageName:'733315eafc6160bcfcc6' },
+    { id:'vendedores-metas', title:'Vendedores & Metas', pageName:'52ff48232215bbe1a3ab' },
+    { id:'supervisor', title:'Supervisor', pageName:'Supervisor' }
   ],
   logistica: [
     { id:'visao-geral', title:'Visão Geral', pageName:'' },
@@ -1593,7 +1607,7 @@ function pagePermissionKey(reportId, pageId) {
 const DEFAULT_DB = {
   sectors: [...DEFAULT_SECTORS],
   users: [
-    { id:1, name:'Admin Sistema', email:'admin@granjabrasilia.com.br', pass:'admin123', role:'admin', sectors:[...DEFAULT_SECTORS], reportAccessMode:'sector', reportIds:[], status:'active' },
+    { id:1, name:'Admin Sistema', email:'admin@granjabrasilia.com.br', pass:'admin123', role:'admin', sectors:[...DEFAULT_SECTORS], reportAccessMode:'sector', reportIds:[], supervisorCode:'', status:'active' },
   ],
   reports: []
 };
@@ -1640,6 +1654,8 @@ db.users.forEach(u => {
   if (!u.reportAccessMode) u.reportAccessMode = 'sector';
   if (!Array.isArray(u.reportIds)) u.reportIds = [];
   if (!Array.isArray(u.pageIds)) u.pageIds = [];
+  if (u.supervisorCode === undefined || u.supervisorCode === null) u.supervisorCode = '';
+  u.supervisorCode = String(u.supervisorCode || '').trim();
 });
 syncSectors();
 
@@ -1664,7 +1680,7 @@ function initApp() {
   // 2. Garantir admin
   if (!db.users.find(u => u.email === 'admin@granjabrasilia.com.br')) {
     db.users.unshift({ id:1, name:'Admin Sistema', email:'admin@granjabrasilia.com.br',
-      pass:'admin123', role:'admin', sectors:[...DEFAULT_SECTORS], reportAccessMode:'sector', reportIds:[], status:'active' });
+      pass:'admin123', role:'admin', sectors:[...DEFAULT_SECTORS], reportAccessMode:'sector', reportIds:[], supervisorCode:'', status:'active' });
     try { localStorage.setItem('granjabi_db', JSON.stringify(db)); } catch(e) {}
   }
   if (!db.sectors || db.sectors.length === 0) db.sectors = [...DEFAULT_SECTORS];
@@ -1836,10 +1852,8 @@ function getUserReports() {
   const mode = u.reportAccessMode || 'sector';
   if (mode === 'specific') {
     const pageIds = Array.isArray(u.pageIds) ? u.pageIds.map(String) : [];
-    // Compatibilidade com a versão anterior, que guardava relatórios inteiros.
-    const oldReportIds = Array.isArray(u.reportIds) ? u.reportIds.map(Number) : [];
+    // No modo específico, NÃO considerar reportIds antigos, pois isso libera o relatório inteiro.
     return db.reports.filter(r =>
-      oldReportIds.includes(Number(r.id)) ||
       pageIds.some(key => key.startsWith(`${Number(r.id)}::`))
     );
   }
@@ -1848,15 +1862,48 @@ function getUserReports() {
   return db.reports.filter(r => sectors.includes(r.sector));
 }
 
+function getUserAccessItems() {
+  const u = currentUser;
+  if (!u) return [];
+
+  // Admin e diretor continuam abrindo o relatório completo.
+  if (u.role === 'admin' || u.role === 'director' || (u.reportAccessMode || 'sector') !== 'specific') {
+    return getUserReports().map(report => ({ report, page: null }));
+  }
+
+  const allowed = new Set((u.pageIds || []).map(String));
+  const items = [];
+  getUserReports().forEach(report => {
+    reportPages(report).forEach(page => {
+      if (allowed.has(pagePermissionKey(report.id, page.id))) {
+        items.push({ report, page });
+      }
+    });
+  });
+  return items;
+}
+
+function canOpenReportPage(reportId, pageId = '') {
+  const u = currentUser;
+  if (!u) return false;
+  if (u.role === 'admin' || u.role === 'director') return true;
+  if ((u.reportAccessMode || 'sector') !== 'specific') {
+    return getUserReports().some(r => Number(r.id) === Number(reportId));
+  }
+  if (!pageId) return false;
+  return (u.pageIds || []).map(String).includes(pagePermissionKey(reportId, pageId));
+}
+
 // ═══════════════════════════════════════
 // DASHBOARD
 // ═══════════════════════════════════════
 function renderDashboard() {
+  const items = getUserAccessItems();
   const reps = getUserReports();
   const u = currentUser;
 
   // Stats
-  const sectors = [...new Set(reps.map(r => r.sector))];
+  const sectors = [...new Set(items.map(x => x.report.sector))];
   const statsGrid = document.getElementById('statsGrid');
   const isAdminDir = u.role === 'admin' || u.role === 'director';
   const pending = db.users.filter(x => x.status === 'pending').length;
@@ -1898,8 +1945,8 @@ function renderDashboard() {
   document.getElementById('requestBox').style.display = (u.role === 'sector') ? 'flex' : 'none';
 
   // Report grid
-  document.getElementById('dashReportCount').textContent = `${reps.length} relatório${reps.length!==1?'s':''}`;
-  document.getElementById('dashReportGrid').innerHTML = reps.slice(0, 8).map(r => reportCard(r)).join('');
+  document.getElementById('dashReportCount').textContent = `${items.length} tela${items.length!==1?'s':''}`;
+  document.getElementById('dashReportGrid').innerHTML = items.slice(0, 8).map(x => accessCard(x)).join('');
 }
 
 // ═══════════════════════════════════════
@@ -1907,8 +1954,8 @@ function renderDashboard() {
 // ═══════════════════════════════════════
 let activeSectorTab = 'all';
 function renderReportTabs() {
-  const reps = getUserReports();
-  const sectors = [...new Set(reps.map(r => r.sector))];
+  const items = getUserAccessItems();
+  const sectors = [...new Set(items.map(x => x.report.sector))];
   const tabs = document.getElementById('reportTabs');
   tabs.innerHTML = `<div class="tab active" onclick="filterReportTab('all',this)">Todos</div>` +
     sectors.map(s => `<div class="tab" onclick="filterReportTab('${s}',this)">${sectorLabel(s)}</div>`).join('');
@@ -1919,21 +1966,28 @@ function filterReportTab(sector, el) {
   activeSectorTab = sector;
   document.querySelectorAll('#reportTabs .tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
-  const reps = getUserReports();
-  const filtered = sector === 'all' ? reps : reps.filter(r => r.sector === sector);
-  document.getElementById('allReportGrid').innerHTML = filtered.map(r => reportCard(r)).join('');
+  const items = getUserAccessItems();
+  const filtered = sector === 'all' ? items : items.filter(x => x.report.sector === sector);
+  document.getElementById('allReportGrid').innerHTML = filtered.map(x => accessCard(x)).join('');
+}
+
+function accessCard(item) {
+  const r = item.report;
+  const pg = item.page;
+  const title = pg ? pg.title : r.title;
+  const desc = pg ? `${r.title} — acesso somente a esta tela` : r.desc;
+  const pageArg = pg ? `, '${pg.id}'` : '';
+  return `<div class="report-card">
+    <div class="report-sector-tag tag-${r.sector}">${sectorLabel(r.sector)}</div>
+    <div class="report-title">${title}</div>
+    <div class="report-desc">${desc}</div>
+    <div class="report-meta"><span>📅 ${r.updatedAt}</span></div>
+    <button class="btn-open" onclick="openReport(${r.id}${pageArg})">🔗 Abrir Tela</button>
+  </div>`;
 }
 
 function reportCard(r) {
-  return `<div class="report-card">
-    <div class="report-sector-tag tag-${r.sector}">${sectorLabel(r.sector)}</div>
-    <div class="report-title">${r.title}</div>
-    <div class="report-desc">${r.desc}</div>
-    <div class="report-meta">
-      <span>📅 ${r.updatedAt}</span>
-    </div>
-    <button class="btn-open" onclick="openReport(${r.id})">🔗 Abrir Relatório</button>
-  </div>`;
+  return accessCard({ report:r, page:null });
 }
 
 
@@ -1999,53 +2053,143 @@ function powerBIUrlWithVisiblePanes(url) {
   }
 }
 
+function powerBIUrlForPage(url, pageName) {
+  const raw = powerBIUrlWithVisiblePanes(url);
+  if (!raw) return '';
+  try {
+    const u = new URL(raw);
+    // Oculta a navegação nativa de páginas para usuários com acesso específico.
+    u.searchParams.set('navContentPaneEnabled', 'false');
+    u.searchParams.set('filterPaneEnabled', 'false');
+    if (pageName) u.searchParams.set('pageName', pageName);
+    return u.toString();
+  } catch (e) {
+    let adjusted = raw;
+    adjusted = adjusted.replace(/navContentPaneEnabled=(true|false)/ig, 'navContentPaneEnabled=false');
+    adjusted = adjusted.replace(/filterPaneEnabled=(true|false)/ig, 'filterPaneEnabled=false');
+    if (pageName) {
+      const sep = adjusted.includes('?') ? '&' : '?';
+      adjusted += `${sep}pageName=${encodeURIComponent(pageName)}`;
+    }
+    return adjusted;
+  }
+}
+
 let currentReportUrl = '';
 let originalReportUrl = '';
-function openReport(id) {
-  const r = getUserReports().find(x => Number(x.id) === Number(id));
-  if (!r) {
+async function openReport(id, pageId = '') {
+  const r = db.reports.find(x => Number(x.id) === Number(id));
+  if (!r || !canOpenReportPage(id, pageId)) {
     showToast('Você não possui acesso a esta tela.', 'error');
     return;
   }
-  originalReportUrl = extractPowerBIEmbedUrl(r.url || '');
-  currentReportUrl = powerBIUrlWithVisiblePanes(originalReportUrl);
-  document.getElementById('modalTitle').textContent = r.title;
-  document.getElementById('modalOpenBtn').href = originalReportUrl || currentReportUrl;
-  document.getElementById('errorOpenBtn').href = originalReportUrl || currentReportUrl;
 
-  // Reset states
+  const page = pageId ? reportPages(r).find(p => String(p.id) === String(pageId)) : null;
+  if (pageId && !page) {
+    showToast('Tela não cadastrada neste relatório.', 'error');
+    return;
+  }
+
+  const iframe = document.getElementById('reportIframe');
+  const embedContainer = document.getElementById('powerbiEmbedContainer');
+  originalReportUrl = extractPowerBIEmbedUrl((page && page.url) || r.url || '');
+  currentReportUrl = page
+    ? powerBIUrlForPage(originalReportUrl, page.pageName || '')
+    : powerBIUrlWithVisiblePanes(originalReportUrl);
+
+  document.getElementById('modalTitle').textContent = page ? `${r.title} — ${page.title}` : r.title;
+  const openBtn = document.getElementById('modalOpenBtn');
+  openBtn.href = currentReportUrl;
+  openBtn.style.display = page ? 'none' : '';
+  document.getElementById('errorOpenBtn').href = currentReportUrl;
   document.getElementById('iframeLoader').style.display = 'flex';
   document.getElementById('iframeError').style.display = 'none';
-  const iframe = document.getElementById('reportIframe');
   iframe.src = '';
-
+  iframe.style.display = 'none';
+  embedContainer.style.display = 'none';
   document.getElementById('modalOverlay').classList.add('open');
 
+  const isSupervisorPage = page && String(page.id) === 'supervisor';
+  const supervisorCode = String(currentUser?.supervisorCode || '').trim();
+
+  // Usuário com página Supervisor usa Embed Token + RLS dinâmica.
+  if (isSupervisorPage && /^\d+$/.test(supervisorCode)) {
+    try {
+      const response = await fetch('/api/powerbi/embed-token', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          supervisor_code: supervisorCode,
+          page_name: page.pageName || page.title || 'Supervisor'
+        })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.erro || 'Falha ao gerar Embed Token.');
+      if (!window.powerbi || !window['powerbi-client']) throw new Error('Biblioteca powerbi-client não carregada.');
+
+      const models = window['powerbi-client'].models;
+      powerbi.reset(embedContainer);
+      embedContainer.style.display = 'block';
+      const config = {
+        type: 'report',
+        id: data.reportId,
+        embedUrl: data.embedUrl,
+        accessToken: data.embedToken,
+        tokenType: models.TokenType.Embed,
+        pageName: data.pageName || undefined,
+        permissions: models.Permissions.Read,
+        settings: {
+          panes: {
+            filters: { visible: false, expanded: false },
+            pageNavigation: { visible: false }
+          },
+          bars: { statusBar: { visible: false } },
+          navContentPaneEnabled: false,
+          filterPaneEnabled: false
+        }
+      };
+      const embeddedReport = powerbi.embed(embedContainer, config);
+      embeddedReport.on('loaded', async () => {
+        document.getElementById('iframeLoader').style.display = 'none';
+        if (data.pageName) {
+          try { await embeddedReport.setPage(data.pageName); } catch(e) {}
+        }
+      });
+      embeddedReport.on('pageChanged', async event => {
+        const current = event?.detail?.newPage?.name;
+        if (data.pageName && current && current !== data.pageName) {
+          try { await embeddedReport.setPage(data.pageName); } catch(e) {}
+        }
+      });
+      embeddedReport.on('error', event => {
+        console.error('Power BI Embedded:', event?.detail || event);
+        document.getElementById('iframeLoader').style.display = 'none';
+        document.getElementById('iframeError').style.display = 'flex';
+      });
+      return;
+    } catch (e) {
+      console.error(e);
+      document.getElementById('iframeLoader').style.display = 'none';
+      document.getElementById('iframeError').style.display = 'flex';
+      showToast(e.message || 'Erro ao abrir o relatório com RLS.', 'error');
+      return;
+    }
+  }
+
+  // Admin/Diretor ou relatórios antigos continuam no iframe legado.
   if (!currentReportUrl) {
     document.getElementById('iframeLoader').style.display = 'none';
     document.getElementById('iframeError').style.display = 'flex';
     return;
   }
-
-  // Load iframe
+  iframe.style.display = 'block';
   setTimeout(() => {
     iframe.src = currentReportUrl;
-    iframe.onload = () => {
-      document.getElementById('iframeLoader').style.display = 'none';
-      // Try to detect block (won't always work due to cross-origin)
-      try {
-        const doc = iframe.contentDocument || iframe.contentWindow.document;
-        if (!doc || doc.body.innerHTML === '') throw new Error('blocked');
-      } catch(e) {
-        // Cross-origin means it loaded (can't read content = different origin = OK usually)
-        document.getElementById('iframeLoader').style.display = 'none';
-      }
-    };
+    iframe.onload = () => { document.getElementById('iframeLoader').style.display = 'none'; };
     iframe.onerror = () => {
       document.getElementById('iframeLoader').style.display = 'none';
       document.getElementById('iframeError').style.display = 'flex';
     };
-    // Timeout fallback - if 12s and still loading, hide spinner anyway
     setTimeout(() => {
       if (document.getElementById('iframeLoader').style.display !== 'none') {
         document.getElementById('iframeLoader').style.display = 'none';
@@ -2068,6 +2212,8 @@ function retryIframe() {
 function closeModal(e) {
   if (!e || e.target === document.getElementById('modalOverlay') || e === undefined) {
     document.getElementById('modalOverlay').classList.remove('open');
+    const c = document.getElementById('powerbiEmbedContainer');
+    if (c && window.powerbi) { try { powerbi.reset(c); } catch(e) {} }
   }
 }
 
@@ -2244,6 +2390,7 @@ function toggleSectorField() {
   const role = document.getElementById('newUserRole').value;
   const isSector = role === 'sector';
   document.getElementById('sectorField').style.display = isSector ? 'block' : 'none';
+  document.getElementById('supervisorCodeField').style.display = isSector ? 'block' : 'none';
   document.getElementById('reportAccessModeField').style.display = isSector ? 'block' : 'none';
   if (isSector) rebuildNewUserPageChecks();
   toggleNewUserReportMode();
@@ -2269,6 +2416,7 @@ function addUser() {
   const name  = document.getElementById('newUserName').value.trim();
   const email = document.getElementById('newUserEmail').value.trim();
   const role  = document.getElementById('newUserRole').value;
+  const supervisorCode = String(document.getElementById('newUserSupervisorCode')?.value || '').trim();
 
   if (!name || !email || !role) { showToast('Preencha todos os campos!', 'error'); return; }
 
@@ -2291,6 +2439,9 @@ function addUser() {
     document.getElementById('newUserReportWarn').style.display = 'block';
     showToast('Selecione pelo menos uma tela específica.', 'error'); return;
   }
+  if (role === 'sector' && reportAccessMode === 'specific' && pageIds.some(k => k.endsWith('::supervisor')) && !/^\d+$/.test(supervisorCode)) {
+    showToast('Informe o Código do Supervisor para liberar a página Supervisor.', 'error'); return;
+  }
 
   const existing = db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
   if (existing) {
@@ -2301,12 +2452,13 @@ function addUser() {
     existing.reportAccessMode = reportAccessMode;
     existing.pageIds = pageIds;
     existing.reportIds = [];
+    existing.supervisorCode = supervisorCode;
     saveDB();
     showToast(`Acesso de ${name} atualizado!`, 'success');
   } else {
     db.users.push({
       id: Date.now(), name, email, pass: 'temp123', role, sectors,
-      reportAccessMode, pageIds, reportIds:[], status: 'active'
+      reportAccessMode, pageIds, reportIds:[], supervisorCode, status: 'active'
     });
     saveDB();
     showToast(`Usuário ${name} adicionado com sucesso!`, 'success');
@@ -2314,10 +2466,12 @@ function addUser() {
 
   document.getElementById('newUserName').value = '';
   document.getElementById('newUserEmail').value = '';
+  document.getElementById('newUserSupervisorCode').value = '';
   document.getElementById('newUserRole').value = '';
   document.getElementById('newUserReportMode').value = 'sector';
   document.getElementById('sectorField').style.display = 'none';
   document.getElementById('reportAccessModeField').style.display = 'none';
+  document.getElementById('supervisorCodeField').style.display = 'none';
   document.getElementById('newUserReportsField').style.display = 'none';
   document.getElementById('newUserReportWarn').style.display = 'none';
   document.querySelectorAll('#sectorCheckGroup .check-item, #newUserReportCheckGroup .check-item').forEach(el => el.classList.remove('checked'));
@@ -2557,6 +2711,7 @@ function openEditUser(id) {
   document.getElementById('euName').value = u.name;
   document.getElementById('euEmail').value = u.email;
   document.getElementById('euRole').value = u.role;
+  document.getElementById('euSupervisorCode').value = u.supervisorCode || '';
   document.getElementById('euNewPwd').value = '';
   document.getElementById('euAvatar').textContent = u.name[0].toUpperCase();
   document.getElementById('euNameDisplay').textContent = u.name;
@@ -2589,6 +2744,7 @@ function toggleEuSectors() {
   const role = document.getElementById('euRole').value;
   const isSector = role === 'sector';
   document.getElementById('euSectorField').style.display = isSector ? 'block' : 'none';
+  document.getElementById('euSupervisorCodeField').style.display = isSector ? 'block' : 'none';
   document.getElementById('euReportModeField').style.display = isSector ? 'block' : 'none';
   toggleEuReportMode();
 }
@@ -2606,6 +2762,7 @@ function saveEditUser() {
   const role   = document.getElementById('euRole').value;
   const status = document.querySelector('input[name="euStatus"]:checked')?.value;
   const newPwd = document.getElementById('euNewPwd').value.trim();
+  const supervisorCode = String(document.getElementById('euSupervisorCode').value || '').trim();
   const warn   = document.getElementById('euSectorWarn');
   const reportWarn = document.getElementById('euReportWarn');
   const reportAccessMode = role === 'sector' ? document.getElementById('euReportMode').value : 'sector';
@@ -2616,6 +2773,9 @@ function saveEditUser() {
   if (!name)   { showToast('Informe o nome!', 'error'); return; }
   if (!email)  { showToast('Informe o e-mail!', 'error'); return; }
   if (!status) { showToast('Selecione o status!', 'error'); return; }
+  if (role === 'sector' && reportAccessMode === 'specific' && pageIds.some(k => k.endsWith('::supervisor')) && !/^\d+$/.test(supervisorCode)) {
+    showToast('Informe o Código do Supervisor para liberar a página Supervisor.', 'error'); return;
+  }
 
   let sectors = role === 'sector'
     ? [...document.querySelectorAll('#euSectorCheckGroup input:checked')].map(i => i.value)
@@ -2645,6 +2805,7 @@ function saveEditUser() {
   u.reportAccessMode = reportAccessMode;
   u.pageIds = pageIds;
   u.reportIds = [];
+  u.supervisorCode = supervisorCode;
   if (newPwd && newPwd.length >= 6) u.pass = newPwd;
 
   saveDB();
