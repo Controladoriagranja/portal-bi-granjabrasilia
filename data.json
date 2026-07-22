@@ -325,48 +325,218 @@
       ],
       "status": "active",
       "supervisorCode": "681"
+    },
+    {
+      "id": 1784750141831,
+      "name": "Marcio Pinheiro dos Reis",
+      "email": "mpreis@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "comercial"
+      ],
+      "reportAccessMode": "specific",
+      "pageIds": [],
+      "reportIds": [
+        1784748927839
+      ],
+      "status": "active"
+    },
+    {
+      "id": 1784750226190,
+      "name": "Carla Franciele de Souza Selma",
+      "email": "cfsouza@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "comercial"
+      ],
+      "reportAccessMode": "specific",
+      "pageIds": [],
+      "reportIds": [
+        1784742001937
+      ],
+      "status": "active"
+    },
+    {
+      "id": 1784750298951,
+      "name": "Pedro Henrique da Silva",
+      "email": "phdsilva@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "comercial"
+      ],
+      "reportAccessMode": "specific",
+      "pageIds": [],
+      "reportIds": [
+        1784748847880
+      ],
+      "status": "active"
+    },
+    {
+      "id": 1784750340718,
+      "name": "Matheus Silva Araujo",
+      "email": "msaraujo@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "comercial"
+      ],
+      "reportAccessMode": "specific",
+      "pageIds": [],
+      "reportIds": [
+        1784749034791
+      ],
+      "status": "active"
+    },
+    {
+      "id": 1784750380399,
+      "name": "Jadson Silva Mascarenhas",
+      "email": "jmascarenhas@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "comercial"
+      ],
+      "reportAccessMode": "specific",
+      "pageIds": [],
+      "reportIds": [
+        1784749099215
+      ],
+      "status": "active"
+    },
+    {
+      "id": 1784750434111,
+      "name": "Gustavo Almeida Barroso",
+      "email": "gbarroso@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "comercial"
+      ],
+      "reportAccessMode": "specific",
+      "pageIds": [],
+      "reportIds": [
+        1784749187079
+      ],
+      "status": "active"
+    },
+    {
+      "id": 1784750479374,
+      "name": "Thais Teles de Souza Madeira",
+      "email": "tmadeira@avenova.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "comercial"
+      ],
+      "reportAccessMode": "sector",
+      "pageIds": [],
+      "reportIds": [],
+      "status": "active"
+    },
+    {
+      "id": 1784750526422,
+      "name": "Sério Elias de Carvalho",
+      "email": "carvalho@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "comercial"
+      ],
+      "reportAccessMode": "sector",
+      "pageIds": [],
+      "reportIds": [],
+      "status": "active"
+    },
+    {
+      "id": 1784750564319,
+      "name": "Júlio César Rodrigues",
+      "email": "jcaraujo@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "comercial"
+      ],
+      "reportAccessMode": "sector",
+      "pageIds": [],
+      "reportIds": [],
+      "status": "active"
     }
   ],
   "reports": [
     {
       "id": 1782495274815,
       "title": "Bi - Logistica",
-      "desc": "",
+      "desc": "Acompanhe os principais indicadores da operação logística.",
       "sector": "logistica",
       "url": "https://app.powerbi.com/view?r=eyJrIjoiOTg2MzMyOTMtMTdkMS00Mzk2LWI0YTgtYjY0OWUxNWI5ZDJmIiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
-      "updatedAt": "jun. de 2026"
+      "updatedAt": "2026-07-22T19:30:00.111Z"
     },
     {
       "id": 1782495350440,
       "title": "Bi - PCP",
-      "desc": "",
+      "desc": "Monitore os indicadores de planejamento e controle da produção.",
       "sector": "pcp",
       "url": "https://app.powerbi.com/view?r=eyJrIjoiZGVhZDViOTAtZDc5ZS00ZmNjLTk3NDAtNTRjNzk5Y2I0Yjg5IiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
-      "updatedAt": "jun. de 2026"
+      "updatedAt": "2026-07-22T19:30:10.695Z"
     },
     {
       "id": 1783630194919,
       "title": "Bi Comercial",
-      "desc": "",
+      "desc": "Visualize os principais indicadores e resultados comerciais.",
       "sector": "comercial",
       "url": "https://app.powerbi.com/view?r=eyJrIjoiN2VjNTczNmUtM2FhZi00NWNlLThmYWQtMjllMzM3MTU1YmM3IiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
-      "updatedAt": "jul. de 2026"
-    },
-    {
-      "id": 1784735350937,
-      "title": "BI Comercial - Supervisor",
-      "desc": "",
-      "sector": "comercial",
-      "url": "https://app.powerbi.com/view?r=eyJrIjoiYWI5YWE2ZTQtM2FlMi00MmI5LTlmMjItNWYxMDdiMDdiYmNlIiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
-      "updatedAt": "jul. de 2026"
+      "updatedAt": "2026-07-22T19:30:24.263Z"
     },
     {
       "id": 1784742001937,
-      "title": "Visão do Supervisor - 681 Willian de Almeida",
-      "desc": "",
+      "title": "Visão do Supervisor: Willian de Almeida e Carla Franciele",
+      "desc": "Gerencie sua equipe acompanhando metas e desempenho individual.",
       "sector": "comercial",
-      "url": "https://app.powerbi.com/view?r=eyJrIjoiMzQ0NTczN2ItMjcwNy00NDEwLThjMjQtZjQ1ZWFhNzRhMTMxIiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
-      "updatedAt": "jul. de 2026"
+      "url": "https://app.powerbi.com/view?r=eyJrIjoiMWI3YTRiNzAtOTllNC00ZDY3LTgxNGYtNmJmY2U2Y2U3ZjJkIiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
+      "updatedAt": "2026-07-22T19:31:31.271Z"
+    },
+    {
+      "id": 1784748847880,
+      "title": "Visão do Supervisor: Pedro Henrique",
+      "desc": "Gerencie sua equipe acompanhando metas e desempenho individual.",
+      "sector": "comercial",
+      "url": "https://app.powerbi.com/view?r=eyJrIjoiOGYxYmJlZjYtYTJlZC00MWE5LTgyNGYtNmY2YjRmMjFlOTBlIiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
+      "updatedAt": "2026-07-22T19:34:07.880Z"
+    },
+    {
+      "id": 1784748927839,
+      "title": "Visão do Supervisor: Marcio Pinheiro",
+      "desc": "Gerencie sua equipe acompanhando metas e desempenho individual.",
+      "sector": "comercial",
+      "url": "https://app.powerbi.com/view?r=eyJrIjoiMmQzZjYxYjItYWE1My00YTJiLWExYTItOTIxNjVjYjg5NGYzIiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
+      "updatedAt": "2026-07-22T19:35:27.839Z"
+    },
+    {
+      "id": 1784749034791,
+      "title": "Visão do Supervisor: Matheus Silva Araujo",
+      "desc": "Gerencie sua equipe acompanhando metas e desempenho individual.",
+      "sector": "comercial",
+      "url": "https://app.powerbi.com/view?r=eyJrIjoiYTY0NjUwZWYtYTlhZC00MDMwLWFiYWQtZDM5YzhiODZhZjIxIiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
+      "updatedAt": "2026-07-22T19:37:14.791Z"
+    },
+    {
+      "id": 1784749099215,
+      "title": "Visão do Supervisor: Jadson Silva Mascarenhas",
+      "desc": "Gerencie sua equipe acompanhando metas e desempenho individual.",
+      "sector": "comercial",
+      "url": "https://app.powerbi.com/view?r=eyJrIjoiNDM1NjdhOGMtMmFmMS00YmIwLWExYzQtNDdlOGM1OGU4MTVjIiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
+      "updatedAt": "2026-07-22T19:38:19.215Z"
+    },
+    {
+      "id": 1784749187079,
+      "title": "Visão do Supervisor: Gustavo Almeida Barroso",
+      "desc": "Gerencie sua equipe acompanhando metas e desempenho individual.",
+      "sector": "comercial",
+      "url": "https://app.powerbi.com/view?r=eyJrIjoiYWU4ZDRmZTUtZTViNS00NTUwLWExMjctOWU1YTAxYjQwNDJmIiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
+      "updatedAt": "2026-07-22T19:39:47.079Z"
     }
   ],
   "sectors": [
@@ -381,5 +551,5 @@
     "diretoria"
   ],
   "sectorMeta": {},
-  "publishedAt": "2026-07-22T17:40:57.578Z"
+  "publishedAt": "2026-07-22T20:04:22.462Z"
 }
