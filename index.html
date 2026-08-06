@@ -1082,6 +1082,7 @@
                 <option value="pcp">PCP</option>
                 <option value="logistica">Logística</option>
                 <option value="comercial">Comercial</option>
+                <option value="suprimentos">Suprimentos</option>
                 <option value="todos">Todos</option>
               </select>
             </div>
@@ -3273,6 +3274,13 @@ async function loadUpdateStatus(){
         return id.startsWith('comercial_') || id==='tratamento_comercial';
       }
 
+      if(modulo==='suprimentos'){
+        return id.startsWith('suprimentos_')
+          || id==='contas_pagas_suprimentos'
+          || id==='suprimentos_contas_pagas'
+          || id==='tratamento_suprimentos';
+      }
+
       return false;
     });
     document.getElementById('updateReportsBody').innerHTML=rels.map(r=>{
@@ -3280,13 +3288,15 @@ async function loadUpdateStatus(){
       const ehTratamento=[
         'tratamento_pcp',
         'tratamento_logistica',
-        'tratamento_comercial'
+        'tratamento_comercial',
+        'tratamento_suprimentos'
       ].includes(id);
 
       const nomesTratamento={
         tratamento_pcp:'Tratamento PCP / Power BI',
         tratamento_logistica:'Tratamento Logística / Power BI',
-        tratamento_comercial:'Tratamento Comercial / Power BI'
+        tratamento_comercial:'Tratamento Comercial / Power BI',
+        tratamento_suprimentos:'Tratamento Suprimentos / Power BI'
       };
 
       const nomeExibicao=nomesTratamento[id] || r.nome;
