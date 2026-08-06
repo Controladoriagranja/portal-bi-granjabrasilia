@@ -463,6 +463,20 @@
       "pageIds": [],
       "reportIds": [],
       "status": "active"
+    },
+    {
+      "id": 1786046292504,
+      "name": "Flávio Ferreira",
+      "email": "fporto@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "suprimentos"
+      ],
+      "reportAccessMode": "sector",
+      "pageIds": [],
+      "reportIds": [],
+      "status": "active"
     }
   ],
   "reports": [
@@ -537,6 +551,14 @@
       "sector": "comercial",
       "url": "https://app.powerbi.com/view?r=eyJrIjoiZjdiYjU0ZDQtMmI1OS00YzBjLWExM2UtMWEyMTc5NjBmNzcxIiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
       "updatedAt": "2026-07-28T17:36:46.864Z"
+    },
+    {
+      "id": 1786046165540,
+      "title": "Bi - Suprimentos",
+      "desc": "Acompanhe os principais indicadores de desempenho da área de Suprimentos",
+      "sector": "suprimentos",
+      "url": "https://app.powerbi.com/view?r=eyJrIjoiNTY3MmEwZmMtNTA2OS00ODU0LWIwOTMtYTljMmEzM2M1NzUzIiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
+      "updatedAt": "2026-08-06T19:56:05.537Z"
     }
   ],
   "sectors": [
@@ -548,8 +570,14 @@
     "operacional",
     "ti",
     "marketing",
-    "diretoria"
+    "diretoria",
+    "suprimentos"
   ],
-  "sectorMeta": {},
-  "publishedAt": "2026-07-28T17:36:53.816Z"
+  "sectorMeta": {
+    "suprimentos": {
+      "label": "Suprimentos",
+      "color": "#fb923c"
+    }
+  },
+  "publishedAt": "2026-08-06T19:58:15.872Z"
 }
