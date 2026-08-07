@@ -1,0 +1,597 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "name": "Admin Sistema",
+      "email": "admin@granjabrasilia.com.br",
+      "pass": "BrasiliaControl@58",
+      "role": "admin",
+      "sectors": [
+        "logistica",
+        "pcp",
+        "comercial",
+        "financeiro",
+        "rh",
+        "operacional",
+        "ti",
+        "marketing",
+        "diretoria"
+      ],
+      "status": "active"
+    },
+    {
+      "id": 1782495397464,
+      "name": "Anderson",
+      "email": "andersonjr.eng@hotmail.com",
+      "pass": "temp123",
+      "role": "director",
+      "sectors": [
+        "logistica",
+        "pcp",
+        "comercial",
+        "financeiro",
+        "rh",
+        "operacional",
+        "ti",
+        "marketing",
+        "diretoria"
+      ],
+      "status": "active"
+    },
+    {
+      "id": 1782495591200,
+      "name": "Aline",
+      "email": "apsantos@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "director",
+      "sectors": [
+        "logistica",
+        "pcp",
+        "comercial",
+        "financeiro",
+        "rh",
+        "operacional",
+        "ti",
+        "marketing",
+        "diretoria"
+      ],
+      "status": "active"
+    },
+    {
+      "id": 1782501286407,
+      "name": "Barbara Morgado",
+      "email": "bantunes@granjabrasilia.com.br",
+      "pass": "bac0105",
+      "role": "director",
+      "sectors": [
+        "logistica",
+        "pcp",
+        "comercial",
+        "financeiro",
+        "rh",
+        "operacional",
+        "ti",
+        "marketing",
+        "diretoria"
+      ],
+      "status": "active",
+      "allowUpdates": true
+    },
+    {
+      "id": 1782504302063,
+      "name": "Paulo Roberto Borges",
+      "email": "proberto@granjabrasilia.com.br",
+      "pass": "gbr27097071",
+      "role": "director",
+      "sectors": [
+        "logistica",
+        "pcp",
+        "comercial",
+        "financeiro",
+        "rh",
+        "operacional",
+        "ti",
+        "marketing",
+        "diretoria"
+      ],
+      "status": "active"
+    },
+    {
+      "id": 1782505827839,
+      "name": "Leandro Ilidio de Oliveira",
+      "email": "leilidio@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "logistica"
+      ],
+      "status": "active"
+    },
+    {
+      "id": 1782506115878,
+      "name": "Delcio Jose dos Santos",
+      "email": "delcio@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "director",
+      "sectors": [
+        "logistica",
+        "pcp",
+        "comercial",
+        "financeiro",
+        "rh",
+        "operacional",
+        "ti",
+        "marketing",
+        "diretoria"
+      ],
+      "status": "active"
+    },
+    {
+      "id": 1782506168951,
+      "name": "Adilson Algusto dos Santos Jr",
+      "email": "adilson.junior@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "director",
+      "sectors": [
+        "logistica",
+        "pcp",
+        "comercial",
+        "financeiro",
+        "rh",
+        "operacional",
+        "ti",
+        "marketing",
+        "diretoria"
+      ],
+      "status": "active"
+    },
+    {
+      "id": 1782747373790,
+      "name": "Lucinaldo Alves Bezerra",
+      "email": "lbezerra@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "pcp"
+      ],
+      "allowUpdates": false,
+      "status": "active"
+    },
+    {
+      "id": 1782747425045,
+      "name": "Marcio Marçal da Cruz",
+      "email": "mcruz@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "pcp"
+      ],
+      "allowUpdates": false,
+      "status": "active"
+    },
+    {
+      "id": 1782747463149,
+      "name": "Isadora Gomes Santos",
+      "email": "isadora@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "director",
+      "sectors": [
+        "logistica",
+        "pcp",
+        "comercial",
+        "financeiro",
+        "rh",
+        "operacional",
+        "ti",
+        "marketing",
+        "diretoria"
+      ],
+      "allowUpdates": false,
+      "status": "active"
+    },
+    {
+      "id": 1782747515549,
+      "name": "Adilson Augusto dos Santos",
+      "email": "adilson@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "director",
+      "sectors": [
+        "logistica",
+        "pcp",
+        "comercial",
+        "financeiro",
+        "rh",
+        "operacional",
+        "ti",
+        "marketing",
+        "diretoria"
+      ],
+      "allowUpdates": false,
+      "status": "active"
+    },
+    {
+      "id": 1782747575846,
+      "name": "Hermeson de Almeida",
+      "email": "healmeida@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "pcp"
+      ],
+      "allowUpdates": false,
+      "status": "active"
+    },
+    {
+      "id": 1782747665613,
+      "name": "Geovane Antonio Teixeira",
+      "email": "gteixeira@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "logistica",
+        "pcp"
+      ],
+      "allowUpdates": false,
+      "status": "active"
+    },
+    {
+      "id": 1783013752397,
+      "name": "Jaélia Gomes Dias",
+      "email": "jgdias@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "pcp"
+      ],
+      "allowUpdates": false,
+      "status": "active"
+    },
+    {
+      "id": 1783096828038,
+      "name": "Lucas Linhares",
+      "email": "linhares@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "comercial"
+      ],
+      "allowUpdates": false,
+      "status": "active"
+    },
+    {
+      "id": 1783357344062,
+      "name": "Maria Teresa Castro",
+      "email": "mtcastro@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "director",
+      "sectors": [
+        "logistica",
+        "pcp",
+        "comercial",
+        "financeiro",
+        "rh",
+        "operacional",
+        "ti",
+        "marketing",
+        "diretoria"
+      ],
+      "allowUpdates": false,
+      "status": "active"
+    },
+    {
+      "id": 1783357521350,
+      "name": "Alexandre Lopes de Freitas",
+      "email": "alfreitas@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "director",
+      "sectors": [
+        "logistica",
+        "pcp",
+        "comercial",
+        "financeiro",
+        "rh",
+        "operacional",
+        "ti",
+        "marketing",
+        "diretoria"
+      ],
+      "allowUpdates": false,
+      "status": "active"
+    },
+    {
+      "id": 1784286256876,
+      "name": "Lara Eduarda Silva Santos",
+      "email": "analistacomercialgb@granjabrasilia.com",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "comercial"
+      ],
+      "status": "active"
+    },
+    {
+      "id": 1784728197820,
+      "name": "Willian de Almeida",
+      "email": "walmeida@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "comercial"
+      ],
+      "reportAccessMode": "specific",
+      "pageIds": [],
+      "reportIds": [
+        1784742001937
+      ],
+      "status": "active",
+      "supervisorCode": "681"
+    },
+    {
+      "id": 1784750141831,
+      "name": "Marcio Pinheiro dos Reis",
+      "email": "mpreis@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "comercial"
+      ],
+      "reportAccessMode": "specific",
+      "pageIds": [],
+      "reportIds": [
+        1784748927839
+      ],
+      "status": "active"
+    },
+    {
+      "id": 1784750226190,
+      "name": "Carla Franciele de Souza Selma",
+      "email": "cfsouza@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "comercial"
+      ],
+      "reportAccessMode": "specific",
+      "pageIds": [],
+      "reportIds": [
+        1784742001937
+      ],
+      "status": "active"
+    },
+    {
+      "id": 1784750298951,
+      "name": "Pedro Henrique da Silva",
+      "email": "phdsilva@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "comercial"
+      ],
+      "reportAccessMode": "specific",
+      "pageIds": [],
+      "reportIds": [
+        1784748847880
+      ],
+      "status": "active"
+    },
+    {
+      "id": 1784750340718,
+      "name": "Matheus Silva Araujo",
+      "email": "msaraujo@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "comercial"
+      ],
+      "reportAccessMode": "specific",
+      "pageIds": [],
+      "reportIds": [
+        1784749034791
+      ],
+      "status": "active"
+    },
+    {
+      "id": 1784750380399,
+      "name": "Jadson Silva Mascarenhas",
+      "email": "jmascarenhas@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "comercial"
+      ],
+      "reportAccessMode": "specific",
+      "pageIds": [],
+      "reportIds": [
+        1784749099215
+      ],
+      "status": "active"
+    },
+    {
+      "id": 1784750434111,
+      "name": "Gustavo Almeida Barroso",
+      "email": "gbarroso@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "comercial"
+      ],
+      "reportAccessMode": "specific",
+      "pageIds": [],
+      "reportIds": [
+        1784749187079
+      ],
+      "status": "active"
+    },
+    {
+      "id": 1784750479374,
+      "name": "Thais Teles de Souza Madeira",
+      "email": "tmadeira@avenova.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "comercial"
+      ],
+      "reportAccessMode": "sector",
+      "pageIds": [],
+      "reportIds": [],
+      "status": "active"
+    },
+    {
+      "id": 1784750526422,
+      "name": "Sério Elias de Carvalho",
+      "email": "carvalho@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "comercial"
+      ],
+      "reportAccessMode": "sector",
+      "pageIds": [],
+      "reportIds": [],
+      "status": "active"
+    },
+    {
+      "id": 1784750564319,
+      "name": "Júlio César Rodrigues",
+      "email": "jcaraujo@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "comercial"
+      ],
+      "reportAccessMode": "sector",
+      "pageIds": [],
+      "reportIds": [],
+      "status": "active"
+    },
+    {
+      "id": 1786046292504,
+      "name": "Flávio Ferreira",
+      "email": "fporto@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "suprimentos"
+      ],
+      "reportAccessMode": "sector",
+      "pageIds": [],
+      "reportIds": [],
+      "status": "active"
+    },
+    {
+      "id": 1786108331648,
+      "name": "Emerson Minoru Xavier Nakano",
+      "email": "enakano@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "suprimentos"
+      ],
+      "reportAccessMode": "sector",
+      "pageIds": [],
+      "reportIds": [],
+      "status": "active"
+    }
+  ],
+  "reports": [
+    {
+      "id": 1782495274815,
+      "title": "Bi - Logistica",
+      "desc": "Acompanhe os principais indicadores da operação logística.",
+      "sector": "logistica",
+      "url": "https://app.powerbi.com/view?r=eyJrIjoiOTg2MzMyOTMtMTdkMS00Mzk2LWI0YTgtYjY0OWUxNWI5ZDJmIiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
+      "updatedAt": "2026-07-22T19:30:00.111Z"
+    },
+    {
+      "id": 1782495350440,
+      "title": "Bi - PCP",
+      "desc": "Monitore os indicadores de planejamento e controle da produção.",
+      "sector": "pcp",
+      "url": "https://app.powerbi.com/view?r=eyJrIjoiZGVhZDViOTAtZDc5ZS00ZmNjLTk3NDAtNTRjNzk5Y2I0Yjg5IiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
+      "updatedAt": "2026-07-22T19:30:10.695Z"
+    },
+    {
+      "id": 1783630194919,
+      "title": "Bi Comercial",
+      "desc": "Visualize os principais indicadores e resultados comerciais.",
+      "sector": "comercial",
+      "url": "https://app.powerbi.com/view?r=eyJrIjoiZmI1YjVmYTEtZGEyOS00ZjRmLWFlNjctMDQzOTc2NjdlODUxIiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
+      "updatedAt": "2026-07-27T17:07:15.164Z"
+    },
+    {
+      "id": 1784742001937,
+      "title": "Visão do Supervisor: Willian de Almeida e Carla Franciele",
+      "desc": "Gerencie sua equipe acompanhando metas e desempenho individual.",
+      "sector": "comercial",
+      "url": "https://app.powerbi.com/view?r=eyJrIjoiZDQyNTIwM2UtMWUwMi00OTljLWI2MGUtYjk0MjY2Y2VkNTBmIiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
+      "updatedAt": "2026-07-28T17:33:57.226Z"
+    },
+    {
+      "id": 1784748847880,
+      "title": "Visão do Supervisor: Pedro Henrique",
+      "desc": "Gerencie sua equipe acompanhando metas e desempenho individual.",
+      "sector": "comercial",
+      "url": "https://app.powerbi.com/view?r=eyJrIjoiMDcwMzc1YzAtODkzNC00MWZmLWI2N2YtOGM1MWVjMTEzZDI3IiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
+      "updatedAt": "2026-07-28T17:34:27.297Z"
+    },
+    {
+      "id": 1784748927839,
+      "title": "Visão do Supervisor: Marcio Pinheiro",
+      "desc": "Gerencie sua equipe acompanhando metas e desempenho individual.",
+      "sector": "comercial",
+      "url": "https://app.powerbi.com/view?r=eyJrIjoiNDc2Y2YzMWItZDlkNC00OGY5LThlY2MtNGE4ODcxOWIwOWY0IiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
+      "updatedAt": "2026-07-28T17:35:13.512Z"
+    },
+    {
+      "id": 1784749034791,
+      "title": "Visão do Supervisor: Matheus Silva Araujo",
+      "desc": "Gerencie sua equipe acompanhando metas e desempenho individual.",
+      "sector": "comercial",
+      "url": "https://app.powerbi.com/view?r=eyJrIjoiNjJiMDM0NGEtOWRmMi00ZTQ5LTg3NWMtYTdlY2ZjMWIxOTYyIiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
+      "updatedAt": "2026-07-28T17:35:52.553Z"
+    },
+    {
+      "id": 1784749099215,
+      "title": "Visão do Supervisor: Jadson Silva Mascarenhas",
+      "desc": "Gerencie sua equipe acompanhando metas e desempenho individual.",
+      "sector": "comercial",
+      "url": "https://app.powerbi.com/view?r=eyJrIjoiY2NlMzIwYTMtZmQzOS00MDE2LTljNzEtYzc1Y2QwNzcyYzQ2IiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
+      "updatedAt": "2026-07-28T17:36:23.688Z"
+    },
+    {
+      "id": 1784749187079,
+      "title": "Visão do Supervisor: Gustavo Almeida Barroso",
+      "desc": "Gerencie sua equipe acompanhando metas e desempenho individual.",
+      "sector": "comercial",
+      "url": "https://app.powerbi.com/view?r=eyJrIjoiZjdiYjU0ZDQtMmI1OS00YzBjLWExM2UtMWEyMTc5NjBmNzcxIiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
+      "updatedAt": "2026-07-28T17:36:46.864Z"
+    },
+    {
+      "id": 1786046165540,
+      "title": "Bi - Suprimentos",
+      "desc": "Acompanhe os principais indicadores de desempenho da área de Suprimentos",
+      "sector": "suprimentos",
+      "url": "https://app.powerbi.com/view?r=eyJrIjoiNTY3MmEwZmMtNTA2OS00ODU0LWIwOTMtYTljMmEzM2M1NzUzIiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
+      "updatedAt": "2026-08-06T19:56:05.537Z"
+    }
+  ],
+  "sectors": [
+    "logistica",
+    "pcp",
+    "comercial",
+    "financeiro",
+    "rh",
+    "operacional",
+    "ti",
+    "marketing",
+    "diretoria",
+    "suprimentos"
+  ],
+  "sectorMeta": {
+    "suprimentos": {
+      "label": "Suprimentos",
+      "color": "#fb923c"
+    }
+  },
+  "publishedAt": "2026-08-07T13:12:23.272Z"
+}
