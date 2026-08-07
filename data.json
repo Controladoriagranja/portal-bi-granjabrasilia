@@ -477,6 +477,20 @@
       "pageIds": [],
       "reportIds": [],
       "status": "active"
+    },
+    {
+      "id": 1786108331648,
+      "name": "Emerson Minoru Xavier Nakano",
+      "email": "enakano@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "suprimentos"
+      ],
+      "reportAccessMode": "sector",
+      "pageIds": [],
+      "reportIds": [],
+      "status": "active"
     }
   ],
   "reports": [
@@ -579,5 +593,5 @@
       "color": "#fb923c"
     }
   },
-  "publishedAt": "2026-08-06T19:58:15.872Z"
+  "publishedAt": "2026-08-07T13:12:23.272Z"
 }
