@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Granja Brasília — Portal de Relatórios</title>
+<!-- Portal atualizado: Suprimentos - Ordens de Compras (2026-08-12) -->
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -3130,7 +3131,20 @@ function rebuildSectorCheckboxes() {
 // ═══════════════════════════════════════
 // CENTRAL DE ATUALIZAÇÕES
 // ═══════════════════════════════════════
-const UPDATE_API = localStorage.getItem('granjabi_update_api') || 'http://192.168.1.193:5000';
+// API da Central de Atualizações.
+// O Flask deste servidor está em HTTP, não HTTPS.
+// Não usamos mais um valor antigo salvo no localStorage para evitar que
+// o navegador tente TLS/HTTPS na porta 5000 e gere "Bad request version".
+const UPDATE_API = 'http://192.168.1.193:5000';
+
+try {
+  const apiSalva = localStorage.getItem('granjabi_update_api');
+  if (apiSalva && apiSalva !== UPDATE_API) {
+    console.warn('API antiga removida do localStorage:', apiSalva);
+    localStorage.removeItem('granjabi_update_api');
+  }
+} catch (e) {}
+
 let updateTimer = null;
 
 function isoToday(){ return new Date().toISOString().slice(0,10); }
