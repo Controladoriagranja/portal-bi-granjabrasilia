@@ -491,6 +491,20 @@
       "pageIds": [],
       "reportIds": [],
       "status": "active"
+    },
+    {
+      "id": 1786995437495,
+      "name": "Helio Lima Dos Santos Jr",
+      "email": "helima@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "logistica"
+      ],
+      "reportAccessMode": "sector",
+      "pageIds": [],
+      "reportIds": [],
+      "status": "active"
     }
   ],
   "reports": [
@@ -593,5 +607,5 @@
       "color": "#fb923c"
     }
   },
-  "publishedAt": "2026-08-13T21:04:18.741Z"
+  "publishedAt": "2026-08-17T19:37:22.935Z"
 }
