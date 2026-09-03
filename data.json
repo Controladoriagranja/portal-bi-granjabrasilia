@@ -505,6 +505,22 @@
       "pageIds": [],
       "reportIds": [],
       "status": "active"
+    },
+    {
+      "id": 1788443432147,
+      "name": "Gilberto Magalhães",
+      "email": "gmsoares@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "suprimentos"
+      ],
+      "reportAccessMode": "specific",
+      "pageIds": [],
+      "reportIds": [
+        1788443381197
+      ],
+      "status": "active"
     }
   ],
   "reports": [
@@ -587,6 +603,14 @@
       "sector": "suprimentos",
       "url": "https://app.powerbi.com/view?r=eyJrIjoiNTY3MmEwZmMtNTA2OS00ODU0LWIwOTMtYTljMmEzM2M1NzUzIiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
       "updatedAt": "2026-08-06T19:56:05.537Z"
+    },
+    {
+      "id": 1788443381197,
+      "title": "Visão do Gilberto - Bi Suprimentos",
+      "desc": "Acompanhe os principais indicadores do suprimentos - Sla Solicitações",
+      "sector": "suprimentos",
+      "url": "https://app.powerbi.com/view?r=eyJrIjoiMGE3YzlkMDgtYzQzYy00NjYzLThkYmYtMGU4ZjY4ZmQ2YWJhIiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
+      "updatedAt": "2026-09-03T13:49:41.194Z"
     }
   ],
   "sectors": [
@@ -607,5 +631,5 @@
       "color": "#fb923c"
     }
   },
-  "publishedAt": "2026-08-31T13:16:14.052Z"
+  "publishedAt": "2026-09-03T13:50:43.682Z"
 }
