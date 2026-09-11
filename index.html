@@ -1085,6 +1085,7 @@
                 <option value="logistica">Logística</option>
                 <option value="comercial">Comercial</option>
                 <option value="suprimentos">Suprimentos</option>
+                <option value="indice_zootecnico">Índice Zootécnico</option>
                 <option value="todos">Todos</option>
               </select>
             </div>
@@ -3315,6 +3316,11 @@ async function loadUpdateStatus(){
           || id==='tratamento_suprimentos';
       }
 
+      if(modulo==='indice_zootecnico'){
+        return id.startsWith('indice_zootecnico_')
+          || id==='tratamento_indice_zootecnico';
+      }
+
       return false;
     });
     document.getElementById('updateReportsBody').innerHTML=rels.map(r=>{
@@ -3323,14 +3329,16 @@ async function loadUpdateStatus(){
         'tratamento_pcp',
         'tratamento_logistica',
         'tratamento_comercial',
-        'tratamento_suprimentos'
+        'tratamento_suprimentos',
+        'tratamento_indice_zootecnico'
       ].includes(id);
 
       const nomesTratamento={
         tratamento_pcp:'Tratamento PCP / Power BI',
         tratamento_logistica:'Tratamento Logística / Power BI',
         tratamento_comercial:'Tratamento Comercial / Power BI',
-        tratamento_suprimentos:'Tratamento Suprimentos / Power BI'
+        tratamento_suprimentos:'Tratamento Suprimentos / Power BI',
+        tratamento_indice_zootecnico:'Tratamento Índice Zootécnico / Power BI'
       };
 
       const nomeExibicao=nomesTratamento[id] || r.nome;
