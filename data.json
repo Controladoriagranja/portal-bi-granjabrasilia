@@ -2,7 +2,7 @@
   "users": [
     {
       "id": 1,
-      "name": "Admin Sistema",
+      "name": "Anderson Jr",
       "email": "admin@granjabrasilia.com.br",
       "pass": "BrasiliaControl@58",
       "role": "admin",
@@ -15,9 +15,15 @@
         "operacional",
         "ti",
         "marketing",
-        "diretoria"
+        "diretoria",
+        "suprimentos",
+        "integracao"
       ],
-      "status": "active"
+      "status": "active",
+      "reportAccessMode": "sector",
+      "pageIds": [],
+      "reportIds": [],
+      "ticketPanelAccess": true
     },
     {
       "id": 1782495397464,
@@ -697,5 +703,5 @@
       "color": "#34d399"
     }
   },
-  "publishedAt": "2026-09-14T12:48:10.798Z"
+  "publishedAt": "2026-09-14T12:53:46.896Z"
 }
