@@ -535,6 +535,20 @@
       "pageIds": [],
       "reportIds": [],
       "status": "active"
+    },
+    {
+      "id": 1789388991275,
+      "name": "Leandro da Costa Elias",
+      "email": "lelias@granjabrasilia.com.br",
+      "pass": "temp123",
+      "role": "sector",
+      "sectors": [
+        "integracao"
+      ],
+      "reportAccessMode": "sector",
+      "pageIds": [],
+      "reportIds": [],
+      "status": "active"
     }
   ],
   "reports": [
@@ -625,6 +639,14 @@
       "sector": "suprimentos",
       "url": "https://app.powerbi.com/view?r=eyJrIjoiMjQ3OTU1NjgtMGUxZi00NDY2LTgxYWQtNWFlZWFjMTI5NDM4IiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
       "updatedAt": "2026-09-03T13:55:17.726Z"
+    },
+    {
+      "id": 1789388951334,
+      "title": "Indicadores Zootécnicos",
+      "desc": "Visão sobre os indicadores zootécnicos do setor 'Integração'",
+      "sector": "integracao",
+      "url": "https://app.fabric.microsoft.com/view?r=eyJrIjoiMjFkMWMyNmMtMDU0Ni00MDYxLWI0N2EtNTdkMTY2ZjlkZTIwIiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
+      "updatedAt": "2026-09-14T12:29:11.331Z"
     }
   ],
   "sectors": [
@@ -637,13 +659,18 @@
     "ti",
     "marketing",
     "diretoria",
-    "suprimentos"
+    "suprimentos",
+    "integracao"
   ],
   "sectorMeta": {
     "suprimentos": {
       "label": "Suprimentos",
       "color": "#fb923c"
+    },
+    "integracao": {
+      "label": "Integração",
+      "color": "#34d399"
     }
   },
-  "publishedAt": "2026-09-09T12:27:28.812Z"
+  "publishedAt": "2026-09-14T12:30:52.507Z"
 }
