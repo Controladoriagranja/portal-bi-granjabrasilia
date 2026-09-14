@@ -3,15 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Teste Neon Auth</title>
+  <title>Teste Login Neon Auth</title>
 </head>
-
 <body>
 
-  <h2>Criar usuário de teste</h2>
-
-  <input id="nome" type="text" value="Vitor Souza" placeholder="Nome">
-  <br><br>
+  <h2>Teste de login</h2>
 
   <input
     id="email"
@@ -24,11 +20,11 @@
   <input
     id="senha"
     type="password"
-    placeholder="Digite uma senha"
+    placeholder="Senha"
   >
   <br><br>
 
-  <button onclick="criarUsuario()">Criar usuário</button>
+  <button onclick="entrar()">Entrar</button>
 
   <pre id="resultado"></pre>
 
@@ -36,31 +32,23 @@
     const AUTH_URL =
       "https://ep-little-firefly-acojjv7h.neonauth.sa-east-1.aws.neon.tech/portal-bi-granjabrasilia/auth";
 
-    async function criarUsuario() {
-
-      const nome = document.getElementById("nome").value.trim();
+    async function entrar() {
       const email = document.getElementById("email").value.trim();
       const senha = document.getElementById("senha").value;
-
       const resultado = document.getElementById("resultado");
 
-      resultado.textContent = "Criando usuário...";
+      resultado.textContent = "Entrando...";
 
       try {
-
         const resposta = await fetch(
-          AUTH_URL + "/sign-up/email",
+          AUTH_URL + "/sign-in/email",
           {
             method: "POST",
-
             headers: {
               "Content-Type": "application/json"
             },
-
             credentials: "include",
-
             body: JSON.stringify({
-              name: nome,
               email: email,
               password: senha
             })
@@ -75,18 +63,14 @@
           resultado.textContent =
             "ERRO:\n\n" +
             JSON.stringify(dados, null, 2);
-
           return;
         }
 
         resultado.textContent =
-          "USUÁRIO CRIADO!\n\n" +
+          "LOGIN REALIZADO!\n\n" +
           JSON.stringify(dados, null, 2);
 
       } catch (erro) {
-
-        console.error(erro);
-
         resultado.textContent =
           "ERRO DE CONEXÃO:\n\n" +
           erro.message;
