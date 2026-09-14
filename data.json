@@ -537,10 +537,10 @@
       "status": "active"
     },
     {
-      "id": 1789388991275,
+      "id": 1789389220187,
       "name": "Leandro da Costa Elias",
       "email": "lelias@granjabrasilia.com.br",
-      "pass": "temp123",
+      "pass": "L251087gb@",
       "role": "sector",
       "sectors": [
         "integracao"
@@ -641,12 +641,12 @@
       "updatedAt": "2026-09-03T13:55:17.726Z"
     },
     {
-      "id": 1789388951334,
+      "id": 1789389191036,
       "title": "Indicadores Zootécnicos",
       "desc": "Visão sobre os indicadores zootécnicos do setor 'Integração'",
       "sector": "integracao",
       "url": "https://app.fabric.microsoft.com/view?r=eyJrIjoiMjFkMWMyNmMtMDU0Ni00MDYxLWI0N2EtNTdkMTY2ZjlkZTIwIiwidCI6IjExMjlhNThlLWIxZTgtNGVkYS05YTRmLWY4YTViMWEzODVkMCJ9",
-      "updatedAt": "2026-09-14T12:29:11.331Z"
+      "updatedAt": "2026-09-14T12:33:11.036Z"
     }
   ],
   "sectors": [
@@ -672,5 +672,5 @@
       "color": "#34d399"
     }
   },
-  "publishedAt": "2026-09-14T12:30:52.507Z"
+  "publishedAt": "2026-09-14T12:34:00.379Z"
 }
