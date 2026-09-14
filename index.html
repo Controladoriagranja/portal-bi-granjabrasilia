@@ -3101,6 +3101,12 @@
 
   #pendingBadge{display:none!important;}
 
+
+/* MULTIUSUÁRIO — indicador de sincronização */
+#ticketSyncIndicator{
+  vertical-align:middle;
+}
+
 </style>
 
 </head>
@@ -4203,6 +4209,9 @@ function initApp() {
 
 window.addEventListener('DOMContentLoaded', () => {
   initApp();
+  setTimeout(() => {
+    initCentralTicketSync();
+  }, 900);
 });
 
 // ═══════════════════════════════════════
@@ -5059,38 +5068,265 @@ function removeReport(id) {
 // Armazenamento separado para não alterar os dados existentes do portal.
 // ═══════════════════════════════════════
 const TICKET_STORE_KEY = 'granjabi_ticket_module_v1';
+
+/*
+  MULTIUSUÁRIO
+  ------------
+  O localStorage agora é somente CACHE / FALLBACK.
+  A fonte oficial dos chamados é a própria API do Portal BI (mesmo host e mesma porta).
+*/
+const TICKET_API = '';
+const TICKET_SYNC_INTERVAL_MS = 3000;
+
 let ticketSelectedFiles = [];
 let approvalTabMode = 'initial';
 let ticketAdminTab = 'all';
 let activeApprovalTicketId = null;
 let activeApprovalPhase = 'initial';
 let ticketApprovalFiles = [];
+let ticketSyncTimer = null;
+let ticketApiOnline = false;
+let ticketSaveInProgress = false;
+let ticketLastRemoteSignature = '';
 
 function defaultTicketStore() {
   return {
-    managers: [
-      { id: 1, name: 'Paulinho', email: 'paulinho@granjabrasilia.com.br', approvalType: 'both', active: true },
-      { id: 2, name: 'João', email: 'joao@granjabrasilia.com.br', approvalType: 'both', active: true }
-    ],
-    tickets: []
+    managers: [],
+    tickets: [],
+    revision: 0,
+    updatedAt: null
   };
 }
-function loadTicketStore() {
+
+function normalizeTicketStore(store) {
+  const s = store && typeof store === 'object' ? store : {};
+  if (!Array.isArray(s.managers)) s.managers = [];
+  if (!Array.isArray(s.tickets)) s.tickets = [];
+  if (!Number.isFinite(Number(s.revision))) s.revision = 0;
+  return s;
+}
+
+function loadTicketCache() {
   try {
     const raw = localStorage.getItem(TICKET_STORE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed && Array.isArray(parsed.managers) && Array.isArray(parsed.tickets)) return parsed;
-    }
+    if (raw) return normalizeTicketStore(JSON.parse(raw));
   } catch(e) {}
-  const store = defaultTicketStore();
-  try { localStorage.setItem(TICKET_STORE_KEY, JSON.stringify(store)); } catch(e) {}
-  return store;
+  return defaultTicketStore();
 }
-let ticketStore = loadTicketStore();
 
+let ticketStore = loadTicketCache();
+
+function cacheTicketStore() {
+  try {
+    localStorage.setItem(TICKET_STORE_KEY, JSON.stringify(ticketStore));
+  } catch(e) {}
+}
+
+function ticketStoreSignature(store) {
+  try {
+    return JSON.stringify({
+      revision: Number(store?.revision || 0),
+      updatedAt: store?.updatedAt || '',
+      count: Array.isArray(store?.tickets) ? store.tickets.length : 0
+    });
+  } catch(e) {
+    return '';
+  }
+}
+
+async function ticketApiRequest(path, options={}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 7000);
+
+  try {
+    const res = await fetch(TICKET_API + path, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options.headers || {})
+      }
+    });
+
+    let data = {};
+    try { data = await res.json(); } catch(e) {}
+
+    if (!res.ok) {
+      throw new Error(data.erro || `Erro HTTP ${res.status}`);
+    }
+
+    ticketApiOnline = true;
+    updateTicketSyncIndicator();
+    return data;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function updateTicketSyncIndicator() {
+  let el = document.getElementById('ticketSyncIndicator');
+  if (!el) {
+    const title = document.querySelector('#view-ticketadmin .section-header');
+    if (!title) return;
+
+    el = document.createElement('div');
+    el.id = 'ticketSyncIndicator';
+    el.style.cssText = `
+      margin-left:10px;
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      font-size:10px;
+      font-weight:700;
+      padding:4px 8px;
+      border-radius:999px;
+      border:1px solid var(--border);
+      white-space:nowrap;
+    `;
+    title.appendChild(el);
+  }
+
+  if (ticketApiOnline) {
+    el.textContent = '● Sincronizado';
+    el.style.color = '#238636';
+    el.style.background = 'rgba(46,160,67,.09)';
+  } else {
+    el.textContent = '● Modo local';
+    el.style.color = '#b7791f';
+    el.style.background = 'rgba(212,153,58,.10)';
+  }
+}
+
+function renderTicketsAfterRemoteSync() {
+  try { renderTickets(); } catch(e) {}
+  try { renderTicketAdmin(); } catch(e) {}
+  try { updateTicketApprovalBadge(); } catch(e) {}
+
+  if (typeof chamadosViewMode !== 'undefined' && chamadosViewMode === 'gantt') {
+    try { renderChamadosGantt(); } catch(e) {}
+  }
+
+  // Se um chamado estiver aberto, atualiza a tela mantendo o mesmo chamado.
+  if (typeof openedUserTicketId !== 'undefined' && openedUserTicketId !== null) {
+    try { refreshOpenedUserTicketDetail(); } catch(e) {}
+  }
+
+  if (typeof activeChamadoDetailId !== 'undefined' && activeChamadoDetailId !== null) {
+    const current = ticketStore.tickets.find(t => Number(t.id) === Number(activeChamadoDetailId));
+    if (current) {
+      try { renderChamadoActivity(); } catch(e) {}
+      try { renderChamadoChecklist(); } catch(e) {}
+      try { renderChamadoDetailAttachments(); } catch(e) {}
+    }
+  }
+}
+
+async function pullTicketStoreFromServer({silent=true}={}) {
+  if (ticketSaveInProgress) return false;
+
+  try {
+    const remote = normalizeTicketStore(await ticketApiRequest('/api/chamados'));
+    const signature = ticketStoreSignature(remote);
+
+    if (signature !== ticketLastRemoteSignature) {
+      ticketStore = remote;
+      ticketLastRemoteSignature = signature;
+      cacheTicketStore();
+      renderTicketsAfterRemoteSync();
+    }
+
+    return true;
+  } catch(e) {
+    ticketApiOnline = false;
+    updateTicketSyncIndicator();
+    if (!silent) {
+      console.warn('API de chamados indisponível:', e);
+    }
+    return false;
+  }
+}
+
+async function migrateLocalTicketsToServer() {
+  const local = loadTicketCache();
+
+  try {
+    const merged = normalizeTicketStore(await ticketApiRequest('/api/chamados/merge', {
+      method: 'POST',
+      body: JSON.stringify({
+        tickets: local.tickets || [],
+        managers: local.managers || []
+      })
+    }));
+
+    ticketStore = merged;
+    ticketLastRemoteSignature = ticketStoreSignature(merged);
+    cacheTicketStore();
+    renderTicketsAfterRemoteSync();
+    return true;
+  } catch(e) {
+    ticketApiOnline = false;
+    updateTicketSyncIndicator();
+    return false;
+  }
+}
+
+async function initCentralTicketSync() {
+  // Na primeira abertura desta versão, envia os chamados antigos deste navegador
+  // para o servidor central e recebe de volta a base consolidada.
+  await migrateLocalTicketsToServer();
+  await pullTicketStoreFromServer({silent:true});
+
+  clearInterval(ticketSyncTimer);
+  ticketSyncTimer = setInterval(() => {
+    pullTicketStoreFromServer({silent:true});
+  }, TICKET_SYNC_INTERVAL_MS);
+}
+
+/*
+  Mantemos o nome saveTicketStore() para não quebrar as funções já existentes.
+  Toda alteração:
+  1. salva o cache local imediatamente;
+  2. envia o estado para a API central;
+  3. recebe a revisão oficial do servidor.
+*/
 function saveTicketStore() {
-  try { localStorage.setItem(TICKET_STORE_KEY, JSON.stringify(ticketStore)); } catch(e) {}
+  cacheTicketStore();
+
+  const snapshot = JSON.parse(JSON.stringify(ticketStore));
+  ticketSaveInProgress = true;
+
+  ticketApiRequest('/api/chamados', {
+    method: 'PUT',
+    body: JSON.stringify(snapshot)
+  }).then(remote => {
+    ticketStore = normalizeTicketStore(remote);
+    ticketLastRemoteSignature = ticketStoreSignature(ticketStore);
+    cacheTicketStore();
+    ticketApiOnline = true;
+    updateTicketSyncIndicator();
+    renderTicketsAfterRemoteSync();
+  }).catch(err => {
+    ticketApiOnline = false;
+    updateTicketSyncIndicator();
+    console.warn('Alteração salva somente no cache local. API central indisponível:', err);
+  }).finally(() => {
+    ticketSaveInProgress = false;
+  });
+}
+
+async function deleteTicketFromServer(id) {
+  try {
+    const remote = normalizeTicketStore(await ticketApiRequest(`/api/chamados/${encodeURIComponent(id)}`, {
+      method: 'DELETE'
+    }));
+    ticketStore = remote;
+    ticketLastRemoteSignature = ticketStoreSignature(remote);
+    cacheTicketStore();
+    renderTicketsAfterRemoteSync();
+    return true;
+  } catch(e) {
+    return false;
+  }
 }
 
 function ticketStatusText(status) {
@@ -5970,13 +6206,21 @@ function deleteCurrentChamado(){
   if(!ok) return;
 
   ticketStore.tickets=ticketStore.tickets.filter(x=>Number(x.id)!==Number(t.id));
-  saveTicketStore();
+  cacheTicketStore();
 
   closeChamadoDetail();
   renderTicketAdmin();
   updateTicketApprovalBadge();
 
-  showToast(`${tipo==='chamado'?'Chamado':'Demanda interna'} excluído(a).`,'success');
+  deleteTicketFromServer(t.id).then(ok => {
+    if (ok) {
+      showToast(`${tipo==='chamado'?'Chamado':'Demanda interna'} excluído(a).`,'success');
+    } else {
+      // Fallback: sincroniza o estado atual completo.
+      saveTicketStore();
+      showToast('Exclusão registrada. A sincronização será tentada novamente.','success');
+    }
+  });
 }
 
 function closeChamadoDetail(){
