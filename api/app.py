@@ -42,7 +42,7 @@ EXEC_THREAD = None
 
 EXTENSOES_DADOS = {".xlsx", ".xls", ".csv", ".parquet", ".html"}
 
-APP_VERSION = "2026.09.11-indice-zootecnico-unc-v1"
+APP_VERSION = "2026.09.14-neon-auth-api-v1"
 APP_FILE = Path(__file__).resolve()
 
 # =============================================================================
@@ -2124,18 +2124,97 @@ def salvar_portal_data_neon(payload):
     return carregar_portal_data_neon()
 
 
+
+# =============================================================================
+# AUTENTICAÇÃO DA API — NEON AUTH
+# O frontend envia o token da sessão Neon apenas em memória no header:
+# Authorization: Bearer <token>
+# A API valida o token diretamente nas tabelas do Neon Auth.
+# =============================================================================
+
+def _extrair_bearer_token():
+    auth_header = str(request.headers.get("Authorization") or "").strip()
+    if not auth_header.lower().startswith("bearer "):
+        return None
+    token = auth_header[7:].strip()
+    return token or None
+
+
+def _usuario_autenticado_neon():
+    token = _extrair_bearer_token()
+    if not token:
+        return None
+
+    with engine.connect() as conn:
+        row = conn.execute(text("""
+            SELECT
+                u.id AS usuario_id,
+                u.nome,
+                u.email,
+                u.perfil,
+                u.role,
+                u.ativo,
+                u.neon_auth_user_id
+            FROM neon_auth.session s
+            JOIN neon_auth."user" au
+              ON au.id = s."userId"
+            JOIN public.usuarios u
+              ON u.neon_auth_user_id = au.id
+            WHERE s.token = :token
+              AND s."expiresAt" > NOW()
+              AND u.ativo = TRUE
+            LIMIT 1
+        """), {"token": token}).mappings().first()
+
+    return dict(row) if row else None
+
+
+def _usuario_e_admin(usuario):
+    if not usuario:
+        return False
+    perfil = str(usuario.get("perfil") or "").strip().lower()
+    role = str(usuario.get("role") or "").strip().lower()
+    return perfil == "admin" or role == "admin"
+
+
+def _resposta_nao_autorizado():
+    return jsonify({
+        "ok": False,
+        "erro": "Sessão inválida, expirada ou usuário sem acesso ao Portal BI."
+    }), 401
+
+
 @app.route("/api/portal-data", methods=["GET", "PUT"])
 def api_portal_data():
     try:
+        usuario = _usuario_autenticado_neon()
+        if not usuario:
+            return _resposta_nao_autorizado()
+
         if request.method == "GET":
             return jsonify(carregar_portal_data_neon())
 
+        # Alterações de usuários, setores, relatórios e permissões
+        # ficam restritas ao administrador do Portal.
+        if not _usuario_e_admin(usuario):
+            return jsonify({
+                "ok": False,
+                "erro": "Seu usuário não possui permissão para alterar os dados do Portal BI."
+            }), 403
+
         payload = request.get_json(silent=True) or {}
         salvo = salvar_portal_data_neon(payload)
+
+        log(
+            f"Portal-data atualizado por {usuario.get('email')}",
+            "INFO"
+        )
+
         return jsonify({"ok": True, "data": salvo})
+
     except Exception as e:
         log(f"Erro em /api/portal-data: {e}", "ERRO")
-        return jsonify({"ok": False, "erro": str(e)}), 500
+        return jsonify({"ok": False, "erro": "Erro interno ao processar os dados do portal."}), 500
 
 
 @app.route("/api/database/status", methods=["GET"])
