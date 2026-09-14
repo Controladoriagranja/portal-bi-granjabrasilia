@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Teste Neon Auth</title>
+</head>
+
+<body>
+
+  <h2>Criar usuário de teste</h2>
+
+  <input id="nome" type="text" value="Vitor Souza" placeholder="Nome">
+  <br><br>
+
+  <input
+    id="email"
+    type="email"
+    value="vchaves@granjabrasilia.com.br"
+    placeholder="E-mail"
+  >
+  <br><br>
+
+  <input
+    id="senha"
+    type="password"
+    placeholder="Digite uma senha"
+  >
+  <br><br>
+
+  <button onclick="criarUsuario()">Criar usuário</button>
+
+  <pre id="resultado"></pre>
+
+  <script>
+    const AUTH_URL =
+      "https://ep-little-firefly-acojjv7h.neonauth.sa-east-1.aws.neon.tech/portal-bi-granjabrasilia/auth";
+
+    async function criarUsuario() {
+
+      const nome = document.getElementById("nome").value.trim();
+      const email = document.getElementById("email").value.trim();
+      const senha = document.getElementById("senha").value;
+
+      const resultado = document.getElementById("resultado");
+
+      resultado.textContent = "Criando usuário...";
+
+      try {
+
+        const resposta = await fetch(
+          AUTH_URL + "/sign-up/email",
+          {
+            method: "POST",
+
+            headers: {
+              "Content-Type": "application/json"
+            },
+
+            credentials: "include",
+
+            body: JSON.stringify({
+              name: nome,
+              email: email,
+              password: senha
+            })
+          }
+        );
+
+        const dados = await resposta.json();
+
+        console.log(dados);
+
+        if (!resposta.ok) {
+          resultado.textContent =
+            "ERRO:\n\n" +
+            JSON.stringify(dados, null, 2);
+
+          return;
+        }
+
+        resultado.textContent =
+          "USUÁRIO CRIADO!\n\n" +
+          JSON.stringify(dados, null, 2);
+
+      } catch (erro) {
+
+        console.error(erro);
+
+        resultado.textContent =
+          "ERRO DE CONEXÃO:\n\n" +
+          erro.message;
+      }
+    }
+  </script>
+
+</body>
+</html>
