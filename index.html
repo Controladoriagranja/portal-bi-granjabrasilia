@@ -4234,38 +4234,133 @@ function toggleLoginPwd() {
   }
 }
 
-function handleLogin() {
+const AUTH_URL =
+  "https://ep-little-firefly-acojjv7h.neonauth.sa-east-1.aws.neon.tech/portal-bi-granjabrasilia/auth";
+
+async function handleLogin() {
   const email = document.getElementById('loginEmail').value.trim().toLowerCase();
   const pass  = document.getElementById('loginPass').value;
   const err   = document.getElementById('loginError');
 
-  const user = db.users.find(u => u.email.toLowerCase() === email && u.pass === pass);
-
-  if (!user) { err.style.display = 'block'; return; }
   err.style.display = 'none';
+  err.textContent = '';
 
-  if (user.status === 'pending') {
-    document.getElementById('pendingEmail').textContent = user.email;
-    showScreen('pending');
-    return;
-  }
-  if (user.status === 'blocked') {
+  if (!email || !pass) {
     err.style.display = 'block';
-    err.textContent = 'Seu acesso foi bloqueado. Entre em contato com o administrador.';
+    err.textContent = 'Informe seu e-mail e sua senha.';
     return;
   }
 
-  currentUser = user;
-  saveSession(user.id);
-  initPortal();
-  showScreen('portal');
+  try {
+    const resposta = await fetch(
+      AUTH_URL + "/sign-in/email",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          email: email,
+          password: pass
+        })
+      }
+    );
+
+    let dados = {};
+    try {
+      dados = await resposta.json();
+    } catch (_) {}
+
+    if (!resposta.ok) {
+      err.style.display = 'block';
+      err.textContent = 'E-mail ou senha incorretos.';
+      return;
+    }
+
+    const emailAutenticado =
+      String(dados?.user?.email || email).trim().toLowerCase();
+
+    const user = db.users.find(
+      u => String(u.email || '').trim().toLowerCase() === emailAutenticado
+    );
+
+    if (!user) {
+      try {
+        await fetch(AUTH_URL + "/sign-out", {
+          method: "POST",
+          credentials: "include"
+        });
+      } catch (_) {}
+
+      err.style.display = 'block';
+      err.textContent =
+        'Usuário autenticado, mas não possui cadastro no Portal BI.';
+      return;
+    }
+
+    if (user.status === 'pending') {
+      document.getElementById('pendingEmail').textContent = user.email;
+      showScreen('pending');
+      return;
+    }
+
+    if (user.status === 'blocked') {
+      try {
+        await fetch(AUTH_URL + "/sign-out", {
+          method: "POST",
+          credentials: "include"
+        });
+      } catch (_) {}
+
+      err.style.display = 'block';
+      err.textContent =
+        'Seu acesso foi bloqueado. Entre em contato com o administrador.';
+      return;
+    }
+
+    currentUser = user;
+    saveSession(user.id);
+
+    console.log(
+      'Login Neon Auth realizado:',
+      dados?.user?.email || emailAutenticado
+    );
+
+    initPortal();
+    showScreen('portal');
+
+  } catch (erro) {
+    console.error('Erro no login Neon Auth:', erro);
+
+    err.style.display = 'block';
+    err.textContent =
+      'Não foi possível conectar ao serviço de autenticação.';
+  }
 }
 
-function logout() {
+async function logout() {
+  try {
+    await fetch(
+      AUTH_URL + "/sign-out",
+      {
+        method: "POST",
+        credentials: "include"
+      }
+    );
+  } catch (erro) {
+    console.warn(
+      'Não foi possível encerrar a sessão no Neon Auth:',
+      erro
+    );
+  }
+
   currentUser = null;
   clearSession();
+
   document.getElementById('loginEmail').value = '';
   document.getElementById('loginPass').value = '';
+
   showScreen('login');
 }
 
