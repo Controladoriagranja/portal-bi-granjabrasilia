@@ -4072,7 +4072,7 @@ function pagePermissionKey(reportId, pageId) {
 const DEFAULT_DB = {
   sectors: [...DEFAULT_SECTORS],
   users: [
-    { id:1, name:'Admin Sistema', email:'admin@granjabrasilia.com.br', pass:'admin123', role:'admin', sectors:[...DEFAULT_SECTORS], reportAccessMode:'sector', reportIds:[], status:'active' },
+    
   ],
   reports: []
 };
@@ -4158,59 +4158,154 @@ function applyLoadedData(loaded) {
 
 }
 
-function initApp() {
-  // 1. Carregar localStorage
+async function getNeonSession() {
+  try {
+    const resposta = await fetch(
+      AUTH_URL + "/get-session",
+      {
+        method: "GET",
+        credentials: "include",
+        headers: {
+          "Accept": "application/json"
+        }
+      }
+    );
+
+    if (!resposta.ok) return null;
+
+    const dados = await resposta.json();
+    return dados && dados.user ? dados : null;
+
+  } catch (erro) {
+    console.warn("Não foi possível validar a sessão Neon Auth:", erro);
+    return null;
+  }
+}
+
+async function initApp() {
+  // 1. Carregar cache local apenas como cache visual/dados.
   try {
     const saved = localStorage.getItem('granjabi_db');
     if (saved) applyLoadedData(JSON.parse(saved));
   } catch(e) {}
 
-  // 2. Garantir admin
-  if (!db.users.find(u => u.email === 'admin@granjabrasilia.com.br')) {
-    db.users.unshift({ id:1, name:'Admin Sistema', email:'admin@granjabrasilia.com.br',
-      pass:'admin123', role:'admin', sectors:[...DEFAULT_SECTORS], reportAccessMode:'sector', reportIds:[], status:'active' });
-    try { localStorage.setItem('granjabi_db', JSON.stringify(db)); } catch(e) {}
+  if (!db.sectors || db.sectors.length === 0) {
+    db.sectors = [...DEFAULT_SECTORS];
   }
-  if (!db.sectors || db.sectors.length === 0) db.sectors = [...DEFAULT_SECTORS];
   syncSectors();
 
-  // 3. Mostrar tela IMEDIATAMENTE
-  const uid = loadSession();
-  if (uid) {
-    const user = db.users.find(u => String(u.id) === uid && u.status === 'active');
-    if (user) {
-      currentUser = user;
-      initPortal();
-      showScreen('portal');
-    } else {
-      clearSession();
-      showScreen('login');
+  // 2. Carregar dados remotos antes de associar a conta autenticada.
+  try {
+    const remote = await loadRemoteData();
+    if (remote) {
+      applyLoadedData(remote);
+      syncSectors();
+      try {
+        localStorage.setItem('granjabi_db', JSON.stringify(db));
+      } catch(e) {}
     }
-  } else {
+  } catch (erro) {
+    console.warn('Não foi possível carregar os dados remotos do portal:', erro);
+  }
+
+  // 3. NÃO confiar no gr anjabi_session/localStorage para autenticação.
+  //    A autenticação real precisa existir no Neon Auth.
+  const sessaoNeon = await getNeonSession();
+
+  if (!sessaoNeon || !sessaoNeon.user || !sessaoNeon.user.email) {
+    currentUser = null;
+    clearSession();
+    showScreen('login');
+    return;
+  }
+
+  const emailAutenticado =
+    String(sessaoNeon.user.email || '').trim().toLowerCase();
+
+  const user = db.users.find(
+    u => String(u.email || '').trim().toLowerCase() === emailAutenticado
+  );
+
+  if (!user) {
+    currentUser = null;
+    clearSession();
+
+    try {
+      await fetch(AUTH_URL + "/sign-out", {
+        method: "POST",
+        credentials: "include"
+      });
+    } catch (_) {}
+
+    const err = document.getElementById('loginError');
+    if (err) {
+      err.style.display = 'block';
+      err.textContent =
+        'Sua conta está autenticada, mas não possui cadastro no Portal BI.';
+    }
+
+    showScreen('login');
+    return;
+  }
+
+  if (user.status === 'pending') {
+    currentUser = null;
+    clearSession();
+
+    const pendingEmail = document.getElementById('pendingEmail');
+    if (pendingEmail) pendingEmail.textContent = user.email;
+
+    showScreen('pending');
+    return;
+  }
+
+  if (user.status === 'blocked') {
+    currentUser = null;
+    clearSession();
+
+    try {
+      await fetch(AUTH_URL + "/sign-out", {
+        method: "POST",
+        credentials: "include"
+      });
+    } catch (_) {}
+
+    const err = document.getElementById('loginError');
+    if (err) {
+      err.style.display = 'block';
+      err.textContent =
+        'Seu acesso foi bloqueado. Entre em contato com o administrador.';
+    }
+
+    showScreen('login');
+    return;
+  }
+
+  // 4. Sessão Neon válida + usuário válido no Portal.
+  currentUser = user;
+
+  // Mantido apenas por compatibilidade com código antigo.
+  // Não serve mais como autenticação.
+  saveSession(user.id);
+
+  initPortal();
+  showScreen('portal');
+}
+
+window.addEventListener('DOMContentLoaded', async () => {
+  try {
+    await initApp();
+  } catch (erro) {
+    console.error('Falha ao iniciar o portal:', erro);
+    currentUser = null;
+    clearSession();
     showScreen('login');
   }
 
-  // 4. Tentar carregar data.json em segundo plano (sem bloquear)
   setTimeout(() => {
-    loadRemoteData().then(remote => {
-      if (!remote || !remote.users || !remote.users.length) return;
-      applyLoadedData(remote);
-      syncSectors();
-      try { localStorage.setItem('granjabi_db', JSON.stringify(db)); } catch(e) {}
-      if (currentUser) {
-        const updated = db.users.find(u => u.id === currentUser.id);
-        if (updated) currentUser = updated;
-        initPortal();
-      }
-    }).catch(() => {});
-  }, 500);
-}
-
-
-window.addEventListener('DOMContentLoaded', () => {
-  initApp();
-  setTimeout(() => {
-    initCentralTicketSync();
+    if (currentUser) {
+      initCentralTicketSync();
+    }
   }, 900);
 });
 
@@ -4238,6 +4333,9 @@ const AUTH_URL =
   "https://ep-little-firefly-acojjv7h.neonauth.sa-east-1.aws.neon.tech/portal-bi-granjabrasilia/auth";
 
 async function handleLogin() {
+  // Remove qualquer sessão local antiga antes de autenticar novamente.
+  clearSession();
+
   const email = document.getElementById('loginEmail').value.trim().toLowerCase();
   const pass  = document.getElementById('loginPass').value;
   const err   = document.getElementById('loginError');
