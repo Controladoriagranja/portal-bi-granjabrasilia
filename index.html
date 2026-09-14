@@ -3205,15 +3205,6 @@
     </div>
 
     <div class="sidebar-section sidebar-group-gap">SISTEMA</div>
-    <div class="nav-item" id="nav-publish" style="display:none;color:#3fb950" onclick="publishData()">
-      <span class="nav-icon">🚀</span> Publicar Dados
-    </div>
-    <div class="nav-item" onclick="switchView('changepass', this)">
-      <span class="nav-icon">🔑</span> Trocar Senha
-    </div>
-    <div class="nav-item" id="nav-resetdb" style="display:none;color:var(--red)" onclick="resetDB()">
-      <span class="nav-icon">🗑</span> Resetar Dados
-    </div>
 
     <div class="sidebar-footer">
       <div class="user-pill" id="userPill">
@@ -4080,6 +4071,10 @@ const DEFAULT_DB = {
 // ── Persistência localStorage ──
 // ── Firestore persistence ──
 function saveDB() {
+  // Nunca persistir credenciais no cache local nem enviá-las para a API.
+  if (Array.isArray(db.users)) {
+    db.users = db.users.map(({ pass, password, senha, ...usuario }) => usuario);
+  }
   try {
     localStorage.setItem('granjabi_db', JSON.stringify(db));
   } catch(e) {}
@@ -4175,6 +4170,10 @@ let currentUser = null;
 
 // ── Auto-login se sessão salva ──
 function applyLoadedData(loaded) {
+  // Nunca manter credenciais no frontend.
+  if (loaded && Array.isArray(loaded.users)) {
+    loaded.users = loaded.users.map(({ pass, password, senha, ...usuario }) => usuario);
+  }
   if (!loaded) return;
   if (loaded.users      && loaded.users.length)   db.users      = loaded.users;
   if (loaded.reports)                              db.reports    = loaded.reports;
@@ -5187,7 +5186,7 @@ function addUser() {
     showToast(`Acesso de ${name} atualizado!`, 'success');
   } else {
     db.users.push({
-      id: Date.now(), name, email, pass: 'temp123', role, sectors,
+      id: Date.now(), name, email, role, sectors,
       reportAccessMode, pageIds:[], reportIds, status: 'active'
     });
     saveDB();
@@ -7813,7 +7812,6 @@ const viewMeta = {
   users:      { title: 'Gerenciar Usuários',    sub: 'Aprovações e controle de acesso' },
   access:     { title: 'Controle de Acesso',    sub: 'Libere e configure permissões de usuários' },
   reportsmgr: { title: 'Gerenciar Relatórios',  sub: 'Adicione, edite e remova relatórios Power BI' },
-  changepass:  { title: 'Trocar Senha',           sub: 'Altere a senha da sua conta' },
   sectors:     { title: 'Gerenciar Setores',      sub: 'Crie, edite e remova setores do portal' },
 };
 
@@ -8010,7 +8008,6 @@ function saveEditUser() {
   u.pageIds = [];
   u.reportIds = reportIds;
   u.ticketPanelAccess = ticketPanelAccess;
-  if (newPwd && newPwd.length >= 6) u.pass = newPwd;
 
   saveDB();
   closeEditUser();
@@ -8058,200 +8055,10 @@ function showMobileAdminBtn(show) {
 }
 
 // ═══════════════════════════════════════
-// TROCAR SENHA
+// AUTENTICAÇÃO E DADOS
+// Senhas são gerenciadas exclusivamente pelo Neon Auth.
+// Os dados oficiais do Portal ficam no Neon PostgreSQL.
 // ═══════════════════════════════════════
-function togglePwd(id, el) {
-  const input = document.getElementById(id);
-  if (input.type === 'password') {
-    input.type = 'text';
-    el.innerHTML = SVG_EYE_OFF_SM;
-  } else {
-    input.type = 'password';
-    el.innerHTML = SVG_EYE_ON_SM;
-  }
-}
-
-function checkPwdStrength(val) {
-  const bar   = document.getElementById('pwdStrengthBar');
-  const label = document.getElementById('pwdStrengthLabel');
-  let score = 0;
-  if (val.length >= 6)  score++;
-  if (val.length >= 10) score++;
-  if (/[A-Z]/.test(val)) score++;
-  if (/[0-9]/.test(val)) score++;
-  if (/[^A-Za-z0-9]/.test(val)) score++;
-  const levels = [
-    { pct:'0%',   color:'var(--border)', lbl:'' },
-    { pct:'20%',  color:'var(--red)',    lbl:'Muito fraca' },
-    { pct:'40%',  color:'var(--orange)', lbl:'Fraca' },
-    { pct:'60%',  color:'#f0b429',       lbl:'Média' },
-    { pct:'80%',  color:'#58a6ff',       lbl:'Boa' },
-    { pct:'100%', color:'var(--green)',  lbl:'Forte' },
-  ];
-  const lvl = levels[score] || levels[0];
-  bar.style.width = lvl.pct;
-  bar.style.background = lvl.color;
-  label.textContent = lvl.lbl;
-  label.style.color = lvl.color;
-
-  // Check confirm match live
-  const confirm = document.getElementById('cpConfirm').value;
-  if (confirm) checkPwdMatch();
-}
-
-function checkPwdMatch() {
-  const newPwd  = document.getElementById('cpNew').value;
-  const confirm = document.getElementById('cpConfirm').value;
-  const msg     = document.getElementById('cpMatchMsg');
-  if (!confirm) { msg.style.display = 'none'; return; }
-  msg.style.display = 'block';
-  if (newPwd === confirm) {
-    msg.textContent = '✅ Senhas coincidem';
-    msg.style.color = 'var(--green)';
-  } else {
-    msg.textContent = '❌ Senhas não coincidem';
-    msg.style.color = 'var(--red)';
-  }
-}
-
-document.addEventListener('input', e => {
-  if (e.target.id === 'cpConfirm') checkPwdMatch();
-});
-
-function changePassword() {
-  const current = document.getElementById('cpCurrent').value;
-  const newPwd  = document.getElementById('cpNew').value;
-  const confirm = document.getElementById('cpConfirm').value;
-  const errEl   = document.getElementById('cpError');
-  const sucEl   = document.getElementById('cpSuccess');
-  errEl.style.display = 'none';
-  sucEl.style.display = 'none';
-
-  if (!current || !newPwd || !confirm) {
-    errEl.textContent = 'Preencha todos os campos.';
-    errEl.style.display = 'block'; return;
-  }
-  if (current !== currentUser.pass) {
-    errEl.textContent = 'Senha atual incorreta.';
-    errEl.style.display = 'block'; return;
-  }
-  if (newPwd.length < 6) {
-    errEl.textContent = 'A nova senha deve ter no mínimo 6 caracteres.';
-    errEl.style.display = 'block'; return;
-  }
-  if (newPwd !== confirm) {
-    errEl.textContent = 'A confirmação de senha não confere.';
-    errEl.style.display = 'block'; return;
-  }
-  if (newPwd === current) {
-    errEl.textContent = 'A nova senha deve ser diferente da atual.';
-    errEl.style.display = 'block'; return;
-  }
-
-  // Save
-  currentUser.pass = newPwd;
-  saveDB();
-  document.getElementById('cpCurrent').value = '';
-  document.getElementById('cpNew').value = '';
-  document.getElementById('cpConfirm').value = '';
-  document.getElementById('pwdStrengthBar').style.width = '0%';
-  document.getElementById('pwdStrengthLabel').textContent = '';
-  document.getElementById('cpMatchMsg').style.display = 'none';
-  sucEl.style.display = 'block';
-  setTimeout(() => sucEl.style.display = 'none', 4000);
-}
-
-function adminResetPassword() {
-  const uid    = parseInt(document.getElementById('resetUserSelect').value);
-  const newPwd = document.getElementById('resetNewPwd').value.trim();
-  if (!newPwd || newPwd.length < 6) { showToast('Senha deve ter ao menos 6 caracteres!', 'error'); return; }
-  const u = db.users.find(x => x.id === uid);
-  if (!u) return;
-  u.pass = newPwd;
-  saveDB();
-  document.getElementById('resetNewPwd').value = '';
-  showToast(`Senha de ${u.name} redefinida!`, 'success');
-}
-
-function initAdminResetPanel() {
-  const panel = document.getElementById('adminResetPwd');
-  if (!panel) return;
-  const isAdmin = currentUser && currentUser.role === 'admin';
-  panel.style.display = isAdmin ? 'block' : 'none';
-  if (!isAdmin) return;
-  const sel = document.getElementById('resetUserSelect');
-  sel.innerHTML = db.users
-    .filter(u => u.id !== currentUser.id)
-    .map(u => `<option value="${u.id}">${u.name} (${u.email})</option>`)
-    .join('');
-}
-
-// Add reset DB button for admin
-function resetDB() {
-  if (!confirm('Isso vai apagar TODOS os dados e restaurar o padrão. Tem certeza?')) return;
-  localStorage.removeItem('granjabi_db');
-  localStorage.removeItem('granjabi_session');
-  location.reload();
-}
-
-// ═══════════════════════════════════════
-// PUBLICAR DADOS — gera data.json para GitHub
-// ═══════════════════════════════════════
-function publishData() {
-  // A data abaixo identifica apenas quando o arquivo data.json foi gerado.
-  // Ela NÃO altera a última atualização individual de cada relatório.
-  const publishedAt = new Date().toISOString();
-
-  // Gerar o arquivo data.json com os dados e as datas individuais dos relatórios.
-  const data = {
-    users:      db.users,
-    reports:    db.reports,
-    sectors:    db.sectors,
-    sectorMeta: db.sectorMeta || {},
-    publishedAt
-  };
-
-  const json = JSON.stringify(data, null, 2);
-  const blob = new Blob([json], { type: 'application/json' });
-  const url  = URL.createObjectURL(blob);
-
-  // Criar link de download
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'data.json';
-  a.click();
-  URL.revokeObjectURL(url);
-
-  // Mostrar instruções
-  showPublishModal();
-}
-
-function showPublishModal() {
-  const overlay = document.createElement('div');
-  overlay.id = 'publishOverlay';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px';
-  overlay.innerHTML = `
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:32px;max-width:500px;width:100%">
-      <div style="font-size:28px;margin-bottom:12px">🚀</div>
-      <div style="font-size:18px;font-weight:700;margin-bottom:8px">Arquivo data.json baixado!</div>
-      <div style="font-size:13px;color:var(--text-muted);line-height:1.8;margin-bottom:20px">
-        Agora siga esses passos para publicar para todos:
-      </div>
-      <div style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:16px;font-size:13px;line-height:2;margin-bottom:20px">
-        <strong>1.</strong> Acesse <span style="color:var(--accent2)">github.com/Controladoriagranja/portal-bi-granjabrasilia</span><br>
-        <strong>2.</strong> Clique em <strong>Add file → Upload files</strong><br>
-        <strong>3.</strong> Arraste o arquivo <strong>data.json</strong> que foi baixado<br>
-        <strong>4.</strong> Escreva <strong>"Publicar dados"</strong> no commit<br>
-        <strong>5.</strong> Clique em <strong>Commit changes</strong><br>
-        <strong>6.</strong> Em 2 minutos todos veem os dados atualizados! ✅
-      </div>
-      <button onclick="document.getElementById('publishOverlay').remove()" 
-        style="width:100%;background:#c0392b;border:none;color:#fff;padding:12px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">
-        Entendido!
-      </button>
-    </div>`;
-  document.body.appendChild(overlay);
-}
 
 // Dados oficiais do Portal: Neon PostgreSQL via API protegida do Render.
 async function loadRemoteData() {
