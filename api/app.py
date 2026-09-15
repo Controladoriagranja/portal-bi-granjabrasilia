@@ -15,6 +15,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory, Response
 from flask_cors import CORS
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
 from database import testar_conexao, engine
 from sqlalchemy import text
@@ -42,7 +43,7 @@ EXEC_THREAD = None
 
 EXTENSOES_DADOS = {".xlsx", ".xls", ".csv", ".parquet", ".html"}
 
-APP_VERSION = "2026.09.14-neon-auth-api-v1"
+APP_VERSION = "2026.09.15-app-auth-v1"
 APP_FILE = Path(__file__).resolve()
 
 # =============================================================================
@@ -2126,11 +2127,41 @@ def salvar_portal_data_neon(payload):
 
 
 # =============================================================================
-# AUTENTICAÇÃO DA API — NEON AUTH
-# O frontend envia o token da sessão Neon apenas em memória no header:
-# Authorization: Bearer <token>
-# A API valida o token diretamente nas tabelas do Neon Auth.
+# AUTENTICAÇÃO DA API — PORTAL BI
+# A autenticação do Portal é feita pela própria API usando public.usuarios.
+# A senha nunca é devolvida pela API e fica armazenada somente como bcrypt
+# em public.usuarios.senha_hash.
+#
+# O frontend envia:
+# Authorization: Bearer <token_assinado>
+#
+# O token é assinado com APP_SECRET_KEY configurada no ambiente do Render.
+# A cada requisição protegida o usuário é consultado novamente no banco,
+# portanto bloqueios e alterações de perfil passam a valer imediatamente.
 # =============================================================================
+
+AUTH_TOKEN_MAX_AGE = 60 * 60 * 12  # 12 horas
+
+
+def _auth_secret():
+    secret = str(os.getenv("APP_SECRET_KEY") or "").strip()
+    if not secret:
+        raise RuntimeError(
+            "APP_SECRET_KEY não configurada no ambiente da API."
+        )
+    if len(secret) < 32:
+        raise RuntimeError(
+            "APP_SECRET_KEY deve possuir pelo menos 32 caracteres."
+        )
+    return secret
+
+
+def _auth_serializer():
+    return URLSafeTimedSerializer(
+        _auth_secret(),
+        salt="portal-bi-granja-brasilia-auth-v1",
+    )
+
 
 def _extrair_bearer_token():
     auth_header = str(request.headers.get("Authorization") or "").strip()
@@ -2140,9 +2171,25 @@ def _extrair_bearer_token():
     return token or None
 
 
-def _usuario_autenticado_neon():
-    token = _extrair_bearer_token()
+def _gerar_token_usuario(usuario_id):
+    return _auth_serializer().dumps({"uid": int(usuario_id)})
+
+
+def _usuario_por_token(token):
     if not token:
+        return None
+
+    try:
+        payload = _auth_serializer().loads(
+            token,
+            max_age=AUTH_TOKEN_MAX_AGE,
+        )
+    except (SignatureExpired, BadSignature):
+        return None
+
+    try:
+        usuario_id = int(payload.get("uid"))
+    except (TypeError, ValueError, AttributeError):
         return None
 
     with engine.connect() as conn:
@@ -2153,20 +2200,18 @@ def _usuario_autenticado_neon():
                 u.email,
                 u.perfil,
                 u.role,
-                u.ativo,
-                u.neon_auth_user_id
-            FROM neon_auth.session s
-            JOIN neon_auth."user" au
-              ON au.id = s."userId"
-            JOIN public.usuarios u
-              ON u.neon_auth_user_id = au.id
-            WHERE s.token = :token
-              AND s."expiresAt" > NOW()
+                u.ativo
+            FROM public.usuarios u
+            WHERE u.id = :usuario_id
               AND u.ativo = TRUE
             LIMIT 1
-        """), {"token": token}).mappings().first()
+        """), {"usuario_id": usuario_id}).mappings().first()
 
     return dict(row) if row else None
+
+
+def _usuario_autenticado():
+    return _usuario_por_token(_extrair_bearer_token())
 
 
 def _usuario_e_admin(usuario):
@@ -2177,6 +2222,21 @@ def _usuario_e_admin(usuario):
     return perfil == "admin" or role == "admin"
 
 
+def _usuario_publico(usuario):
+    if not usuario:
+        return None
+    return {
+        "id": usuario.get("usuario_id"),
+        "name": usuario.get("nome"),
+        "nome": usuario.get("nome"),
+        "email": usuario.get("email"),
+        "perfil": usuario.get("perfil"),
+        "role": usuario.get("role"),
+        "ativo": bool(usuario.get("ativo")),
+        "isAdmin": _usuario_e_admin(usuario),
+    }
+
+
 def _resposta_nao_autorizado():
     return jsonify({
         "ok": False,
@@ -2184,10 +2244,108 @@ def _resposta_nao_autorizado():
     }), 401
 
 
+@app.route("/api/auth/login", methods=["POST"])
+def api_auth_login():
+    try:
+        body = request.get_json(silent=True) or {}
+        email = str(body.get("email") or "").strip().lower()
+        senha = str(body.get("password") or body.get("senha") or "")
+
+        if not email or not senha:
+            return jsonify({
+                "ok": False,
+                "erro": "Informe e-mail e senha."
+            }), 400
+
+        with engine.connect() as conn:
+            row = conn.execute(text("""
+                SELECT
+                    u.id AS usuario_id,
+                    u.nome,
+                    u.email,
+                    u.perfil,
+                    u.role,
+                    u.ativo
+                FROM public.usuarios u
+                WHERE lower(u.email) = :email
+                  AND u.ativo = TRUE
+                  AND u.senha_hash IS NOT NULL
+                  AND crypt(:senha, u.senha_hash) = u.senha_hash
+                LIMIT 1
+            """), {
+                "email": email,
+                "senha": senha,
+            }).mappings().first()
+
+        if not row:
+            # Resposta deliberadamente genérica: não revela se o e-mail existe,
+            # se o usuário está bloqueado ou se a senha está incorreta.
+            return jsonify({
+                "ok": False,
+                "erro": "E-mail ou senha incorretos."
+            }), 401
+
+        usuario = dict(row)
+        token = _gerar_token_usuario(usuario["usuario_id"])
+
+        log(f"Login Portal BI realizado: {usuario.get('email')}", "INFO")
+
+        return jsonify({
+            "ok": True,
+            "token": token,
+            "expiresIn": AUTH_TOKEN_MAX_AGE,
+            "user": _usuario_publico(usuario),
+        })
+
+    except RuntimeError as e:
+        log(f"Configuração de autenticação inválida: {e}", "ERRO")
+        return jsonify({
+            "ok": False,
+            "erro": "Serviço de autenticação não configurado."
+        }), 503
+    except Exception as e:
+        log(f"Erro em /api/auth/login: {e}", "ERRO")
+        return jsonify({
+            "ok": False,
+            "erro": "Erro interno ao realizar login."
+        }), 500
+
+
+@app.route("/api/auth/me", methods=["GET"])
+def api_auth_me():
+    try:
+        usuario = _usuario_autenticado()
+        if not usuario:
+            return _resposta_nao_autorizado()
+
+        return jsonify({
+            "ok": True,
+            "user": _usuario_publico(usuario),
+        })
+    except RuntimeError as e:
+        log(f"Configuração de autenticação inválida: {e}", "ERRO")
+        return jsonify({
+            "ok": False,
+            "erro": "Serviço de autenticação não configurado."
+        }), 503
+    except Exception as e:
+        log(f"Erro em /api/auth/me: {e}", "ERRO")
+        return jsonify({
+            "ok": False,
+            "erro": "Erro interno ao validar sessão."
+        }), 500
+
+
+@app.route("/api/auth/logout", methods=["POST"])
+def api_auth_logout():
+    # O token é stateless. O logout efetivo ocorre ao removê-lo do navegador.
+    return jsonify({"ok": True})
+
+
 @app.route("/api/portal-data", methods=["GET", "PUT"])
 def api_portal_data():
     try:
-        usuario = _usuario_autenticado_neon()
+        usuario = _usuario_autenticado()
         if not usuario:
             return _resposta_nao_autorizado()
 
@@ -2195,7 +2353,7 @@ def api_portal_data():
             return jsonify(carregar_portal_data_neon())
 
         # Alterações de usuários, setores, relatórios e permissões
-        # ficam restritas ao administrador do Portal.
+        # continuam restritas ao administrador do Portal.
         if not _usuario_e_admin(usuario):
             return jsonify({
                 "ok": False,
@@ -2212,9 +2370,18 @@ def api_portal_data():
 
         return jsonify({"ok": True, "data": salvo})
 
+    except RuntimeError as e:
+        log(f"Configuração de autenticação inválida: {e}", "ERRO")
+        return jsonify({
+            "ok": False,
+            "erro": "Serviço de autenticação não configurado."
+        }), 503
     except Exception as e:
         log(f"Erro em /api/portal-data: {e}", "ERRO")
-        return jsonify({"ok": False, "erro": "Erro interno ao processar os dados do portal."}), 500
+        return jsonify({
+            "ok": False,
+            "erro": "Erro interno ao processar os dados do portal."
+        }), 500
 
 
 @app.route("/api/database/status", methods=["GET"])
