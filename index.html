@@ -4081,7 +4081,7 @@ function saveDB() {
 
   // Mantemos a assinatura síncrona para não quebrar as funções antigas.
   // A gravação oficial acontece no Neon em segundo plano.
-  if (currentUser && neonSessionToken) {
+  if (currentUser && (neonSessionToken || getPortalToken())) {
     portalApiRequest('/api/portal-data', {
       method: 'PUT',
       body: JSON.stringify(db)
@@ -4128,15 +4128,15 @@ function reportPortalUpdateText(report) {
 }
 
 function saveSession(userId) {
-  try { localStorage.setItem('granjabi_session', String(userId)); } catch(e) {}
+  try { sessionStorage.setItem('granjabi_session', String(userId)); } catch(e) {}
 }
 
 function loadSession() {
-  try { return localStorage.getItem('granjabi_session'); } catch(e) { return null; }
+  try { return sessionStorage.getItem('granjabi_session'); } catch(e) { return null; }
 }
 
 function clearSession() {
-  try { localStorage.removeItem('granjabi_session'); } catch(e) {}
+  try { sessionStorage.removeItem('granjabi_session'); } catch(e) {}
 }
 
 // Carregar db do localStorage ou usar padrão
@@ -4183,168 +4183,90 @@ function applyLoadedData(loaded) {
 
 }
 
-async function getNeonSession() {
+function getPortalToken() {
+  try { return sessionStorage.getItem('granjabi_auth_token'); } catch(e) { return null; }
+}
+
+function setPortalToken(token) {
+  neonSessionToken = token || null;
   try {
-    const resposta = await fetch(
-      AUTH_URL + "/get-session",
-      {
-        method: "GET",
-        credentials: "include",
-        headers: {
-          "Accept": "application/json"
-        }
-      }
-    );
+    if (token) sessionStorage.setItem('granjabi_auth_token', token);
+    else sessionStorage.removeItem('granjabi_auth_token');
+  } catch(e) {}
+}
 
-    if (!resposta.ok) {
-      neonSessionToken = null;
-      return null;
-    }
+function clearPortalToken() {
+  neonSessionToken = null;
+  try { sessionStorage.removeItem('granjabi_auth_token'); } catch(e) {}
+}
 
+async function getNeonSession() {
+  const token = neonSessionToken || getPortalToken();
+  if (!token) return null;
+  try {
+    const resposta = await fetch(PORTAL_API_BASE + "/api/auth/me", {
+      method: "GET",
+      headers: {"Accept":"application/json", "Authorization": `Bearer ${token}`}
+    });
+    if (!resposta.ok) { clearPortalToken(); return null; }
     const dados = await resposta.json();
-
-    if (!dados || !dados.user || !dados.session || !dados.session.token) {
-      neonSessionToken = null;
-      return null;
-    }
-
-    neonSessionToken = dados.session.token;
-    return dados;
-
+    if (!dados?.ok || !dados?.user?.email) { clearPortalToken(); return null; }
+    neonSessionToken = token;
+    return {user: dados.user, session: {token}};
   } catch (erro) {
-    neonSessionToken = null;
-    console.warn("Não foi possível validar a sessão Neon Auth:", erro);
+    console.warn("Não foi possível validar a sessão do Portal:", erro);
     return null;
   }
 }
 
 async function initApp() {
-  // 1. Primeiro comprovar a sessão real no Neon Auth.
-  const sessaoNeon = await getNeonSession();
-
-  if (!sessaoNeon || !sessaoNeon.user || !sessaoNeon.user.email) {
-    currentUser = null;
-    clearSession();
-    showScreen('login');
-    return;
+  neonSessionToken = getPortalToken();
+  const sessaoPortal = await getNeonSession();
+  if (!sessaoPortal?.user?.email) {
+    currentUser = null; clearSession(); clearPortalToken(); showScreen('login'); return;
   }
-
-  // 2. Somente depois da autenticação carregar usuários,
-  //    setores, relatórios e permissões do Neon PostgreSQL.
   let remote = null;
-
-  try {
-    remote = await loadRemoteData();
-  } catch (erro) {
+  try { remote = await loadRemoteData(); }
+  catch (erro) {
     console.error('Não foi possível carregar os dados protegidos do portal:', erro);
-    currentUser = null;
-    clearSession();
-    showScreen('login');
-
-    const err = document.getElementById('loginError');
-    if (err) {
-      err.style.display = 'block';
-      err.textContent = 'Não foi possível carregar seus dados de acesso.';
-    }
+    currentUser = null; clearSession(); clearPortalToken(); showScreen('login');
+    const err=document.getElementById('loginError');
+    if(err){err.style.display='block';err.textContent='Não foi possível carregar seus dados de acesso.';}
     return;
   }
-
   if (remote) {
-    applyLoadedData(remote);
-    syncSectors();
-
-    // Sobrescreve o cache antigo. O retorno do Neon não contém senhas.
-    try {
-      localStorage.setItem('granjabi_db', JSON.stringify(db));
-    } catch(e) {}
+    applyLoadedData(remote); syncSectors();
+    try { localStorage.setItem('granjabi_db', JSON.stringify(db)); } catch(e) {}
   }
-
-  const emailAutenticado =
-    String(sessaoNeon.user.email || '').trim().toLowerCase();
-
-  const user = db.users.find(
-    u => String(u.email || '').trim().toLowerCase() === emailAutenticado
-  );
-
-  if (!user) {
-    currentUser = null;
-    clearSession();
-    neonSessionToken = null;
-
-    try {
-      await fetch(AUTH_URL + "/sign-out", {
-        method: "POST",
-        credentials: "include"
-      });
-    } catch (_) {}
-
-    const err = document.getElementById('loginError');
-    if (err) {
-      err.style.display = 'block';
-      err.textContent =
-        'Sua conta está autenticada, mas não possui cadastro ativo no Portal BI.';
-    }
-
-    showScreen('login');
-    return;
+  const emailAutenticado=String(sessaoPortal.user.email||'').trim().toLowerCase();
+  const user=db.users.find(u=>String(u.email||'').trim().toLowerCase()===emailAutenticado);
+  if(!user){
+    currentUser=null;clearSession();clearPortalToken();
+    const err=document.getElementById('loginError');
+    if(err){err.style.display='block';err.textContent='Sua conta está autenticada, mas não possui cadastro ativo no Portal BI.';}
+    showScreen('login');return;
   }
-
-  if (user.status === 'pending') {
-    currentUser = null;
-    clearSession();
-
-    const pendingEmail = document.getElementById('pendingEmail');
-    if (pendingEmail) pendingEmail.textContent = user.email;
-
-    showScreen('pending');
-    return;
+  if(user.status==='pending'){
+    currentUser=null;clearSession();
+    const pe=document.getElementById('pendingEmail');if(pe)pe.textContent=user.email;
+    showScreen('pending');return;
   }
-
-  if (user.status === 'blocked' || user.status === 'inactive') {
-    currentUser = null;
-    clearSession();
-    neonSessionToken = null;
-
-    try {
-      await fetch(AUTH_URL + "/sign-out", {
-        method: "POST",
-        credentials: "include"
-      });
-    } catch (_) {}
-
-    const err = document.getElementById('loginError');
-    if (err) {
-      err.style.display = 'block';
-      err.textContent =
-        'Seu acesso está inativo. Entre em contato com o administrador.';
-    }
-
-    showScreen('login');
-    return;
+  if(user.status==='blocked'||user.status==='inactive'){
+    currentUser=null;clearSession();clearPortalToken();
+    const err=document.getElementById('loginError');
+    if(err){err.style.display='block';err.textContent='Seu acesso está inativo. Entre em contato com o administrador.';}
+    showScreen('login');return;
   }
-
-  currentUser = user;
-  saveSession(user.id);
-
-  initPortal();
-  showScreen('portal');
+  currentUser=user;saveSession(user.id);initPortal();showScreen('portal');
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
-  try {
-    await initApp();
-  } catch (erro) {
+  try { await initApp(); }
+  catch (erro) {
     console.error('Falha ao iniciar o portal:', erro);
-    currentUser = null;
-    clearSession();
-    showScreen('login');
+    currentUser=null;clearSession();clearPortalToken();showScreen('login');
   }
-
-  setTimeout(() => {
-    if (currentUser) {
-      initCentralTicketSync();
-    }
-  }, 900);
+  setTimeout(()=>{if(currentUser){initCentralTicketSync();}},900);
 });
 
 // ═══════════════════════════════════════
@@ -4367,202 +4289,61 @@ function toggleLoginPwd() {
   }
 }
 
-const AUTH_URL =
-  "https://ep-little-firefly-acojjv7h.neonauth.sa-east-1.aws.neon.tech/portal-bi-granjabrasilia/auth";
-
 const PORTAL_API_BASE =
   "https://portal-bi-granjabrasilia.onrender.com";
 
-// Token da sessão mantido SOMENTE em memória.
-// Não é salvo em localStorage.
 let neonSessionToken = null;
 
 async function portalApiRequest(path, options = {}) {
-  if (!neonSessionToken) {
-    const sessao = await getNeonSession();
-    if (!sessao || !neonSessionToken) {
-      throw new Error("Sessão Neon Auth inválida.");
-    }
-  }
-
-  const headers = new Headers(options.headers || {});
-  headers.set("Accept", "application/json");
-  headers.set("Authorization", `Bearer ${neonSessionToken}`);
-
-  if (options.body && !headers.has("Content-Type")) {
-    headers.set("Content-Type", "application/json");
-  }
-
-  const resposta = await fetch(
-    PORTAL_API_BASE + path,
-    {
-      ...options,
-      headers
-    }
-  );
-
-  let dados = null;
-  try {
-    dados = await resposta.json();
-  } catch (_) {}
-
-  if (resposta.status === 401) {
-    neonSessionToken = null;
-    throw new Error("Sessão expirada. Entre novamente.");
-  }
-
-  if (!resposta.ok) {
-    throw new Error(
-      dados?.erro || `Falha na API do Portal (${resposta.status}).`
-    );
-  }
-
+  if (!neonSessionToken) neonSessionToken = getPortalToken();
+  if (!neonSessionToken) throw new Error("Sessão inválida. Entre novamente.");
+  const headers=new Headers(options.headers||{});
+  headers.set("Accept","application/json");
+  headers.set("Authorization",`Bearer ${neonSessionToken}`);
+  if(options.body&&!headers.has("Content-Type"))headers.set("Content-Type","application/json");
+  const resposta=await fetch(PORTAL_API_BASE+path,{...options,headers});
+  let dados=null;try{dados=await resposta.json();}catch(_){}
+  if(resposta.status===401){clearPortalToken();clearSession();throw new Error("Sessão expirada. Entre novamente.");}
+  if(!resposta.ok)throw new Error(dados?.erro||`Falha na API do Portal (${resposta.status}).`);
   return dados;
 }
 
 async function handleLogin() {
-  clearSession();
-  neonSessionToken = null;
-
-  const email = document.getElementById('loginEmail').value.trim().toLowerCase();
-  const pass  = document.getElementById('loginPass').value;
-  const err   = document.getElementById('loginError');
-
-  err.style.display = 'none';
-  err.textContent = '';
-
-  if (!email || !pass) {
-    err.style.display = 'block';
-    err.textContent = 'Informe seu e-mail e sua senha.';
-    return;
-  }
-
+  clearSession();clearPortalToken();
+  const email=document.getElementById('loginEmail').value.trim().toLowerCase();
+  const pass=document.getElementById('loginPass').value;
+  const err=document.getElementById('loginError');
+  err.style.display='none';err.textContent='';
+  if(!email||!pass){err.style.display='block';err.textContent='Informe seu e-mail e sua senha.';return;}
   try {
-    const resposta = await fetch(
-      AUTH_URL + "/sign-in/email",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          email,
-          password: pass
-        })
-      }
-    );
-
-    if (!resposta.ok) {
-      err.style.display = 'block';
-      err.textContent = 'E-mail ou senha incorretos.';
-      return;
+    const resposta=await fetch(PORTAL_API_BASE+"/api/auth/login",{
+      method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},
+      body:JSON.stringify({email,password:pass})
+    });
+    let dados=null;try{dados=await resposta.json();}catch(_){}
+    if(!resposta.ok||!dados?.ok||!dados?.token){
+      err.style.display='block';err.textContent=dados?.erro||'E-mail ou senha incorretos.';return;
     }
-
-    // O login criou a sessão. Agora recuperamos o token da sessão
-    // e usamos esse token apenas em memória para acessar o Render.
-    const sessaoNeon = await getNeonSession();
-
-    if (!sessaoNeon || !neonSessionToken) {
-      err.style.display = 'block';
-      err.textContent = 'A autenticação foi realizada, mas a sessão não pôde ser validada.';
-      return;
-    }
-
-    const remote = await loadRemoteData();
-    if (remote) {
-      applyLoadedData(remote);
-      syncSectors();
-
-      try {
-        localStorage.setItem('granjabi_db', JSON.stringify(db));
-      } catch(e) {}
-    }
-
-    const emailAutenticado =
-      String(sessaoNeon.user?.email || email).trim().toLowerCase();
-
-    const user = db.users.find(
-      u => String(u.email || '').trim().toLowerCase() === emailAutenticado
-    );
-
-    if (!user) {
-      try {
-        await fetch(AUTH_URL + "/sign-out", {
-          method: "POST",
-          credentials: "include"
-        });
-      } catch (_) {}
-
-      neonSessionToken = null;
-
-      err.style.display = 'block';
-      err.textContent =
-        'Usuário autenticado, mas não possui cadastro ativo no Portal BI.';
-      return;
-    }
-
-    if (user.status === 'pending') {
-      document.getElementById('pendingEmail').textContent = user.email;
-      showScreen('pending');
-      return;
-    }
-
-    if (user.status === 'blocked' || user.status === 'inactive') {
-      try {
-        await fetch(AUTH_URL + "/sign-out", {
-          method: "POST",
-          credentials: "include"
-        });
-      } catch (_) {}
-
-      neonSessionToken = null;
-
-      err.style.display = 'block';
-      err.textContent =
-        'Seu acesso está inativo. Entre em contato com o administrador.';
-      return;
-    }
-
-    currentUser = user;
-    saveSession(user.id);
-
-    initPortal();
-    showScreen('portal');
-
-  } catch (erro) {
-    console.error('Erro no login/API do Portal:', erro);
-
-    err.style.display = 'block';
-    err.textContent =
-      erro?.message || 'Não foi possível conectar ao serviço de autenticação.';
+    setPortalToken(dados.token);
+    const remote=await loadRemoteData();
+    if(remote){applyLoadedData(remote);syncSectors();try{localStorage.setItem('granjabi_db',JSON.stringify(db));}catch(e){}}
+    const emailAutenticado=String(dados.user?.email||email).trim().toLowerCase();
+    const user=db.users.find(u=>String(u.email||'').trim().toLowerCase()===emailAutenticado);
+    if(!user){clearPortalToken();err.style.display='block';err.textContent='Usuário autenticado, mas não possui cadastro ativo no Portal BI.';return;}
+    if(user.status==='pending'){document.getElementById('pendingEmail').textContent=user.email;showScreen('pending');return;}
+    if(user.status==='blocked'||user.status==='inactive'){clearPortalToken();err.style.display='block';err.textContent='Seu acesso está inativo. Entre em contato com o administrador.';return;}
+    currentUser=user;saveSession(user.id);document.getElementById('loginPass').value='';initPortal();showScreen('portal');
+  } catch(erro) {
+    console.error('Erro no login/API do Portal:',erro);clearPortalToken();err.style.display='block';
+    err.textContent=erro?.message||'Não foi possível conectar ao serviço de autenticação.';
   }
 }
 
 async function logout() {
-  try {
-    await fetch(
-      AUTH_URL + "/sign-out",
-      {
-        method: "POST",
-        credentials: "include"
-      }
-    );
-  } catch (erro) {
-    console.warn(
-      'Não foi possível encerrar a sessão no Neon Auth:',
-      erro
-    );
-  }
-
-  currentUser = null;
-  neonSessionToken = null;
-  clearSession();
-
-  document.getElementById('loginEmail').value = '';
-  document.getElementById('loginPass').value = '';
-
-  showScreen('login');
+  const token=neonSessionToken||getPortalToken();
+  try{if(token)await fetch(PORTAL_API_BASE+"/api/auth/logout",{method:"POST",headers:{"Accept":"application/json","Authorization":`Bearer ${token}`}});}catch(erro){console.warn('Não foi possível comunicar o logout à API:',erro);}
+  currentUser=null;clearPortalToken();clearSession();
+  document.getElementById('loginEmail').value='';document.getElementById('loginPass').value='';showScreen('login');
 }
 
 function showScreen(id) {
