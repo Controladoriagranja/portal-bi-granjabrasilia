@@ -3259,62 +3259,72 @@
 
       <!-- VIEW: CENTRAL DE ATUALIZAÇÕES (admin) -->
       <div class="view" id="view-updates">
-        <div id="updateApiBanner" class="api-banner offline">● Verificando conexão com a API...</div>
+        <div id="updateApiBanner" class="api-banner offline">● Verificando conexão com o Render...</div>
 
         <div class="update-panel">
           <div class="update-controls">
             <div class="update-field">
               <label>Módulo</label>
-              <select id="updateModule" onchange="toggleTreatmentMode();loadUpdateStatus()">
+              <select id="updateModule" onchange="loadUpdateStatus()">
                 <option value="pcp">PCP</option>
                 <option value="logistica">Logística</option>
                 <option value="comercial">Comercial</option>
                 <option value="suprimentos">Suprimentos</option>
+                <option value="zootecnico">Índice Zootécnico</option>
                 <option value="todos">Todos</option>
               </select>
             </div>
+
             <div class="update-field">
               <label>Período da atualização</label>
-              <select id="updatePeriod" onchange="toggleManualPeriod()">
-                <option value="auto_pasta">Automático - ler pasta</option>
-                <option value="hoje">Hoje</option>
-                <option value="2_dias">Últimos 2 dias</option>
-                <option value="3_dias">Últimos 3 dias</option>
-                <option value="5_dias">Últimos 5 dias</option>
-                <option value="7_dias">Últimos 7 dias</option>
-                <option value="15_dias">Últimos 15 dias</option>
-                <option value="30_dias">Últimos 30 dias</option>
-                <option value="manual">Personalizado</option>
+              <select id="updatePeriod" disabled title="Os parâmetros de período serão conectados na próxima etapa.">
+                <option value="auto_pasta">Automático — padrão do robô</option>
               </select>
             </div>
-            <div id="manualPeriodFields" class="manual-period">
-              <div class="update-field"><label>Data inicial</label><input type="date" id="updateStart"></div>
-              <div class="update-field"><label>Data final</label><input type="date" id="updateEnd"></div>
-            </div>
-            <div class="update-field update-treatment-field" id="updateTreatmentField">
+
+            <div class="update-field update-treatment-field show" id="updateTreatmentField">
               <label>Tratamento dos dados</label>
               <select id="updateTreatmentMode">
-                <option value="incremental">⚡ Somente atualizações</option>
-                <option value="completo">🔄 Reprocessar tudo</option>
+                <option value="atualizar_tratar">⚡ Atualizações + tratamento</option>
+                <option value="somente_atualizacoes">📥 Somente atualizações</option>
               </select>
             </div>
+
             <button class="btn-sm accent update-main-btn" onclick="runModuleUpdate()">▶ Atualizar</button>
+          </div>
+
+          <div style="margin-top:10px;font-size:11px;color:var(--text-muted);line-height:1.5">
+            Nesta etapa, a Central já envia os jobs ao Render e o Agent local executa os robôs.
+            O filtro de período será ligado aos parâmetros dos robôs na próxima etapa.
           </div>
         </div>
 
         <div class="update-panel" id="updateProgressPanel" style="display:none">
-          <div style="display:flex;justify-content:space-between;gap:12px"><strong id="updateProgressTitle">Aguardando...</strong><span id="updateProgressTime" style="color:var(--text-muted);font-size:12px"></span></div>
+          <div style="display:flex;justify-content:space-between;gap:12px">
+            <strong id="updateProgressTitle">Aguardando...</strong>
+            <span id="updateProgressTime" style="color:var(--text-muted);font-size:12px"></span>
+          </div>
           <div class="update-progress"><div id="updateProgressBar"></div></div>
           <div id="updateProgressText" style="font-size:12px;color:var(--text-muted)"></div>
         </div>
 
         <div class="table-wrapper">
           <table>
-            <thead><tr><th>Relatório</th><th>Status</th><th>Última atualização</th><th>Duração</th><th>Período</th><th>Ação</th></tr></thead>
+            <thead>
+              <tr>
+                <th>Relatório</th>
+                <th>Status</th>
+                <th>Última atualização</th>
+                <th>Duração</th>
+                <th>Período</th>
+                <th>Ação</th>
+              </tr>
+            </thead>
             <tbody id="updateReportsBody"><tr><td colspan="6">Carregando...</td></tr></tbody>
           </table>
         </div>
-        <div class="terminal-box" id="updateTerminal">Terminal aguardando execução...</div>
+
+        <div class="terminal-box" id="updateTerminal">Histórico de jobs aguardando consulta...</div>
       </div>
 
       <!-- VIEW: USERS (admin) -->
@@ -7934,236 +7944,339 @@ function rebuildSectorCheckboxes() {
 }
 
 // ═══════════════════════════════════════
-// CENTRAL DE ATUALIZAÇÕES
+// CENTRAL DE ATUALIZAÇÕES — RENDER + NEON + BI AGENT
 // ═══════════════════════════════════════
-// API da Central de Atualizações.
-// O Flask deste servidor está em HTTP, não HTTPS.
-// Não usamos mais um valor antigo salvo no localStorage para evitar que
-// o navegador tente TLS/HTTPS na porta 5000 e gere "Bad request version".
-const UPDATE_API = 'http://192.168.1.193:5000';
+// O navegador NÃO fala mais com 192.168.1.193:5000.
+// Ele cria/consulta jobs no Render usando a sessão já autenticada.
+// O BI Agent, dentro da rede da Granja, pega os jobs e executa os scripts locais.
 
-try {
-  const apiSalva = localStorage.getItem('granjabi_update_api');
-  if (apiSalva && apiSalva !== UPDATE_API) {
-    console.warn('API antiga removida do localStorage:', apiSalva);
-    localStorage.removeItem('granjabi_update_api');
-  }
-} catch (e) {}
+const UPDATE_ROBOTS = [
+  {id:58, modulo:'comercial', nome:'Faturamento Comercial CFOP', codigo:'comercial_faturamento_cfop', tratamento:false},
+  {id:44, modulo:'comercial', nome:'Cadastro de Vendedores', codigo:'cadastro_de_vendedores', tratamento:false},
+  {id:50, modulo:'comercial', nome:'Clientes Cadastrados', codigo:'clientes_cadastrados', tratamento:false},
+  {id:40, modulo:'comercial', nome:'Tratamento Comercial / Power BI', codigo:'tratar_comercial', tratamento:true},
+  {id:1, modulo:'zootecnico', nome:'Base Dinâmica', codigo:'indice_zootecnico_base_dinamica', tratamento:false},
+  {id:2, modulo:'zootecnico', nome:'Mortalidade/Peso - Lotes Abertos', codigo:'indice_zootecnico_mortalidade_peso_lotes_abertos', tratamento:false},
+  {id:3, modulo:'zootecnico', nome:'Mortalidade/Peso - Lotes Fechados', codigo:'indice_zootecnico_mortalidade_peso_lotes_fechados', tratamento:false},
+  {id:4, modulo:'zootecnico', nome:'Tratamento Índice Zootécnico / Power BI', codigo:'tratar_zootecnico', tratamento:true},
+  {id:51, modulo:'logistica', nome:'Cadastro de Vendedores', codigo:'logistica_cadastro_vendedores', tratamento:false},
+  {id:68, modulo:'logistica', nome:'Contas a Pagar', codigo:'logistica_contas_a_pagar', tratamento:false},
+  {id:47, modulo:'logistica', nome:'Controle Frete', codigo:'logistica_controle_frete', tratamento:false},
+  {id:41, modulo:'logistica', nome:'Controle Pallets', codigo:'logistica_controle_pallets', tratamento:false},
+  {id:39, modulo:'logistica', nome:'Devoluções', codigo:'logistica_devolucoes', tratamento:false},
+  {id:52, modulo:'logistica', nome:'Faturamento CFOP', codigo:'logistica_faturamento_cfop', tratamento:false},
+  {id:46, modulo:'logistica', nome:'Frete', codigo:'logistica_frete', tratamento:false},
+  {id:49, modulo:'logistica', nome:'Ocorrência Viagem Custo', codigo:'logistica_ocorrencia_viagens_custo', tratamento:false},
+  {id:65, modulo:'logistica', nome:'Relatório Veículos', codigo:'logistica_relatorio_veiculos', tratamento:false},
+  {id:67, modulo:'logistica', nome:'Tratamento Logística / Power BI', codigo:'tratar_logistica', tratamento:true},
+  {id:64, modulo:'pcp', nome:'Desperdício', codigo:'pcp_desperdicio', tratamento:false},
+  {id:48, modulo:'pcp', nome:'Devolução', codigo:'pcp_devolucao', tratamento:false},
+  {id:53, modulo:'pcp', nome:'Diário Indústria', codigo:'pcp_diario_industria', tratamento:false},
+  {id:55, modulo:'pcp', nome:'Diário Indústria Ave Nova Turnos', codigo:'pcp_diario_industria_avenova_turnos', tratamento:false},
+  {id:61, modulo:'pcp', nome:'Estoque Online', codigo:'pcp_estoque_online', tratamento:false},
+  {id:70, modulo:'pcp', nome:'Estoque por Transação', codigo:'pcp_estoque_por_transacao', tratamento:false},
+  {id:43, modulo:'pcp', nome:'Movimento Geral Pesagem', codigo:'pcp_movimento_geral_pesagem', tratamento:false},
+  {id:63, modulo:'pcp', nome:'Plano Produção', codigo:'pcp_plano_producao', tratamento:false},
+  {id:42, modulo:'pcp', nome:'Relatório Geral Condenações', codigo:'pcp_relatorio_geral_condenacoes', tratamento:false},
+  {id:69, modulo:'pcp', nome:'Tratamento PCP / Power BI', codigo:'tratar_pcp', tratamento:true},
+  {id:45, modulo:'suprimentos', nome:'Contas Pagas', codigo:'suprimentos_contas_pagas', tratamento:false},
+  {id:62, modulo:'suprimentos', nome:'Notas Fiscais Item', codigo:'suprimentos_notas_fiscais_item', tratamento:false},
+  {id:60, modulo:'suprimentos', nome:'Ordens de Compras Emitidas', codigo:'suprimentos_ordens_compras_emitidas', tratamento:false},
+  {id:59, modulo:'suprimentos', nome:'Relação OC NF', codigo:'suprimentos_relacao_oc_nf', tratamento:false},
+  {id:56, modulo:'suprimentos', nome:'Relatório Usuários', codigo:'suprimentos_relatorio_usuarios', tratamento:false},
+  {id:57, modulo:'suprimentos', nome:'Solicitações Requisitante', codigo:'suprimentos_solicitacoes_requisitante', tratamento:false},
+  {id:54, modulo:'suprimentos', nome:'Títulos Agrupados', codigo:'suprimentos_titulos_agrupados', tratamento:false},
+  {id:66, modulo:'suprimentos', nome:'Tratamento Suprimentos / Power BI', codigo:'tratar_suprimentos', tratamento:true}
+];
 
 let updateTimer = null;
+let updateLastJobs = [];
 
-function isoToday(){ return new Date().toISOString().slice(0,10); }
 function toggleTreatmentMode(){
   const field = document.getElementById('updateTreatmentField');
-  if (!field) return;
-
-  // Todos os módulos aceitam tratamento incremental/completo.
-  field.classList.add('show');
+  if (field) field.classList.add('show');
 }
 
 function toggleManualPeriod(){
-  const manual = document.getElementById('updatePeriod').value === 'manual';
-  document.getElementById('manualPeriodFields').classList.toggle('show', manual);
-  if (manual) {
-    const end=document.getElementById('updateEnd');
-    const start=document.getElementById('updateStart');
-    if(!end.value) end.value=isoToday();
-    if(!start.value){ const d=new Date(); d.setDate(d.getDate()-7); start.value=d.toISOString().slice(0,10); }
-    end.max=isoToday(); start.max=isoToday();
-  }
+  // V2: o período será enviado ao Agent por parâmetros armazenados no job.
 }
+
 function updatePayload(){
-  const periodo=document.getElementById('updatePeriod').value;
-  const tratamento_modo=document.getElementById('updateTreatmentMode')?.value || 'incremental';
-  const payload={periodo, tratamento_modo};
-  if(periodo==='manual'){
-    payload.data_inicio=document.getElementById('updateStart').value;
-    payload.data_fim=document.getElementById('updateEnd').value;
-    if(!payload.data_inicio || !payload.data_fim) throw new Error('Informe a data inicial e a data final.');
-    if(payload.data_inicio>payload.data_fim) throw new Error('A data inicial não pode ser maior que a data final.');
-  }
-  return payload;
+  return {
+    periodo: 'auto_pasta',
+    tratamento_modo: document.getElementById('updateTreatmentMode')?.value || 'atualizar_tratar'
+  };
 }
+
 async function apiUpdate(path, options={}){
-  const res=await fetch(UPDATE_API+path,{...options,headers:{'Content-Type':'application/json',...(options.headers||{})}});
-  let data={}; try{data=await res.json();}catch(e){}
-  if(!res.ok) throw new Error(data.erro || ('Erro HTTP '+res.status));
-  return data;
+  // Reutiliza a autenticação nova do Portal: granjabi_auth_token / Bearer.
+  return portalApiRequest(path, options);
 }
-function startUpdateMonitor(){
-  toggleManualPeriod(); toggleTreatmentMode(); loadUpdateStatus();
-  clearInterval(updateTimer); updateTimer=setInterval(loadUpdateStatus,2000);
+
+function getUpdateModuleLabel(modulo){
+  return {
+    pcp:'PCP',
+    logistica:'Logística',
+    comercial:'Comercial',
+    suprimentos:'Suprimentos',
+    zootecnico:'Índice Zootécnico',
+    todos:'Todos'
+  }[modulo] || modulo;
 }
-async function runModuleUpdate(){
-  try{
-    const modulo=document.getElementById('updateModule').value;
-    const payload=updatePayload();
-    const nomePeriodo=document.getElementById('updatePeriod').selectedOptions[0].text;
-    let detalhe=nomePeriodo;
-    if(payload.periodo==='manual') detalhe=`${payload.data_inicio.split('-').reverse().join('/')} até ${payload.data_fim.split('-').reverse().join('/')}`;
 
-    const modoTratamento = payload.tratamento_modo === 'completo'
-      ? '🔄 Reprocessar tudo'
-      : '⚡ Somente atualizações';
-
-    if(!confirm(`Atualizar ${modulo.toUpperCase()}?
-
-Período: ${detalhe}
-Tratamento: ${modoTratamento}`)) return;
-    await apiUpdate('/api/executar/'+modulo,{method:'POST',body:JSON.stringify(payload)});
-    showToast('Atualização iniciada com sucesso.','success');
-    document.getElementById('updateProgressPanel').style.display='block';
-    loadUpdateStatus();
-  }catch(e){ showToast(e.message,'error'); }
+function robotsForModule(modulo){
+  if (modulo === 'todos') return [...UPDATE_ROBOTS];
+  return UPDATE_ROBOTS.filter(r => r.modulo === modulo);
 }
-async function runSingleUpdate(id){
-  try{
-    const payload=updatePayload();
-    payload.id=id;
 
-    // Abre imediatamente o mesmo painel de acompanhamento usado na atualização geral.
-    const panel=document.getElementById('updateProgressPanel');
-    if(panel) panel.style.display='block';
-
-    // Atualiza o status agora e mantém a consulta automática a cada 2 segundos.
-    clearInterval(updateTimer);
-    await loadUpdateStatus();
-    updateTimer=setInterval(loadUpdateStatus,2000);
-
-    await apiUpdate('/api/executar/relatorio',{
-      method:'POST',
-      body:JSON.stringify(payload)
-    });
-
-    const mensagem = String(id).startsWith('tratamento_')
-      ? 'Tratamento iniciado individualmente.'
-      : 'Relatório e tratamento iniciados.';
-    showToast(mensagem,'success');
-
-    // Busca novamente para mostrar "Em andamento" sem esperar o próximo intervalo.
-    await loadUpdateStatus();
-  }catch(e){
-    const detalhe = String(e.message || e);
-    showToast(detalhe,'error');
-
-    if(detalhe.toLowerCase().includes('arquivo não encontrado')){
-      console.error('Confira http://192.168.1.193:5000/api/versao para saber qual app.py está rodando.');
-    }
-
-    await loadUpdateStatus();
-  }
+function formatDateTimeUpdate(value){
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString('pt-BR', {
+    day:'2-digit', month:'2-digit', year:'numeric',
+    hour:'2-digit', minute:'2-digit', second:'2-digit'
+  });
 }
+
+function formatDurationUpdate(job){
+  if (!job?.iniciado_em) return '—';
+  const ini = new Date(job.iniciado_em);
+  const fim = job.finalizado_em ? new Date(job.finalizado_em) : new Date();
+  if (Number.isNaN(ini.getTime()) || Number.isNaN(fim.getTime())) return '—';
+  let s = Math.max(0, Math.floor((fim - ini) / 1000));
+  const h = Math.floor(s / 3600); s %= 3600;
+  const m = Math.floor(s / 60); s %= 60;
+  if (h) return `${h}h ${String(m).padStart(2,'0')}m`;
+  if (m) return `${m}m ${String(s).padStart(2,'0')}s`;
+  return `${s}s`;
+}
+
 function statusBadgeUpdate(status){
-  const texto=String(status||'Aguardando');
-  const s=texto.toLowerCase();
-  let cls='status-pending';
+  const raw = String(status || 'nunca executado');
+  const s = raw.toLowerCase();
+  let cls = 'status-pending';
+  let texto = raw;
 
-  if(s.includes('sucesso') || s.includes('conclu') || s.includes('atualizado')){
-    cls='status-active';
-  }else if(s.includes('erro') || s.includes('falha') || s.includes('offline')){
-    cls='status-blocked';
-  }
+  if (s === 'concluido') { cls='status-active'; texto='Concluído'; }
+  else if (s === 'executando') { cls='status-pending'; texto='Executando'; }
+  else if (s === 'aguardando') { cls='status-pending'; texto='Aguardando'; }
+  else if (s === 'erro') { cls='status-blocked'; texto='Erro'; }
+  else if (s === 'nunca executado') { texto='Nunca executado'; }
 
   return `<span class="status-badge ${cls}"><span class="status-dot"></span>${texto}</span>`;
 }
+
+function latestJobByRobot(jobs){
+  const map = new Map();
+  for (const job of jobs || []) {
+    if (!map.has(Number(job.robo_id))) map.set(Number(job.robo_id), job);
+  }
+  return map;
+}
+
+function saveUpdateBatch(ids){
+  try { sessionStorage.setItem('granjabi_update_batch', JSON.stringify(ids || [])); } catch(e) {}
+}
+
+function loadUpdateBatch(){
+  try {
+    const ids = JSON.parse(sessionStorage.getItem('granjabi_update_batch') || '[]');
+    return Array.isArray(ids) ? ids.map(Number).filter(Number.isFinite) : [];
+  } catch(e) { return []; }
+}
+
+async function createRobotJob(robo){
+  const data = await apiUpdate('/api/jobs', {
+    method:'POST',
+    body:JSON.stringify({robo_id: robo.id})
+  });
+  return data.job;
+}
+
+function startUpdateMonitor(){
+  toggleTreatmentMode();
+  loadUpdateStatus();
+  clearInterval(updateTimer);
+  updateTimer = setInterval(loadUpdateStatus, 2500);
+}
+
+async function runSingleUpdate(id){
+  const robo = UPDATE_ROBOTS.find(r => Number(r.id) === Number(id));
+  if (!robo) return showToast('Robô não encontrado na Central.', 'error');
+
+  if (!confirm(`Executar "${robo.nome}"?\n\nO Agent local iniciará assim que pegar o job.`)) return;
+
+  try {
+    const job = await createRobotJob(robo);
+    saveUpdateBatch([job.id]);
+    showToast(`Job #${job.id} criado.`, 'success');
+    document.getElementById('updateProgressPanel').style.display='block';
+    await loadUpdateStatus();
+  } catch(e) {
+    showToast(e.message, 'error');
+  }
+}
+
+async function runModuleUpdate(){
+  const modulo = document.getElementById('updateModule').value;
+  const tratamentoModo = document.getElementById('updateTreatmentMode').value;
+
+  let robos = robotsForModule(modulo);
+  if (tratamentoModo === 'somente_atualizacoes') {
+    robos = robos.filter(r => !r.tratamento);
+  } else {
+    // Garante que todos os extratores entrem antes dos tratamentos.
+    robos = [
+      ...robos.filter(r => !r.tratamento),
+      ...robos.filter(r => r.tratamento)
+    ];
+  }
+
+  if (!robos.length) return showToast('Nenhum robô disponível para este módulo.', 'error');
+
+  const label = getUpdateModuleLabel(modulo);
+  const tratamentoTexto = tratamentoModo === 'somente_atualizacoes'
+    ? 'Somente atualizações'
+    : 'Atualizações + tratamento';
+
+  if (!confirm(
+    `Atualizar ${label}?\n\n` +
+    `Jobs que serão criados: ${robos.length}\n` +
+    `Modo: ${tratamentoTexto}\n` +
+    `Período: automático (padrão de cada robô)`
+  )) return;
+
+  const btn = document.querySelector('.update-main-btn');
+  if (btn) { btn.disabled=true; btn.textContent='Criando jobs...'; }
+
+  const ids = [];
+  try {
+    for (const robo of robos) {
+      const job = await createRobotJob(robo);
+      ids.push(job.id);
+    }
+    saveUpdateBatch(ids);
+    showToast(`${ids.length} job(s) criado(s) para ${label}.`, 'success');
+    document.getElementById('updateProgressPanel').style.display='block';
+    await loadUpdateStatus();
+  } catch(e) {
+    saveUpdateBatch(ids);
+    showToast(`Foram criados ${ids.length} job(s) antes do erro: ${e.message}`, 'error');
+    await loadUpdateStatus();
+  } finally {
+    if (btn) { btn.disabled=false; btn.textContent='▶ Atualizar'; }
+  }
+}
+
+function renderUpdateTerminal(jobs){
+  const term = document.getElementById('updateTerminal');
+  if (!term) return;
+
+  const linhas = (jobs || []).slice(0, 30).reverse().map(job => {
+    const quando = formatDateTimeUpdate(job.criado_em);
+    const nome = job.robo_nome || job.robo_codigo || `Robô #${job.robo_id}`;
+    let linha = `[${quando}] JOB #${job.id} | ${String(job.status || '').toUpperCase()} | ${nome}`;
+    if (job.erro) linha += `\n  ERRO: ${job.erro}`;
+    return linha;
+  });
+
+  term.textContent = linhas.length
+    ? linhas.join('\n')
+    : 'Nenhum job registrado ainda.';
+  term.scrollTop = term.scrollHeight;
+}
+
+function renderUpdateProgress(jobs){
+  const panel = document.getElementById('updateProgressPanel');
+  const batchIds = loadUpdateBatch();
+  let alvo = batchIds.length
+    ? (jobs || []).filter(j => batchIds.includes(Number(j.id)))
+    : (jobs || []).filter(j => ['aguardando','executando'].includes(String(j.status)));
+
+  if (!alvo.length) {
+    panel.style.display='none';
+    return;
+  }
+
+  panel.style.display='block';
+
+  const total = alvo.length;
+  const concluidos = alvo.filter(j => j.status === 'concluido').length;
+  const erros = alvo.filter(j => j.status === 'erro').length;
+  const executando = alvo.filter(j => j.status === 'executando').length;
+  const aguardando = alvo.filter(j => j.status === 'aguardando').length;
+  const finalizados = concluidos + erros;
+  const pct = total ? Math.round((finalizados / total) * 100) : 0;
+
+  document.getElementById('updateProgressBar').style.width = pct + '%';
+  document.getElementById('updateProgressTitle').textContent =
+    executando ? `Executando ${executando} job(s)...`
+    : aguardando ? `${aguardando} job(s) aguardando o Agent...`
+    : erros ? `Finalizado com ${erros} erro(s)`
+    : '✅ Concluído com sucesso!';
+
+  document.getElementById('updateProgressText').textContent =
+    `${pct}% · ${finalizados} de ${total} finalizados` +
+    (erros ? ` · ${erros} erro(s)` : '');
+
+  document.getElementById('updateProgressTime').textContent =
+    finalizados === total ? formatDateTimeUpdate(new Date().toISOString()) : '';
+
+  if (finalizados === total) {
+    saveUpdateBatch([]);
+  }
+}
+
 async function loadUpdateStatus(){
-  try{
-    const data=await apiUpdate('/api/status');
-    const banner=document.getElementById('updateApiBanner');
-    banner.classList.remove('offline'); banner.textContent='● API conectada — '+UPDATE_API;
-    const modulo=document.getElementById('updateModule').value;
-    const rels=Object.values(data.relatorios||{}).filter(r=>{
-      const id=String(r.id||'');
-      const moduloRelatorio=String(r.modulo||'').toLowerCase();
+  const banner = document.getElementById('updateApiBanner');
+  const tbody = document.getElementById('updateReportsBody');
+  if (!banner || !tbody) return;
 
-      if(modulo==='todos') return true;
+  try {
+    const data = await apiUpdate('/api/jobs');
+    const jobs = Array.isArray(data.jobs) ? data.jobs : [];
+    updateLastJobs = jobs;
 
-      // Forma principal: usa o módulo enviado pelo app.py.
-      if(moduloRelatorio){
-        return moduloRelatorio===modulo;
-      }
+    banner.classList.remove('offline');
+    banner.textContent = '● Render conectado — jobs centralizados no Neon';
 
-      // Compatibilidade com status.json antigo, ainda sem o campo "modulo".
-      if(modulo==='pcp'){
-        return id.startsWith('pcp_') || id==='tratamento_pcp';
-      }
+    const modulo = document.getElementById('updateModule').value;
+    const rels = robotsForModule(modulo);
+    const latest = latestJobByRobot(jobs);
 
-      if(modulo==='logistica'){
-        const idsLogistica=[
-          'cadastro_vendedores',
-          'relatorio_veiculos',
-          'controle_pallets',
-          'devolucoes',
-          'frete',
-          'controle_frete',
-          'ocorrencia_viagens_custo',
-          'contas_a_pagar',
-          'faturamento_cfop',
-          'tratamento_logistica'
-        ];
-        return idsLogistica.includes(id);
-      }
-
-      if(modulo==='comercial'){
-        return id.startsWith('comercial_') || id==='tratamento_comercial';
-      }
-
-      if(modulo==='suprimentos'){
-        return id.startsWith('suprimentos_')
-          || id==='contas_pagas_suprimentos'
-          || id==='suprimentos_contas_pagas'
-          || id==='tratamento_suprimentos';
-      }
-
-      return false;
-    });
-    document.getElementById('updateReportsBody').innerHTML=rels.map(r=>{
-      const id=String(r.id||'');
-      const ehTratamento=[
-        'tratamento_pcp',
-        'tratamento_logistica',
-        'tratamento_comercial',
-        'tratamento_suprimentos'
-      ].includes(id);
-
-      const nomesTratamento={
-        tratamento_pcp:'Tratamento PCP / Power BI',
-        tratamento_logistica:'Tratamento Logística / Power BI',
-        tratamento_comercial:'Tratamento Comercial / Power BI',
-        tratamento_suprimentos:'Tratamento Suprimentos / Power BI'
-      };
-
-      const nomeExibicao=nomesTratamento[id] || r.nome;
-
-      const textoAcao=ehTratamento ? 'Tratar' : 'Atualizar';
-      const acao=`<button class="update-action" onclick="runSingleUpdate('${id}')">${textoAcao}</button>`;
+    tbody.innerHTML = rels.map(robo => {
+      const job = latest.get(Number(robo.id));
+      const status = job?.status || 'nunca executado';
+      const ocupado = ['aguardando','executando'].includes(String(status));
+      const erro = job?.erro ? `<span class="update-table-file" style="color:var(--red)" title="${String(job.erro).replace(/"/g,'&quot;')}">${String(job.erro).slice(0,110)}</span>` : '';
 
       return `<tr>
         <td>
-          <span class="update-table-name">${nomeExibicao}</span>
-          <span class="update-table-file">${String(r.arquivo||'').split('\\').pop()}</span>
+          <span class="update-table-name">${robo.nome}</span>
+          <span class="update-table-file">${robo.codigo}</span>
+          ${erro}
         </td>
-        <td>${statusBadgeUpdate(r.status)}</td>
-        <td>${r.ultima||'—'}</td>
-        <td>${r.duracao||'—'}</td>
-        <td>${r.periodo||'—'}</td>
-        <td>${acao}</td>
+        <td>${statusBadgeUpdate(status)}</td>
+        <td>${job?.finalizado_em ? formatDateTimeUpdate(job.finalizado_em) : '—'}</td>
+        <td>${job ? formatDurationUpdate(job) : '—'}</td>
+        <td>Automático</td>
+        <td>
+          <button class="update-action" ${ocupado ? 'disabled style="opacity:.45;cursor:not-allowed"' : ''}
+            onclick="runSingleUpdate(${robo.id})">
+            ${robo.tratamento ? 'Tratar' : 'Atualizar'}
+          </button>
+        </td>
       </tr>`;
-    }).join('') || `<tr>
-      <td colspan="6" style="padding:18px;color:var(--text-muted)">
-        Nenhum relatório encontrado para <strong>${modulo}</strong>.
-        Reinicie a API usando o app.py atualizado para carregar os novos relatórios.
-      </td>
-    </tr>`;
-    const ex=data.execucao||{}; const running=ex.status==='executando';
-    const panel=document.getElementById('updateProgressPanel'); panel.style.display=(running||ex.status==='concluido'||ex.status==='erro')?'block':'none';
-    const pct=Number(ex.percentual||0); document.getElementById('updateProgressBar').style.width=Math.min(100,Math.max(0,pct))+'%';
-    document.getElementById('updateProgressTitle').textContent=running?('Executando: '+(ex.etapa_atual||'preparando')):(ex.status==='concluido'?'✅ Concluído com sucesso!':ex.status==='erro'?'❌ Erro na atualização':'Aguardando');
-    document.getElementById('updateProgressText').textContent=`${pct}% · ${ex.concluidos_qtd||0} de ${ex.total||0} etapas`;
-    document.getElementById('updateProgressTime').textContent=ex.fim||'';
-    try{ const logs=await apiUpdate('/api/logs'); const term=document.getElementById('updateTerminal'); term.textContent=logs.logs||'Terminal aguardando execução...'; term.scrollTop=term.scrollHeight; }catch(e){}
-  }catch(e){
-    const banner=document.getElementById('updateApiBanner'); if(banner){banner.classList.add('offline');banner.textContent='● API desconectada — '+e.message;}
+    }).join('') || `<tr><td colspan="6" style="padding:18px;color:var(--text-muted)">Nenhum robô encontrado.</td></tr>`;
+
+    renderUpdateProgress(jobs);
+    renderUpdateTerminal(jobs);
+
+  } catch(e) {
+    banner.classList.add('offline');
+    banner.textContent = '● API desconectada — ' + e.message;
+    tbody.innerHTML = `<tr><td colspan="6" style="padding:18px;color:var(--red)">Não foi possível consultar os jobs: ${e.message}</td></tr>`;
   }
 }
 
