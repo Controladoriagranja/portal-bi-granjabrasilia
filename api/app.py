@@ -2436,6 +2436,20 @@ def api_criar_job():
                 "erro": "Informe um robo_id válido."
             }), 400
 
+        parametros = body.get("parametros") or {}
+        if not isinstance(parametros, dict):
+            return jsonify({
+                "ok": False,
+                "erro": "parametros deve ser um objeto JSON."
+            }), 400
+
+        parametros_json = json.dumps(parametros, ensure_ascii=False)
+        if len(parametros_json.encode("utf-8")) > 20000:
+            return jsonify({
+                "ok": False,
+                "erro": "parametros excede o limite permitido."
+            }), 400
+
         with engine.begin() as conn:
             robo = conn.execute(text("""
                 SELECT id, codigo, nome, ativo
@@ -2460,12 +2474,14 @@ def api_criar_job():
                 INSERT INTO public.jobs (
                     robo_id,
                     solicitado_por,
-                    status
+                    status,
+                    parametros
                 )
                 VALUES (
                     :robo_id,
                     :solicitado_por,
-                    'aguardando'
+                    'aguardando',
+                    CAST(:parametros AS jsonb)
                 )
                 RETURNING
                     id,
@@ -2475,10 +2491,12 @@ def api_criar_job():
                     criado_em,
                     iniciado_em,
                     finalizado_em,
-                    erro
+                    erro,
+                    parametros
             """), {
                 "robo_id": robo_id,
                 "solicitado_por": int(usuario["usuario_id"]),
+                "parametros": parametros_json,
             }).mappings().one()
 
         log(
@@ -2531,6 +2549,7 @@ def api_listar_jobs():
                     j.iniciado_em,
                     j.finalizado_em,
                     j.erro,
+                    j.parametros,
                     r.codigo AS robo_codigo,
                     r.nome AS robo_nome
                 FROM public.jobs j
@@ -2578,6 +2597,7 @@ def api_consultar_job(job_id):
                     j.iniciado_em,
                     j.finalizado_em,
                     j.erro,
+                    j.parametros,
                     r.codigo AS robo_codigo,
                     r.nome AS robo_nome
                 FROM public.jobs j
@@ -2674,6 +2694,7 @@ def api_agent_claim_job():
                     j.iniciado_em,
                     j.finalizado_em,
                     j.erro,
+                    j.parametros,
                     r.codigo AS robo_codigo,
                     r.nome AS robo_nome
             """)).mappings().first()
