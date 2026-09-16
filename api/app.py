@@ -44,7 +44,7 @@ EXEC_THREAD = None
 
 EXTENSOES_DADOS = {".xlsx", ".xls", ".csv", ".parquet", ".html"}
 
-APP_VERSION = "2026.09.16-agent-v1"
+APP_VERSION = "2026.09.16-heartbeat-v1"
 APP_FILE = Path(__file__).resolve()
 
 # =============================================================================
@@ -2400,7 +2400,7 @@ def _job_publico(row):
         return None
 
     job = dict(row)
-    for campo in ("criado_em", "iniciado_em", "finalizado_em"):
+    for campo in ("criado_em", "iniciado_em", "finalizado_em", "ultimo_heartbeat"):
         valor = job.get(campo)
         if valor is not None and hasattr(valor, "isoformat"):
             job[campo] = valor.isoformat()
@@ -2550,6 +2550,8 @@ def api_listar_jobs():
                     j.finalizado_em,
                     j.erro,
                     j.parametros,
+                    j.ultimo_heartbeat,
+                    j.agent_id,
                     r.codigo AS robo_codigo,
                     r.nome AS robo_nome
                 FROM public.jobs j
@@ -2598,6 +2600,8 @@ def api_consultar_job(job_id):
                     j.finalizado_em,
                     j.erro,
                     j.parametros,
+                    j.ultimo_heartbeat,
+                    j.agent_id,
                     r.codigo AS robo_codigo,
                     r.nome AS robo_nome
                 FROM public.jobs j
@@ -2660,10 +2664,17 @@ def _resposta_agent_nao_autorizado():
 
 @app.route("/api/agent/jobs/claim", methods=["POST"])
 def api_agent_claim_job():
-    """Reserva atomicamente o próximo job aguardando e o marca executando."""
+    """Reserva atomicamente o próximo job aguardando e inicia o heartbeat."""
     try:
         if not _agent_autorizado():
             return _resposta_agent_nao_autorizado()
+
+        body = request.get_json(silent=True) or {}
+        agent_id = str(
+            body.get("agent_id")
+            or request.headers.get("X-Agent-Id")
+            or ""
+        ).strip()[:255] or None
 
         with engine.begin() as conn:
             row = conn.execute(text("""
@@ -2681,6 +2692,8 @@ def api_agent_claim_job():
                 SET
                     status = 'executando',
                     iniciado_em = NOW(),
+                    ultimo_heartbeat = NOW(),
+                    agent_id = COALESCE(:agent_id, j.agent_id),
                     erro = NULL
                 FROM proximo, public.robos r
                 WHERE j.id = proximo.id
@@ -2695,15 +2708,18 @@ def api_agent_claim_job():
                     j.finalizado_em,
                     j.erro,
                     j.parametros,
+                    j.ultimo_heartbeat,
+                    j.agent_id,
                     r.codigo AS robo_codigo,
                     r.nome AS robo_nome
-            """)).mappings().first()
+            """), {"agent_id": agent_id}).mappings().first()
 
         if not row:
             return jsonify({"ok": True, "job": None})
 
         log(
-            f"BI Agent reservou Job #{row['id']} | robô: {row['robo_codigo']}",
+            f"BI Agent reservou Job #{row['id']} | robô: {row['robo_codigo']} | "
+            f"agent_id: {row.get('agent_id') or 'não informado'}",
             "INFO",
         )
         return jsonify({"ok": True, "job": _job_publico(row)})
@@ -2714,6 +2730,57 @@ def api_agent_claim_job():
     except Exception as e:
         log(f"Erro ao reservar job para BI Agent: {e}", "ERRO")
         return jsonify({"ok": False, "erro": "Erro interno ao reservar atualização."}), 500
+
+
+@app.route("/api/agent/jobs/<int:job_id>/heartbeat", methods=["POST"])
+def api_agent_heartbeat_job(job_id):
+    """Atualiza o último sinal de vida de um job que continua executando."""
+    try:
+        if not _agent_autorizado():
+            return _resposta_agent_nao_autorizado()
+
+        body = request.get_json(silent=True) or {}
+        agent_id = str(
+            body.get("agent_id")
+            or request.headers.get("X-Agent-Id")
+            or ""
+        ).strip()[:255] or None
+
+        with engine.begin() as conn:
+            row = conn.execute(text("""
+                UPDATE public.jobs
+                SET
+                    ultimo_heartbeat = NOW(),
+                    agent_id = COALESCE(:agent_id, agent_id)
+                WHERE id = :job_id
+                  AND status = 'executando'
+                RETURNING
+                    id,
+                    status,
+                    ultimo_heartbeat,
+                    agent_id
+            """), {
+                "job_id": job_id,
+                "agent_id": agent_id,
+            }).mappings().first()
+
+        if not row:
+            return jsonify({
+                "ok": False,
+                "erro": "Job não encontrado ou não está em execução."
+            }), 409
+
+        return jsonify({
+            "ok": True,
+            "job": _job_publico(row),
+        })
+
+    except RuntimeError as e:
+        log(f"Configuração do BI Agent inválida no heartbeat: {e}", "ERRO")
+        return jsonify({"ok": False, "erro": "BI Agent não configurado no servidor."}), 503
+    except Exception as e:
+        log(f"Erro no heartbeat do Job #{job_id}: {e}", "ERRO")
+        return jsonify({"ok": False, "erro": "Erro interno ao registrar heartbeat."}), 500
 
 
 @app.route("/api/agent/jobs/<int:job_id>/finish", methods=["POST"])
@@ -2739,12 +2806,20 @@ def api_agent_finish_job(job_id):
         else:
             erro = str(erro)[-20000:]
 
+        agent_id = str(
+            body.get("agent_id")
+            or request.headers.get("X-Agent-Id")
+            or ""
+        ).strip()[:255] or None
+
         with engine.begin() as conn:
             row = conn.execute(text("""
                 UPDATE public.jobs
                 SET
                     status = :status,
                     finalizado_em = NOW(),
+                    ultimo_heartbeat = NOW(),
+                    agent_id = COALESCE(:agent_id, agent_id),
                     erro = :erro
                 WHERE id = :job_id
                   AND status = 'executando'
@@ -2756,11 +2831,15 @@ def api_agent_finish_job(job_id):
                     criado_em,
                     iniciado_em,
                     finalizado_em,
-                    erro
+                    erro,
+                    parametros,
+                    ultimo_heartbeat,
+                    agent_id
             """), {
                 "job_id": job_id,
                 "status": status,
                 "erro": erro,
+                "agent_id": agent_id,
             }).mappings().first()
 
         if not row:
@@ -2773,500 +2852,11 @@ def api_agent_finish_job(job_id):
         return jsonify({"ok": True, "job": _job_publico(row)})
 
     except RuntimeError as e:
-        log(f"Configuração do BI Agent inválida: {e}", "ERRO")
+        log(f"Configuração do BI Agent inválida ao finalizar job: {e}", "ERRO")
         return jsonify({"ok": False, "erro": "BI Agent não configurado no servidor."}), 503
     except Exception as e:
         log(f"Erro ao finalizar Job #{job_id}: {e}", "ERRO")
         return jsonify({"ok": False, "erro": "Erro interno ao finalizar atualização."}), 500
-
-@app.route("/api/database/status", methods=["GET"])
-def api_database_status():
-    """Retorna o status da conexão da API com o PostgreSQL/Neon."""
-    try:
-        conectado = testar_conexao()
-        return jsonify({
-            "ok": bool(conectado),
-            "database": "connected" if conectado else "offline",
-            "provider": "Neon PostgreSQL",
-            "hora": agora(),
-        })
-    except Exception as erro:
-        log(f"Falha na conexão com o banco Neon: {erro}", "ERRO")
-        return jsonify({
-            "ok": False,
-            "database": "offline",
-            "provider": "Neon PostgreSQL",
-            "hora": agora(),
-            "erro": str(erro),
-        }), 500
-
-
-@app.route("/api/ping")
-def api_ping():
-    return jsonify({"ok": True, "hora": agora()})
-
-
-@app.route("/api/status")
-def api_status():
-    # Endpoint leve: não varre as pastas a cada 2 segundos.
-    # A varredura de pastas acontece ao iniciar e ao finalizar uma execução.
-    data = carregar_estado(scan_pastas=False)
-    return jsonify(data)
-
-
-@app.route("/api/status/modulos")
-def api_status_modulos():
-    """Resumo dos relatórios disponíveis por módulo, útil para diagnóstico do portal."""
-    data = carregar_estado(scan_pastas=False)
-    resumo = {}
-
-    for relatorio in data.get("relatorios", {}).values():
-        modulo = relatorio.get("modulo") or "sem_modulo"
-        resumo.setdefault(modulo, []).append({
-            "id": relatorio.get("id"),
-            "nome": relatorio.get("nome"),
-            "status": relatorio.get("status"),
-        })
-
-    return jsonify({"ok": True, "modulos": resumo})
-
-
-@app.route("/api/versao")
-def api_versao():
-    robos = {
-        r["id"]: {
-            "nome": r["nome"],
-            "script_configurado": r["script"],
-            "script_encontrado": str(resolver_caminho_script(r)),
-            "existe": resolver_caminho_script(r).exists(),
-        }
-        for r in get_robos()
-        if r.get("modulo") == "comercial"
-    }
-
-    return jsonify({
-        "ok": True,
-        "versao": APP_VERSION,
-        "app_file": str(APP_FILE),
-        "robos_comercial": robos,
-    })
-
-
-@app.route("/api/logs")
-def api_logs():
-    return jsonify({"logs": ler_terminal()})
-
-
-@app.route("/api/logs/limpar", methods=["POST"])
-def api_limpar_logs():
-    limpar_terminal()
-    log("Terminal limpo pelo usuário.", "INFO")
-    return jsonify({"ok": True})
-
-
-@app.route("/api/executar/logistica", methods=["POST"])
-def api_executar_logistica():
-    data = carregar_estado(scan_pastas=False)
-    if data["execucao"].get("status") == "executando":
-        return jsonify({"erro": "Já existe uma execução em andamento"}), 409
-
-    body = request.get_json(silent=True) or {}
-    try:
-        periodo = periodo_requisicao(body)
-    except ValueError as e:
-        return jsonify({"erro": str(e)}), 400
-    tratamento_modo = tratamento_modo_requisicao(body)
-
-    fila = ordem_logistica() + ["tratamento_logistica"]
-
-    limpar_terminal()
-    log(f"Solicitação recebida: Atualizar tudo Logística | Período: {periodo_datas(periodo)['nome']}", "INFO")
-    log("Tratamento Logística será executado somente no final da atualização geral.", "INFO")
-    iniciar_execucao(fila, "logistica_completa", periodo, tratamento_modo=tratamento_modo)
-    return jsonify({"ok": True, "mensagem": "Atualização completa iniciada"})
-
-
-@app.route("/api/executar/logistica-completa", methods=["POST"])
-def api_executar_logistica_alias():
-    return api_executar_logistica()
-
-
-@app.route("/api/executar/pcp", methods=["POST"])
-def api_executar_pcp():
-    data = carregar_estado(scan_pastas=False)
-    if data["execucao"].get("status") == "executando":
-        return jsonify({"erro": "Já existe uma execução em andamento"}), 409
-
-    body = request.get_json(silent=True) or {}
-    try:
-        periodo = periodo_requisicao(body)
-    except ValueError as e:
-        return jsonify({"erro": str(e)}), 400
-    tratamento_modo = tratamento_modo_requisicao(body)
-
-    fila = ordem_pcp() + ["tratamento_pcp"]
-
-    limpar_terminal()
-    log(f"Solicitação recebida: Atualizar tudo PCP | Período: {periodo_datas(periodo)['nome']}", "INFO")
-    log("Tratamento PCP será executado somente no final da atualização geral.", "INFO")
-    iniciar_execucao(fila, "pcp_completo", periodo, tratamento_modo=tratamento_modo)
-    return jsonify({"ok": True, "mensagem": "Atualização completa PCP iniciada"})
-
-
-@app.route("/api/executar/pcp-completo", methods=["POST"])
-def api_executar_pcp_alias():
-    return api_executar_pcp()
-
-
-
-
-@app.route("/api/executar/comercial", methods=["POST"])
-def api_executar_comercial():
-    data = carregar_estado(scan_pastas=False)
-    if data["execucao"].get("status") == "executando":
-        return jsonify({"erro": "Já existe uma execução em andamento"}), 409
-
-    body = request.get_json(silent=True) or {}
-    try:
-        periodo = periodo_requisicao(body)
-    except ValueError as e:
-        return jsonify({"erro": str(e)}), 400
-    tratamento_modo = tratamento_modo_requisicao(body)
-
-    fila = ordem_comercial() + ["tratamento_comercial"]
-
-    limpar_terminal()
-    log(
-        f"Solicitação recebida: Atualizar tudo Comercial | "
-        f"Período: {periodo_datas(periodo)['nome']}",
-        "INFO",
-    )
-    log(
-        "Tratamento Comercial será executado somente no final da atualização geral.",
-        "INFO",
-    )
-    iniciar_execucao(fila, "comercial_completo", periodo, tratamento_modo=tratamento_modo)
-    return jsonify({
-        "ok": True,
-        "mensagem": "Atualização completa Comercial iniciada",
-        "fila": fila,
-    })
-
-
-@app.route("/api/executar/comercial-completo", methods=["POST"])
-def api_executar_comercial_alias():
-    return api_executar_comercial()
-
-
-@app.route("/api/executar/suprimentos", methods=["POST"])
-def api_executar_suprimentos():
-    data = carregar_estado(scan_pastas=False)
-    if data["execucao"].get("status") == "executando":
-        return jsonify({"erro": "Já existe uma execução em andamento"}), 409
-
-    body = request.get_json(silent=True) or {}
-    try:
-        periodo = periodo_requisicao(body)
-    except ValueError as e:
-        return jsonify({"erro": str(e)}), 400
-    tratamento_modo = tratamento_modo_requisicao(body)
-
-    fila = ordem_suprimentos() + ["tratamento_suprimentos"]
-
-    limpar_terminal()
-    log(
-        f"Solicitação recebida: Atualizar tudo Suprimentos | "
-        f"Período: {periodo_datas(periodo)['nome']}",
-        "INFO",
-    )
-    log(
-        "Tratamento Suprimentos será executado somente no final da atualização geral.",
-        "INFO",
-    )
-    iniciar_execucao(fila, "suprimentos_completo", periodo, tratamento_modo=tratamento_modo)
-    return jsonify({
-        "ok": True,
-        "mensagem": "Atualização completa Suprimentos iniciada",
-        "fila": fila,
-    })
-
-
-@app.route("/api/executar/suprimentos-completo", methods=["POST"])
-def api_executar_suprimentos_alias():
-    return api_executar_suprimentos()
-
-
-@app.route("/api/executar/tratamento-suprimentos", methods=["POST"])
-def api_executar_tratamento_suprimentos():
-    data = carregar_estado(scan_pastas=False)
-    if data["execucao"].get("status") == "executando":
-        return jsonify({"erro": "Já existe uma execução em andamento"}), 409
-
-    body = request.get_json(silent=True) or {}
-    try:
-        periodo = periodo_requisicao(body)
-    except ValueError as e:
-        return jsonify({"erro": str(e)}), 400
-    tratamento_modo = tratamento_modo_requisicao(body)
-
-    limpar_terminal()
-    log(
-        f"Solicitação recebida: Tratamento Suprimentos | "
-        f"Período: {periodo_datas(periodo)['nome']}",
-        "INFO",
-    )
-    iniciar_execucao(
-        ["tratamento_suprimentos"],
-        "tratamento_suprimentos",
-        periodo,
-        tratamento_modo=tratamento_modo,
-    )
-    return jsonify({"ok": True, "mensagem": "Tratamento Suprimentos iniciado"})
-
-
-@app.route("/api/executar/tratamento-comercial", methods=["POST"])
-def api_executar_tratamento_comercial():
-    data = carregar_estado(scan_pastas=False)
-    if data["execucao"].get("status") == "executando":
-        return jsonify({"erro": "Já existe uma execução em andamento"}), 409
-
-    body = request.get_json(silent=True) or {}
-    try:
-        periodo = periodo_requisicao(body)
-    except ValueError as e:
-        return jsonify({"erro": str(e)}), 400
-    tratamento_modo = tratamento_modo_requisicao(body)
-
-    limpar_terminal()
-    log(
-        f"Solicitação recebida: Tratamento Comercial | "
-        f"Período: {periodo_datas(periodo)['nome']}",
-        "INFO",
-    )
-    iniciar_execucao(
-        ["tratamento_comercial"],
-        "tratamento_comercial",
-        periodo,
-        tratamento_modo=tratamento_modo,
-    )
-    return jsonify({"ok": True, "mensagem": "Tratamento Comercial iniciado"})
-
-
-@app.route("/api/executar/indice_zootecnico", methods=["POST"])
-def api_executar_indice_zootecnico():
-    data = carregar_estado(scan_pastas=False)
-    if data["execucao"].get("status") == "executando":
-        return jsonify({"erro": "Já existe uma execução em andamento"}), 409
-
-    body = request.get_json(silent=True) or {}
-    try:
-        periodo = periodo_requisicao(body)
-    except ValueError as e:
-        return jsonify({"erro": str(e)}), 400
-    tratamento_modo = tratamento_modo_requisicao(body)
-
-    fila = ordem_indice_zootecnico() + ["tratamento_indice_zootecnico"]
-
-    limpar_terminal()
-    log(
-        f"Solicitação recebida: Atualizar tudo Índice Zootécnico | "
-        f"Período: {periodo_datas(periodo)['nome']}",
-        "INFO",
-    )
-    log(
-        "Tratamento Índice Zootécnico será executado somente no final da atualização geral.",
-        "INFO",
-    )
-    iniciar_execucao(
-        fila,
-        "indice_zootecnico_completo",
-        periodo,
-        tratamento_modo=tratamento_modo,
-    )
-    return jsonify({
-        "ok": True,
-        "mensagem": "Atualização completa do Índice Zootécnico iniciada",
-        "fila": fila,
-    })
-
-
-@app.route("/api/executar/indice-zootecnico", methods=["POST"])
-def api_executar_indice_zootecnico_alias():
-    return api_executar_indice_zootecnico()
-
-
-@app.route("/api/executar/todos", methods=["POST"])
-def api_executar_todos():
-    data = carregar_estado(scan_pastas=False)
-    if data["execucao"].get("status") == "executando":
-        return jsonify({"erro": "Já existe uma execução em andamento"}), 409
-
-    body = request.get_json(silent=True) or {}
-    try:
-        periodo = periodo_requisicao(body)
-    except ValueError as e:
-        return jsonify({"erro": str(e)}), 400
-    tratamento_modo = tratamento_modo_requisicao(body)
-
-    # Atualização geral de todos os módulos:
-    # 1) roda todos os robôs de extração
-    # 2) somente depois roda os tratamentos no final
-    fila = (
-        ordem_logistica()
-        + ordem_pcp()
-        + ordem_comercial()
-        + ordem_suprimentos()
-        + ordem_indice_zootecnico()
-        + [
-            "tratamento_logistica",
-            "tratamento_pcp",
-            "tratamento_comercial",
-            "tratamento_suprimentos",
-            "tratamento_indice_zootecnico",
-        ]
-    )
-
-    limpar_terminal()
-    log(f"Solicitação recebida: Atualizar tudo | Período: {periodo_datas(periodo)['nome']}", "INFO")
-    log("Tratamentos serão executados somente no final da atualização geral.", "INFO")
-    iniciar_execucao(fila, "todos_completo", periodo, tratamento_modo=tratamento_modo)
-    return jsonify({"ok": True, "mensagem": "Atualização completa de todos os módulos iniciada"})
-
-
-@app.route("/api/executar/relatorio", methods=["POST"])
-def api_executar_relatorio():
-    data = carregar_estado(scan_pastas=False)
-    if data["execucao"].get("status") == "executando":
-        return jsonify({"erro": "Já existe uma execução em andamento"}), 409
-
-    body = request.get_json(silent=True) or {}
-    try:
-        periodo = periodo_requisicao(body)
-    except ValueError as e:
-        return jsonify({"erro": str(e)}), 400
-    tratamento_modo = tratamento_modo_requisicao(body)
-    rid = body.get("id")
-    nome = body.get("nome")
-
-    robo = robo_por_id_ou_nome(rid or nome)
-    if not robo:
-        return jsonify({"erro": "Robô não encontrado"}), 400
-
-    ids = [robo["id"]]
-    tratamento_id = robo.get("tratamento_id")
-    if robo.get("tratamento") and tratamento_id and robo["id"] != tratamento_id:
-        ids.append(tratamento_id)
-
-    limpar_terminal()
-    log(f"Solicitação recebida: {robo['nome']} | Período: {periodo_datas(periodo)['nome']}", "INFO")
-    iniciar_execucao(ids, "individual", periodo, tratamento_modo=tratamento_modo)
-    return jsonify({"ok": True, "mensagem": f"Atualização iniciada: {robo['nome']}"})
-
-
-@app.route("/api/executar/tratamento-logistica", methods=["POST"])
-def api_executar_tratamento():
-    data = carregar_estado(scan_pastas=False)
-    if data["execucao"].get("status") == "executando":
-        return jsonify({"erro": "Já existe uma execução em andamento"}), 409
-
-    body = request.get_json(silent=True) or {}
-    try:
-        periodo = periodo_requisicao(body)
-    except ValueError as e:
-        return jsonify({"erro": str(e)}), 400
-    tratamento_modo = tratamento_modo_requisicao(body)
-
-    iniciar_execucao(["tratamento_logistica"], "tratamento", periodo, tratamento_modo=tratamento_modo)
-    return jsonify({"ok": True, "mensagem": "Tratamento iniciado"})
-
-
-@app.route("/api/executar/tratamento-pcp", methods=["POST"])
-def api_executar_tratamento_pcp():
-    data = carregar_estado(scan_pastas=False)
-    if data["execucao"].get("status") == "executando":
-        return jsonify({"erro": "Já existe uma execução em andamento"}), 409
-
-    body = request.get_json(silent=True) or {}
-    try:
-        periodo = periodo_requisicao(body)
-    except ValueError as e:
-        return jsonify({"erro": str(e)}), 400
-    tratamento_modo = tratamento_modo_requisicao(body)
-
-    limpar_terminal()
-    log(f"Solicitação recebida: Tratamento PCP | Período: {periodo_datas(periodo)['nome']}", "INFO")
-    iniciar_execucao(["tratamento_pcp"], "tratamento_pcp", periodo, tratamento_modo=tratamento_modo)
-    return jsonify({"ok": True, "mensagem": "Tratamento PCP iniciado"})
-
-
-@app.route("/api/executar/tratamento-indice-zootecnico", methods=["POST"])
-def api_executar_tratamento_indice_zootecnico():
-    data = carregar_estado(scan_pastas=False)
-    if data["execucao"].get("status") == "executando":
-        return jsonify({"erro": "Já existe uma execução em andamento"}), 409
-
-    body = request.get_json(silent=True) or {}
-    try:
-        periodo = periodo_requisicao(body)
-    except ValueError as e:
-        return jsonify({"erro": str(e)}), 400
-    tratamento_modo = tratamento_modo_requisicao(body)
-
-    limpar_terminal()
-    log(
-        f"Solicitação recebida: Tratamento Índice Zootécnico | "
-        f"Período: {periodo_datas(periodo)['nome']}",
-        "INFO",
-    )
-    iniciar_execucao(
-        ["tratamento_indice_zootecnico"],
-        "tratamento_indice_zootecnico",
-        periodo,
-        tratamento_modo=tratamento_modo,
-    )
-    return jsonify({"ok": True, "mensagem": "Tratamento Índice Zootécnico iniciado"})
-
-
-@app.route("/api/continuar", methods=["POST"])
-def api_continuar():
-    data = carregar_estado(scan_pastas=False)
-    exec_data = data.get("execucao", {})
-
-    if exec_data.get("status") == "executando":
-        return jsonify({"erro": "Já existe uma execução em andamento"}), 409
-
-    fila = (
-        exec_data.get("fila")
-        or ordem_logistica()
-        + ordem_pcp()
-        + ordem_comercial()
-        + ordem_suprimentos()
-        + ordem_indice_zootecnico()
-    )
-    concluidos = set(exec_data.get("concluidos") or [])
-    concluidos_nomes = set(exec_data.get("concluidos_nomes") or [])
-    robos = {r["id"]: r for r in get_robos()}
-
-    pendentes = [
-        rid for rid in fila
-        if rid in robos and rid not in concluidos and robos[rid]["nome"] not in concluidos_nomes
-    ]
-
-    if not pendentes:
-        pendentes = ordem_logistica() + ordem_pcp() + ordem_comercial() + ordem_suprimentos() + ordem_indice_zootecnico()
-
-    iniciar_execucao(pendentes, "continuacao", "5_dias", tratamento_modo="incremental")
-    return jsonify({"ok": True, "pendentes": pendentes})
-
-
-@app.route("/api/reset", methods=["POST"])
-def api_reset():
-    limpar_terminal()
-    data = estado_padrao()
-    salvar_status(data)
-    log("Status resetado pelo usuário.", "INFO")
-    return jsonify({"ok": True})
-
 
 
 # =============================================================================
