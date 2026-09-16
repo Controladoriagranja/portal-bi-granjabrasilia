@@ -3107,6 +3107,11 @@
   vertical-align:middle;
 }
 
+
+  .update-manual-period { display:none; align-items:flex-end; gap:12px; }
+  .update-manual-period.show { display:flex; }
+  .update-manual-period input { min-width:145px; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius); padding:9px 11px; color:var(--text); font-family:inherit; font-size:13px; outline:none; }
+  .update-manual-period input:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-glow); }
 </style>
 
 </head>
@@ -3277,9 +3282,24 @@
 
             <div class="update-field">
               <label>Período da atualização</label>
-              <select id="updatePeriod" disabled title="Os parâmetros de período serão conectados na próxima etapa.">
-                <option value="auto_pasta">Automático — padrão do robô</option>
+              <select id="updatePeriod" onchange="toggleManualPeriod()">
+                <option value="auto">Automático — padrão do robô</option>
+                <option value="7">Últimos 7 dias</option>
+                <option value="15">Últimos 15 dias</option>
+                <option value="30">Últimos 30 dias</option>
+                <option value="manual">Período manual</option>
               </select>
+            </div>
+
+            <div class="update-manual-period" id="manualPeriodFields">
+              <div class="update-field">
+                <label>Data inicial</label>
+                <input type="date" id="updateStart">
+              </div>
+              <div class="update-field">
+                <label>Data final</label>
+                <input type="date" id="updateEnd">
+              </div>
             </div>
 
             <div class="update-field update-treatment-field show" id="updateTreatmentField">
@@ -3294,8 +3314,7 @@
           </div>
 
           <div style="margin-top:10px;font-size:11px;color:var(--text-muted);line-height:1.5">
-            Nesta etapa, a Central já envia os jobs ao Render e o Agent local executa os robôs.
-            O filtro de período será ligado aos parâmetros dos robôs na próxima etapa.
+            A Central envia os jobs autenticados ao Render; o Agent local executa os robôs com o período selecionado.
           </div>
         </div>
 
@@ -7997,15 +8016,60 @@ function toggleTreatmentMode(){
   if (field) field.classList.add('show');
 }
 
+function isoTodayUpdate(){
+  return new Date().toISOString().slice(0,10);
+}
+
 function toggleManualPeriod(){
-  // V2: o período será enviado ao Agent por parâmetros armazenados no job.
+  const select = document.getElementById('updatePeriod');
+  const fields = document.getElementById('manualPeriodFields');
+  if (!select || !fields) return;
+
+  const manual = select.value === 'manual';
+  fields.classList.toggle('show', manual);
+
+  if (manual) {
+    const end = document.getElementById('updateEnd');
+    const start = document.getElementById('updateStart');
+    const hoje = isoTodayUpdate();
+
+    if (!end.value) end.value = hoje;
+    if (!start.value) {
+      const d = new Date();
+      d.setDate(d.getDate() - 6);
+      start.value = d.toISOString().slice(0,10);
+    }
+
+    end.max = hoje;
+    start.max = hoje;
+  }
 }
 
 function updatePayload(){
-  return {
-    periodo: 'auto_pasta',
-    tratamento_modo: document.getElementById('updateTreatmentMode')?.value || 'atualizar_tratar'
+  const periodo = document.getElementById('updatePeriod')?.value || 'auto';
+  const tratamento_modo = document.getElementById('updateTreatmentMode')?.value || 'atualizar_tratar';
+
+  const parametros = {
+    modo: 'auto',
+    tratamento_modo
   };
+
+  if (['7','15','30'].includes(periodo)) {
+    parametros.modo = 'dias';
+    parametros.dias = Number(periodo);
+  } else if (periodo === 'manual') {
+    const inicio = document.getElementById('updateStart')?.value;
+    const fim = document.getElementById('updateEnd')?.value;
+
+    if (!inicio || !fim) throw new Error('Informe a data inicial e a data final.');
+    if (inicio > fim) throw new Error('A data inicial não pode ser maior que a data final.');
+
+    parametros.modo = 'periodo';
+    parametros.inicio = inicio;
+    parametros.fim = fim;
+  }
+
+  return parametros;
 }
 
 async function apiUpdate(path, options={}){
@@ -8022,6 +8086,20 @@ function getUpdateModuleLabel(modulo){
     zootecnico:'Índice Zootécnico',
     todos:'Todos'
   }[modulo] || modulo;
+}
+
+function periodDescriptionUpdate(parametros){
+  if (!parametros || parametros.modo === 'auto') return 'Automático';
+  if (parametros.modo === 'dias') return `Últimos ${parametros.dias} dias`;
+  if (parametros.modo === 'periodo') {
+    const br = v => String(v || '').split('-').reverse().join('/');
+    return `${br(parametros.inicio)} até ${br(parametros.fim)}`;
+  }
+  return 'Automático';
+}
+
+function periodDescriptionFromJob(job){
+  return periodDescriptionUpdate(job?.parametros || {});
 }
 
 function robotsForModule(modulo){
@@ -8086,16 +8164,20 @@ function loadUpdateBatch(){
   } catch(e) { return []; }
 }
 
-async function createRobotJob(robo){
+async function createRobotJob(robo, parametros){
   const data = await apiUpdate('/api/jobs', {
     method:'POST',
-    body:JSON.stringify({robo_id: robo.id})
+    body:JSON.stringify({
+      robo_id: robo.id,
+      parametros: parametros || updatePayload()
+    })
   });
   return data.job;
 }
 
 function startUpdateMonitor(){
   toggleTreatmentMode();
+  toggleManualPeriod();
   loadUpdateStatus();
   clearInterval(updateTimer);
   updateTimer = setInterval(loadUpdateStatus, 2500);
@@ -8108,7 +8190,8 @@ async function runSingleUpdate(id){
   if (!confirm(`Executar "${robo.nome}"?\n\nO Agent local iniciará assim que pegar o job.`)) return;
 
   try {
-    const job = await createRobotJob(robo);
+    const parametros = updatePayload();
+    const job = await createRobotJob(robo, parametros);
     saveUpdateBatch([job.id]);
     showToast(`Job #${job.id} criado.`, 'success');
     document.getElementById('updateProgressPanel').style.display='block';
@@ -8135,6 +8218,13 @@ async function runModuleUpdate(){
 
   if (!robos.length) return showToast('Nenhum robô disponível para este módulo.', 'error');
 
+  let parametros;
+  try {
+    parametros = updatePayload();
+  } catch(e) {
+    return showToast(e.message, 'error');
+  }
+
   const label = getUpdateModuleLabel(modulo);
   const tratamentoTexto = tratamentoModo === 'somente_atualizacoes'
     ? 'Somente atualizações'
@@ -8144,7 +8234,7 @@ async function runModuleUpdate(){
     `Atualizar ${label}?\n\n` +
     `Jobs que serão criados: ${robos.length}\n` +
     `Modo: ${tratamentoTexto}\n` +
-    `Período: automático (padrão de cada robô)`
+    `Período: ${periodDescriptionUpdate(parametros)}`
   )) return;
 
   const btn = document.querySelector('.update-main-btn');
@@ -8153,7 +8243,7 @@ async function runModuleUpdate(){
   const ids = [];
   try {
     for (const robo of robos) {
-      const job = await createRobotJob(robo);
+      const job = await createRobotJob(robo, parametros);
       ids.push(job.id);
     }
     saveUpdateBatch(ids);
@@ -8260,7 +8350,7 @@ async function loadUpdateStatus(){
         <td>${statusBadgeUpdate(status)}</td>
         <td>${job?.finalizado_em ? formatDateTimeUpdate(job.finalizado_em) : '—'}</td>
         <td>${job ? formatDurationUpdate(job) : '—'}</td>
-        <td>Automático</td>
+        <td>${job ? periodDescriptionFromJob(job) : '—'}</td>
         <td>
           <button class="update-action" ${ocupado ? 'disabled style="opacity:.45;cursor:not-allowed"' : ''}
             onclick="runSingleUpdate(${robo.id})">
