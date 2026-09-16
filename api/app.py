@@ -43,7 +43,7 @@ EXEC_THREAD = None
 
 EXTENSOES_DADOS = {".xlsx", ".xls", ".csv", ".parquet", ".html"}
 
-APP_VERSION = "2026.09.15-app-auth-v1"
+APP_VERSION = "2026.09.16-jobs-v1"
 APP_FILE = Path(__file__).resolve()
 
 # =============================================================================
@@ -2381,6 +2381,232 @@ def api_portal_data():
         return jsonify({
             "ok": False,
             "erro": "Erro interno ao processar os dados do portal."
+        }), 500
+
+
+
+# =============================================================================
+# CENTRAL DE ATUALIZAÇÕES — JOBS NO NEON (V1)
+#
+# Nesta etapa o Render APENAS cria e consulta jobs no PostgreSQL/Neon.
+# A execução dos robôs continua fora do Render e será feita pelo BI Agent local.
+# Estes endpoints reutilizam a autenticação atual do Portal e exigem ADMIN.
+# =============================================================================
+
+def _job_publico(row):
+    """Converte uma linha de public.jobs em JSON estável para o frontend."""
+    if not row:
+        return None
+
+    job = dict(row)
+    for campo in ("criado_em", "iniciado_em", "finalizado_em"):
+        valor = job.get(campo)
+        if valor is not None and hasattr(valor, "isoformat"):
+            job[campo] = valor.isoformat()
+    return job
+
+
+def _resposta_jobs_admin(usuario):
+    if not usuario:
+        return _resposta_nao_autorizado()
+    if not _usuario_e_admin(usuario):
+        return jsonify({
+            "ok": False,
+            "erro": "Seu usuário não possui permissão para administrar atualizações."
+        }), 403
+    return None
+
+
+@app.route("/api/jobs", methods=["POST"])
+def api_criar_job():
+    """Cria uma solicitação de execução. Não executa o robô no Render."""
+    try:
+        usuario = _usuario_autenticado()
+        bloqueio = _resposta_jobs_admin(usuario)
+        if bloqueio:
+            return bloqueio
+
+        body = request.get_json(silent=True) or {}
+        try:
+            robo_id = int(body.get("robo_id"))
+        except (TypeError, ValueError):
+            return jsonify({
+                "ok": False,
+                "erro": "Informe um robo_id válido."
+            }), 400
+
+        with engine.begin() as conn:
+            robo = conn.execute(text("""
+                SELECT id, codigo, nome, ativo
+                FROM public.robos
+                WHERE id = :robo_id
+                LIMIT 1
+            """), {"robo_id": robo_id}).mappings().first()
+
+            if not robo:
+                return jsonify({
+                    "ok": False,
+                    "erro": "Robô não encontrado."
+                }), 404
+
+            if not bool(robo.get("ativo")):
+                return jsonify({
+                    "ok": False,
+                    "erro": "Este robô está inativo."
+                }), 409
+
+            job = conn.execute(text("""
+                INSERT INTO public.jobs (
+                    robo_id,
+                    solicitado_por,
+                    status
+                )
+                VALUES (
+                    :robo_id,
+                    :solicitado_por,
+                    'aguardando'
+                )
+                RETURNING
+                    id,
+                    robo_id,
+                    solicitado_por,
+                    status,
+                    criado_em,
+                    iniciado_em,
+                    finalizado_em,
+                    erro
+            """), {
+                "robo_id": robo_id,
+                "solicitado_por": int(usuario["usuario_id"]),
+            }).mappings().one()
+
+        log(
+            f"Job #{job['id']} criado por {usuario.get('email')} | "
+            f"robô: {robo.get('codigo')}",
+            "INFO",
+        )
+
+        return jsonify({
+            "ok": True,
+            "job": _job_publico(job),
+            "robo": {
+                "id": robo.get("id"),
+                "codigo": robo.get("codigo"),
+                "nome": robo.get("nome"),
+            },
+        }), 201
+
+    except RuntimeError as e:
+        log(f"Configuração de autenticação inválida em /api/jobs: {e}", "ERRO")
+        return jsonify({
+            "ok": False,
+            "erro": "Serviço de autenticação não configurado."
+        }), 503
+    except Exception as e:
+        log(f"Erro ao criar job: {e}", "ERRO")
+        return jsonify({
+            "ok": False,
+            "erro": "Erro interno ao criar solicitação de atualização."
+        }), 500
+
+
+@app.route("/api/jobs", methods=["GET"])
+def api_listar_jobs():
+    """Lista os jobs mais recentes para a Central de Atualizações."""
+    try:
+        usuario = _usuario_autenticado()
+        bloqueio = _resposta_jobs_admin(usuario)
+        if bloqueio:
+            return bloqueio
+
+        with engine.connect() as conn:
+            rows = conn.execute(text("""
+                SELECT
+                    j.id,
+                    j.robo_id,
+                    j.solicitado_por,
+                    j.status,
+                    j.criado_em,
+                    j.iniciado_em,
+                    j.finalizado_em,
+                    j.erro,
+                    r.codigo AS robo_codigo,
+                    r.nome AS robo_nome
+                FROM public.jobs j
+                JOIN public.robos r ON r.id = j.robo_id
+                ORDER BY j.id DESC
+                LIMIT 100
+            """)).mappings().all()
+
+        return jsonify({
+            "ok": True,
+            "jobs": [_job_publico(row) for row in rows],
+        })
+
+    except RuntimeError as e:
+        log(f"Configuração de autenticação inválida em GET /api/jobs: {e}", "ERRO")
+        return jsonify({
+            "ok": False,
+            "erro": "Serviço de autenticação não configurado."
+        }), 503
+    except Exception as e:
+        log(f"Erro ao listar jobs: {e}", "ERRO")
+        return jsonify({
+            "ok": False,
+            "erro": "Erro interno ao consultar atualizações."
+        }), 500
+
+
+@app.route("/api/jobs/<int:job_id>", methods=["GET"])
+def api_consultar_job(job_id):
+    """Consulta um job específico."""
+    try:
+        usuario = _usuario_autenticado()
+        bloqueio = _resposta_jobs_admin(usuario)
+        if bloqueio:
+            return bloqueio
+
+        with engine.connect() as conn:
+            row = conn.execute(text("""
+                SELECT
+                    j.id,
+                    j.robo_id,
+                    j.solicitado_por,
+                    j.status,
+                    j.criado_em,
+                    j.iniciado_em,
+                    j.finalizado_em,
+                    j.erro,
+                    r.codigo AS robo_codigo,
+                    r.nome AS robo_nome
+                FROM public.jobs j
+                JOIN public.robos r ON r.id = j.robo_id
+                WHERE j.id = :job_id
+                LIMIT 1
+            """), {"job_id": job_id}).mappings().first()
+
+        if not row:
+            return jsonify({
+                "ok": False,
+                "erro": "Job não encontrado."
+            }), 404
+
+        return jsonify({
+            "ok": True,
+            "job": _job_publico(row),
+        })
+
+    except RuntimeError as e:
+        log(f"Configuração de autenticação inválida em GET /api/jobs/<id>: {e}", "ERRO")
+        return jsonify({
+            "ok": False,
+            "erro": "Serviço de autenticação não configurado."
+        }), 503
+    except Exception as e:
+        log(f"Erro ao consultar job #{job_id}: {e}", "ERRO")
+        return jsonify({
+            "ok": False,
+            "erro": "Erro interno ao consultar atualização."
         }), 500
 
 
