@@ -1,6 +1,7 @@
 import json
 import base64
 import gzip
+import hmac
 import os
 import queue
 import re
@@ -43,7 +44,7 @@ EXEC_THREAD = None
 
 EXTENSOES_DADOS = {".xlsx", ".xls", ".csv", ".parquet", ".html"}
 
-APP_VERSION = "2026.09.16-jobs-v1"
+APP_VERSION = "2026.09.16-agent-v1"
 APP_FILE = Path(__file__).resolve()
 
 # =============================================================================
@@ -2609,6 +2610,153 @@ def api_consultar_job(job_id):
             "erro": "Erro interno ao consultar atualização."
         }), 500
 
+
+
+# =============================================================================
+# BI AGENT — ENDPOINTS PRIVADOS (V1)
+#
+# O Agent roda dentro da rede da Granja e acessa estes endpoints somente por
+# HTTPS de saída. Ele NÃO usa login de usuário e NÃO recebe DATABASE_URL.
+# A credencial própria fica em PORTAL_BI_AGENT_KEY no Render e no ambiente
+# local do Agent. Nenhum caminho de script é enviado pelo servidor.
+# =============================================================================
+
+def _agent_autorizado():
+    esperado = str(os.getenv("PORTAL_BI_AGENT_KEY") or "").strip()
+    recebido = str(request.headers.get("X-Agent-Key") or "").strip()
+    if not esperado or len(esperado) < 32:
+        raise RuntimeError(
+            "PORTAL_BI_AGENT_KEY não configurada corretamente no ambiente da API."
+        )
+    return bool(recebido) and hmac.compare_digest(recebido, esperado)
+
+
+def _resposta_agent_nao_autorizado():
+    return jsonify({
+        "ok": False,
+        "erro": "Agent não autorizado."
+    }), 401
+
+
+@app.route("/api/agent/jobs/claim", methods=["POST"])
+def api_agent_claim_job():
+    """Reserva atomicamente o próximo job aguardando e o marca executando."""
+    try:
+        if not _agent_autorizado():
+            return _resposta_agent_nao_autorizado()
+
+        with engine.begin() as conn:
+            row = conn.execute(text("""
+                WITH proximo AS (
+                    SELECT j.id
+                    FROM public.jobs j
+                    JOIN public.robos r ON r.id = j.robo_id
+                    WHERE j.status = 'aguardando'
+                      AND r.ativo = TRUE
+                    ORDER BY j.id ASC
+                    FOR UPDATE OF j SKIP LOCKED
+                    LIMIT 1
+                )
+                UPDATE public.jobs j
+                SET
+                    status = 'executando',
+                    iniciado_em = NOW(),
+                    erro = NULL
+                FROM proximo, public.robos r
+                WHERE j.id = proximo.id
+                  AND r.id = j.robo_id
+                RETURNING
+                    j.id,
+                    j.robo_id,
+                    j.solicitado_por,
+                    j.status,
+                    j.criado_em,
+                    j.iniciado_em,
+                    j.finalizado_em,
+                    j.erro,
+                    r.codigo AS robo_codigo,
+                    r.nome AS robo_nome
+            """)).mappings().first()
+
+        if not row:
+            return jsonify({"ok": True, "job": None})
+
+        log(
+            f"BI Agent reservou Job #{row['id']} | robô: {row['robo_codigo']}",
+            "INFO",
+        )
+        return jsonify({"ok": True, "job": _job_publico(row)})
+
+    except RuntimeError as e:
+        log(f"Configuração do BI Agent inválida: {e}", "ERRO")
+        return jsonify({"ok": False, "erro": "BI Agent não configurado no servidor."}), 503
+    except Exception as e:
+        log(f"Erro ao reservar job para BI Agent: {e}", "ERRO")
+        return jsonify({"ok": False, "erro": "Erro interno ao reservar atualização."}), 500
+
+
+@app.route("/api/agent/jobs/<int:job_id>/finish", methods=["POST"])
+def api_agent_finish_job(job_id):
+    """Recebe do Agent o resultado final de um job que estava executando."""
+    try:
+        if not _agent_autorizado():
+            return _resposta_agent_nao_autorizado()
+
+        body = request.get_json(silent=True) or {}
+        status = str(body.get("status") or "").strip().lower()
+        if status not in {"concluido", "erro"}:
+            return jsonify({
+                "ok": False,
+                "erro": "status deve ser 'concluido' ou 'erro'."
+            }), 400
+
+        erro = body.get("erro")
+        if status == "concluido":
+            erro = None
+        elif erro is None:
+            erro = "O robô terminou com erro sem mensagem adicional."
+        else:
+            erro = str(erro)[-20000:]
+
+        with engine.begin() as conn:
+            row = conn.execute(text("""
+                UPDATE public.jobs
+                SET
+                    status = :status,
+                    finalizado_em = NOW(),
+                    erro = :erro
+                WHERE id = :job_id
+                  AND status = 'executando'
+                RETURNING
+                    id,
+                    robo_id,
+                    solicitado_por,
+                    status,
+                    criado_em,
+                    iniciado_em,
+                    finalizado_em,
+                    erro
+            """), {
+                "job_id": job_id,
+                "status": status,
+                "erro": erro,
+            }).mappings().first()
+
+        if not row:
+            return jsonify({
+                "ok": False,
+                "erro": "Job não encontrado ou não está em execução."
+            }), 409
+
+        log(f"BI Agent finalizou Job #{job_id} com status {status}.", "INFO")
+        return jsonify({"ok": True, "job": _job_publico(row)})
+
+    except RuntimeError as e:
+        log(f"Configuração do BI Agent inválida: {e}", "ERRO")
+        return jsonify({"ok": False, "erro": "BI Agent não configurado no servidor."}), 503
+    except Exception as e:
+        log(f"Erro ao finalizar Job #{job_id}: {e}", "ERRO")
+        return jsonify({"ok": False, "erro": "Erro interno ao finalizar atualização."}), 500
 
 @app.route("/api/database/status", methods=["GET"])
 def api_database_status():
