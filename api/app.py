@@ -44,7 +44,7 @@ EXEC_THREAD = None
 
 EXTENSOES_DADOS = {".xlsx", ".xls", ".csv", ".parquet", ".html"}
 
-APP_VERSION = "2026.09.17-crud-integrado-v1"
+APP_VERSION = "2026.09.17-usuario-edicao-v2"
 APP_FILE = Path(__file__).resolve()
 
 # =============================================================================
@@ -2902,6 +2902,159 @@ def api_auth_me():
 def api_auth_logout():
     # O token é stateless. O logout efetivo ocorre ao removê-lo do navegador.
     return jsonify({"ok": True})
+
+
+
+@app.route("/api/admin/usuarios/<int:usuario_id>", methods=["PATCH"])
+def api_admin_usuario_patch(usuario_id):
+    """Atualiza um usuário específico sem depender do snapshot completo do Portal.
+
+    Usado pelo modal "Editar Usuário" para persistir de forma atômica:
+    dados cadastrais, acesso ao Painel de Chamados, setores/permissões e senha.
+    """
+    usuario_atual = _usuario_autenticado()
+    if not usuario_atual:
+        return _resposta_nao_autorizado()
+    if not _usuario_e_admin(usuario_atual):
+        return jsonify({"ok": False, "erro": "Apenas administradores podem editar usuários."}), 403
+
+    body = request.get_json(silent=True) or {}
+    if not isinstance(body, dict):
+        return jsonify({"ok": False, "erro": "Payload inválido."}), 400
+
+    nome = str(body.get("name") or "").strip()
+    email = str(body.get("email") or "").strip().lower()
+    role = str(body.get("role") or "sector").strip().lower()
+    status = str(body.get("status") or "active").strip().lower()
+    report_access_mode = str(body.get("reportAccessMode") or "sector").strip()
+    ticket_panel_access = bool(body.get("ticketPanelAccess", False))
+    senha = str(body.get("password") or "")
+    sectors = body.get("sectors") if isinstance(body.get("sectors"), list) else []
+    report_ids = body.get("reportIds") if isinstance(body.get("reportIds"), list) else []
+
+    if not nome:
+        return jsonify({"ok": False, "erro": "Informe o nome do usuário."}), 400
+    if not email:
+        return jsonify({"ok": False, "erro": "Informe o e-mail do usuário."}), 400
+    if role not in {"admin", "director", "sector"}:
+        return jsonify({"ok": False, "erro": "Perfil de acesso inválido."}), 400
+    if status not in {"active", "blocked", "inactive"}:
+        return jsonify({"ok": False, "erro": "Status inválido."}), 400
+    if senha and len(senha) < 8:
+        return jsonify({"ok": False, "erro": "A senha deve possuir pelo menos 8 caracteres."}), 400
+    if len(senha) > 128:
+        return jsonify({"ok": False, "erro": "A senha excede o limite permitido."}), 400
+
+    try:
+        with engine.begin() as conn:
+            existente = conn.execute(text("""
+                SELECT id, email
+                FROM public.usuarios
+                WHERE id = :id
+                LIMIT 1
+            """), {"id": usuario_id}).mappings().first()
+            if not existente:
+                return jsonify({"ok": False, "erro": "Usuário não encontrado."}), 404
+
+            conflito = conn.execute(text("""
+                SELECT id
+                FROM public.usuarios
+                WHERE LOWER(email) = :email
+                  AND id <> :id
+                LIMIT 1
+            """), {"email": email, "id": usuario_id}).scalar()
+            if conflito is not None:
+                return jsonify({"ok": False, "erro": "Já existe outro usuário com este e-mail."}), 400
+
+            params = {
+                "id": usuario_id,
+                "nome": nome,
+                "email": email,
+                "perfil": _perfil_portal_por_role(role),
+                "ativo": status == "active",
+                "role": role,
+                "report_access_mode": report_access_mode,
+                "ticket_panel_access": ticket_panel_access,
+            }
+
+            conn.execute(text("""
+                UPDATE public.usuarios
+                SET nome = :nome,
+                    email = :email,
+                    perfil = :perfil,
+                    ativo = :ativo,
+                    role = :role,
+                    report_access_mode = :report_access_mode,
+                    ticket_panel_access = :ticket_panel_access,
+                    atualizado_em = NOW()
+                WHERE id = :id
+            """), params)
+
+            if senha:
+                conn.execute(text("""
+                    UPDATE public.usuarios
+                    SET senha_hash = crypt(:senha, gen_salt('bf', 12)),
+                        atualizado_em = NOW()
+                    WHERE id = :id
+                """), {"id": usuario_id, "senha": senha})
+
+            # Setores do usuário
+            conn.execute(text(
+                "DELETE FROM public.usuario_setores WHERE usuario_id = :id"
+            ), {"id": usuario_id})
+
+            for codigo in sectors:
+                codigo = str(codigo or "").strip()
+                if not codigo:
+                    continue
+                sid = conn.execute(text("""
+                    SELECT id
+                    FROM public.setores
+                    WHERE codigo = :codigo AND ativo = TRUE
+                    LIMIT 1
+                """), {"codigo": codigo}).scalar()
+                if sid is not None:
+                    conn.execute(text("""
+                        INSERT INTO public.usuario_setores (usuario_id, setor_id)
+                        VALUES (:uid, :sid)
+                        ON CONFLICT DO NOTHING
+                    """), {"uid": usuario_id, "sid": int(sid)})
+
+            # Permissões específicas de relatórios
+            conn.execute(text(
+                "DELETE FROM public.usuario_relatorios WHERE usuario_id = :id"
+            ), {"id": usuario_id})
+
+            for rid in report_ids:
+                try:
+                    rid_int = int(rid)
+                except Exception:
+                    continue
+                relatorio_id = conn.execute(text("""
+                    SELECT id
+                    FROM public.relatorios
+                    WHERE legacy_id = :rid OR id = :rid
+                    ORDER BY CASE WHEN legacy_id = :rid THEN 0 ELSE 1 END
+                    LIMIT 1
+                """), {"rid": rid_int}).scalar()
+                if relatorio_id is not None:
+                    conn.execute(text("""
+                        INSERT INTO public.usuario_relatorios (usuario_id, relatorio_id)
+                        VALUES (:uid, :rid)
+                        ON CONFLICT DO NOTHING
+                    """), {"uid": usuario_id, "rid": int(relatorio_id)})
+
+        salvo = carregar_portal_data_neon()
+        log(
+            f"Usuário {usuario_id} atualizado por {usuario_atual.get('email')} "
+            f"(painel_chamados={ticket_panel_access}, senha={'sim' if senha else 'não'}).",
+            "INFO",
+        )
+        return jsonify({"ok": True, "data": salvo})
+
+    except Exception as e:
+        log(f"Erro ao editar usuário {usuario_id}: {e}", "ERRO")
+        return jsonify({"ok": False, "erro": "Erro interno ao atualizar o usuário."}), 500
 
 
 @app.route("/api/portal-data", methods=["GET", "PUT"])
