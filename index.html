@@ -3704,8 +3704,8 @@
             <div class="ticket-form-grid">
               <div class="form-group">
                 <label>Nome do solicitante *</label>
-                <input id="ticketRequesterName" readonly placeholder="Nome do solicitante">
-                <div style="font-size:11px;color:var(--text-muted);margin-top:5px">Preenchido automaticamente pelo login, mas pode ser ajustado se necessário.</div>
+                <select id="ticketRequesterName" disabled><option value="">Carregando usuário...</option></select>
+                <div id="ticketRequesterHelp" style="font-size:11px;color:var(--text-muted);margin-top:5px">Preenchido automaticamente pelo login.</div>
               </div>
               <div class="form-group">
                 <label>WhatsApp ou Ramal *</label>
@@ -5217,24 +5217,56 @@ function selectedPortalUserId(elementId){
   return user ? Number(user.id) : null;
 }
 
-function fillPortalUserSelect(id, selectedName='', allowEmpty=true){
+function isTicketAdmin(){
+  return currentUser?.role === 'admin' || currentUser?.perfil === 'admin' || currentUser?.isAdmin === true;
+}
+
+function ticketResponsibleUsers(){
+  return portalTicketUsers.filter(u=>u.pode_ser_responsavel === true || [1,36].includes(Number(u.id)));
+}
+
+function fillPortalUserSelect(id, selectedName='', allowEmpty=true, users=null){
   const el=document.getElementById(id);
   if(!el || el.tagName!=='SELECT') return;
   const selected=String(selectedName||'');
+  const source=Array.isArray(users)?users:portalTicketUsers;
   const empty=allowEmpty?'<option value="">Ainda não definido</option>':'';
-  el.innerHTML=empty + portalTicketUsers.map(u=>
+  el.innerHTML=empty + source.map(u=>
     `<option value="${escTicket(u.nome)}">${escTicket(u.nome)} — ${escTicket(u.email)}</option>`
   ).join('');
   el.value=selected;
 }
 
 function renderPortalTicketUserSelects(){
+  const responsaveis=ticketResponsibleUsers();
   fillPortalUserSelect('internalDemandResponsible',
-    document.getElementById('internalDemandResponsible')?.value||'', true);
+    document.getElementById('internalDemandResponsible')?.value||'', true, responsaveis);
   fillPortalUserSelect('chSummaryResponsible',
-    document.getElementById('chSummaryResponsible')?.value||'', true);
+    document.getElementById('chSummaryResponsible')?.value||'', true, responsaveis);
   fillPortalUserSelect('ticketResponsibleName',
-    document.getElementById('ticketResponsibleName')?.value||'', true);
+    document.getElementById('ticketResponsibleName')?.value||'', true, responsaveis);
+
+  const auth=authenticatedTicketRequester();
+  const newRequester=document.getElementById('ticketRequesterName');
+  const selectedNew=(newRequester?.value || auth.name || '');
+  fillPortalUserSelect('ticketRequesterName', selectedNew, false, portalTicketUsers);
+  if(newRequester){
+    if(!isTicketAdmin()) newRequester.value=auth.name;
+    newRequester.disabled=!isTicketAdmin();
+  }
+  const help=document.getElementById('ticketRequesterHelp');
+  if(help){
+    help.textContent=isTicketAdmin()
+      ? 'Administrador: você pode abrir o chamado em nome de qualquer usuário ativo.'
+      : 'Preenchido automaticamente pelo seu login e não pode ser alterado.';
+  }
+
+  const detailRequester=document.getElementById('chSummaryRequester');
+  if(detailRequester){
+    const selectedDetail=detailRequester.dataset.selectedName || detailRequester.value || '';
+    fillPortalUserSelect('chSummaryRequester', selectedDetail, false, portalTicketUsers);
+    detailRequester.disabled=!isTicketAdmin();
+  }
 }
 
 function validateTicketFiles(files){
@@ -5701,7 +5733,18 @@ function openNewTicket() {
   document.getElementById('newTicketView').style.display='block';
 
   const requesterNameInput = document.getElementById('ticketRequesterName');
-  if (requesterNameInput && !requesterNameInput.value) requesterNameInput.value = currentName();
+  const authRequester = authenticatedTicketRequester();
+  if (requesterNameInput) {
+    fillPortalUserSelect('ticketRequesterName', authRequester.name, false, portalTicketUsers);
+    requesterNameInput.value = authRequester.name;
+    requesterNameInput.disabled = !isTicketAdmin();
+  }
+  const help=document.getElementById('ticketRequesterHelp');
+  if(help){
+    help.textContent=isTicketAdmin()
+      ? 'Administrador: você pode abrir o chamado em nome de qualquer usuário ativo.'
+      : 'Preenchido automaticamente pelo seu login e não pode ser alterado.';
+  }
 
   ticketSelectedFiles = [];
   renderTicketFileList();
@@ -5778,10 +5821,19 @@ function createTicket() {
   }
   const next = ticketStore.tickets.reduce((m,t)=>Math.max(m, Number(t.number)||0), 1053) + 1;
   const now = new Date().toISOString();
+  const authRequester=authenticatedTicketRequester();
+  const selectedRequester=isTicketAdmin() ? portalUserByName(requesterName) : portalUserByName(authRequester.name);
+  if(isTicketAdmin() && !selectedRequester){
+    showToast('Selecione um solicitante válido.', 'error'); return;
+  }
+  const requester=selectedRequester || authRequester;
   const t = {
     id: Date.now(), number: next, title, type, project, description, objective, formula,
     demandKind:'chamado',
-    requesterId: currentUser?.id || null, requesterName: requesterName, requesterContact: requesterContact, requesterEmail: currentEmail(),
+    requesterId: requester?.id || authRequester.id || null,
+    requesterName: requester?.nome || requester?.name || authRequester.name,
+    requesterContact: requesterContact,
+    requesterEmail: requester?.email || authRequester.email,
     status:'awaiting_manager', priority:'Média', assignedTo:'', assignedToId:null,
     attachments: ticketSelectedFiles.map(f=>({name:f.name,size:f.size,type:f.type})),
     createdAt:now, updatedAt:now,
@@ -5789,7 +5841,7 @@ function createTicket() {
   };
   ticketStore.tickets.unshift(t);
   saveTicketStore();
-  ['ticketRequesterName','ticketRequesterContact','ticketTitle','ticketDescription','ticketObjective'].forEach(id=>{ const e=document.getElementById(id); if(e)e.value=''; });
+  ['ticketRequesterContact','ticketTitle','ticketDescription','ticketObjective'].forEach(id=>{ const e=document.getElementById(id); if(e)e.value=''; });
   document.getElementById('ticketType').value='';
   document.getElementById('ticketProject').value='';
   ticketSelectedFiles=[];
@@ -6333,7 +6385,12 @@ function openChamadoDetail(id){
     originBadge.textContent=internal?'📌 Demanda interna':'🎫 Chamado';
   }
 
-  document.getElementById('chSummaryRequester').value=t.requesterName||'';
+  const requesterSelect=document.getElementById('chSummaryRequester');
+  if(requesterSelect){
+    requesterSelect.dataset.selectedName=t.requesterName||'';
+    fillPortalUserSelect('chSummaryRequester', t.requesterName||'', false, portalTicketUsers);
+    requesterSelect.value=t.requesterName||'';
+  }
   document.getElementById('chSummaryContact').value=t.requesterContact||'';
   document.getElementById('chSummarySector').value=t.project||'';
   document.getElementById('chSummaryType').value=t.type||'';
@@ -6344,7 +6401,7 @@ function openChamadoDetail(id){
   document.getElementById('chSummaryEnd').value=t.plannedEnd||'';
 
   // Somente o Admin pode alterar todos os dados após a abertura.
-  const adminEdit = currentUser?.role === 'admin';
+  const adminEdit = isTicketAdmin();
   [
     'chSummaryRequester','chSummaryContact','chSummarySector','chSummaryType',
     'chSummaryPriority','chSummaryStatus'
@@ -6455,8 +6512,16 @@ function saveChamadoSummary(){
   t.plannedStart=start;
   t.plannedEnd=end;
 
-  if(currentUser?.role === 'admin'){
-    t.requesterName=document.getElementById('chSummaryRequester').value.trim();
+  if(isTicketAdmin()){
+    const requesterName=document.getElementById('chSummaryRequester').value.trim();
+    const requesterUser=portalUserByName(requesterName);
+    if(!requesterUser){
+      showToast('Selecione um solicitante válido.', 'error');
+      return;
+    }
+    t.requesterId=Number(requesterUser.id);
+    t.requesterName=requesterUser.nome;
+    t.requesterEmail=requesterUser.email;
     t.requesterContact=document.getElementById('chSummaryContact').value.trim();
     t.project=document.getElementById('chSummarySector').value.trim();
     t.type=document.getElementById('chSummaryType').value.trim();
@@ -8626,7 +8691,7 @@ async function loadUpdateStatus(){
         <div class="ch-summary">
           <div class="ch-summary-card">
             <small>Solicitante</small>
-            <input id="chSummaryRequester" readonly placeholder="Solicitante">
+            <select id="chSummaryRequester" disabled><option value="">Solicitante</option></select>
           </div>
           <div class="ch-summary-card">
             <small>Contato</small>
