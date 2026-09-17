@@ -5184,6 +5184,66 @@ const TICKET_STORE_KEY = 'granjabi_ticket_module_v1';
 const TICKET_API = 'https://portal-bi-granjabrasilia.onrender.com';
 const TICKET_SYNC_INTERVAL_MS = 3000;
 
+const TICKET_MAX_FILE_BYTES = 10 * 1024 * 1024;
+const TICKET_MAX_FILES_PER_SEND = 5;
+let portalTicketUsers = [];
+
+async function loadPortalTicketUsers(){
+  try{
+    const data = await ticketApiRequest('/api/chamados/usuarios');
+    portalTicketUsers = Array.isArray(data?.usuarios) ? data.usuarios : [];
+    renderPortalTicketUserSelects();
+  }catch(e){
+    console.warn('Não foi possível carregar usuários dos Chamados:', e);
+  }
+}
+
+function portalUserByName(name){
+  const key=String(name||'').trim().toLowerCase();
+  return portalTicketUsers.find(u=>String(u.nome||'').trim().toLowerCase()===key) || null;
+}
+
+function selectedPortalUserId(elementId){
+  const el=document.getElementById(elementId);
+  const user=portalUserByName(el?.value||'');
+  return user ? Number(user.id) : null;
+}
+
+function fillPortalUserSelect(id, selectedName='', allowEmpty=true){
+  const el=document.getElementById(id);
+  if(!el || el.tagName!=='SELECT') return;
+  const selected=String(selectedName||'');
+  const empty=allowEmpty?'<option value="">Ainda não definido</option>':'';
+  el.innerHTML=empty + portalTicketUsers.map(u=>
+    `<option value="${escTicket(u.nome)}">${escTicket(u.nome)} — ${escTicket(u.email)}</option>`
+  ).join('');
+  el.value=selected;
+}
+
+function renderPortalTicketUserSelects(){
+  fillPortalUserSelect('internalDemandResponsible',
+    document.getElementById('internalDemandResponsible')?.value||'', true);
+  fillPortalUserSelect('chSummaryResponsible',
+    document.getElementById('chSummaryResponsible')?.value||'', true);
+  fillPortalUserSelect('ticketResponsibleName',
+    document.getElementById('ticketResponsibleName')?.value||'', true);
+}
+
+function validateTicketFiles(files){
+  const list=[...(files||[])];
+  if(list.length > TICKET_MAX_FILES_PER_SEND){
+    showToast(`Máximo de ${TICKET_MAX_FILES_PER_SEND} anexos por envio.`,'error');
+    return false;
+  }
+  const tooBig=list.find(f=>Number(f.size||0)>TICKET_MAX_FILE_BYTES);
+  if(tooBig){
+    showToast(`O anexo "${tooBig.name}" excede o limite de 10 MB.`,'error');
+    return false;
+  }
+  return true;
+}
+
+
 let ticketSelectedFiles = [];
 let approvalTabMode = 'initial';
 let ticketAdminTab = 'all';
@@ -5250,6 +5310,7 @@ async function ticketApiRequest(path, options={}) {
       signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
+        ...(getPortalToken() ? {'Authorization': `Bearer ${getPortalToken()}`} : {}),
         ...(options.headers || {})
       }
     });
@@ -5377,6 +5438,7 @@ async function migrateLocalTicketsToServer() {
 }
 
 async function initCentralTicketSync() {
+  await loadPortalTicketUsers();
   // Na primeira abertura desta versão, envia os chamados antigos deste navegador
   // para o servidor central e recebe de volta a base consolidada.
   await migrateLocalTicketsToServer();
@@ -5536,6 +5598,7 @@ function openInternalDemandModal(){
       if(el) el.value='';
     });
 
+  fillPortalUserSelect('internalDemandResponsible','',true);
   const p=document.getElementById('internalDemandPriority');
   const t=document.getElementById('internalDemandType');
   if(p) p.value='Média';
@@ -5591,6 +5654,7 @@ function createInternalDemand(){
     status:'queue',
     priority,
     assignedTo:responsible,
+    assignedToId:selectedPortalUserId('internalDemandResponsible'),
     plannedStart,
     plannedEnd,
     attachments:[],
@@ -5644,6 +5708,15 @@ function closeNewTicket() {
   renderTickets();
 }
 function addTicketFiles(fileList) {
+  if(!validateTicketFiles(fileList)) {
+    const picker=document.getElementById('ticketFilePicker');
+    if(picker) picker.value='';
+    return;
+  }
+  if(ticketSelectedFiles.length + [...(fileList||[])].length > TICKET_MAX_FILES_PER_SEND){
+    showToast(`Máximo de ${TICKET_MAX_FILES_PER_SEND} anexos por envio.`,'error');
+    return;
+  }
   [...(fileList || [])].forEach(file => {
     const key = `${file.name}__${file.size}__${file.lastModified}`;
     if (!ticketSelectedFiles.some(x=>x.key===key)) {
@@ -5701,7 +5774,7 @@ function createTicket() {
     id: Date.now(), number: next, title, type, project, description, objective, formula,
     demandKind:'chamado',
     requesterId: currentUser?.id || null, requesterName: requesterName, requesterContact: requesterContact, requesterEmail: currentEmail(),
-    status:'awaiting_manager', priority:'Média', assignedTo:'',
+    status:'awaiting_manager', priority:'Média', assignedTo:'', assignedToId:null,
     attachments: ticketSelectedFiles.map(f=>({name:f.name,size:f.size,type:f.type})),
     createdAt:now, updatedAt:now,
     history:[{at:now, by:currentName(), action:'Chamado aberto', detail:`Enviado para aprovação: ${managers.map(m=>m.name).join(', ')}`}]
@@ -6370,6 +6443,7 @@ function saveChamadoSummary(){
   }
 
   t.assignedTo=responsible;
+  t.assignedToId=selectedPortalUserId('chSummaryResponsible');
   t.plannedStart=start;
   t.plannedEnd=end;
 
@@ -6403,6 +6477,15 @@ function saveChamadoMeta(){
 
 
 function addChamadoCommentFiles(fileList){
+  if(!validateTicketFiles(fileList)) {
+    const inp=document.getElementById('chCommentFileInput');
+    if(inp) inp.value='';
+    return;
+  }
+  if(chCommentTempFiles.length + [...(fileList||[])].length > TICKET_MAX_FILES_PER_SEND){
+    showToast(`Máximo de ${TICKET_MAX_FILES_PER_SEND} anexos por comentário.`,'error');
+    return;
+  }
   [...(fileList||[])].forEach(f=>{
     const key=`${f.name}_${f.size}_${f.lastModified}`;
     if(!chCommentTempFiles.some(x=>x.key===key)){
@@ -7397,6 +7480,7 @@ function openAssignResponsible(id){
       Solicitante: ${escTicket(t.requesterName)}`;
   }
   const input = document.getElementById('ticketResponsibleName');
+  fillPortalUserSelect('ticketResponsibleName', t.assignedTo || '', true);
   if(input) input.value = t.assignedTo || '';
   const ps = document.getElementById('ticketPlannedStart');
   const pe = document.getElementById('ticketPlannedEnd');
@@ -7429,6 +7513,7 @@ function saveResponsibleAndQueue(){
     return;
   }
   t.assignedTo = responsible;
+  t.assignedToId = selectedPortalUserId('ticketResponsibleName');
   t.plannedStart = plannedStart;
   t.plannedEnd = plannedEnd;
   t.returnPriority = false;
@@ -8476,7 +8561,7 @@ async function loadUpdateStatus(){
       <div class="form-row">
         <div class="form-group">
           <label>Responsável</label>
-          <input id="internalDemandResponsible" placeholder="Ex.: Anderson Junior">
+          <select id="internalDemandResponsible"><option value="">Ainda não definido</option></select>
         </div>
         <div class="form-group">
           <label>Tipo</label>
@@ -8549,7 +8634,7 @@ async function loadUpdateStatus(){
           </div>
           <div class="ch-summary-card wide">
             <small>Responsável</small>
-            <input id="chSummaryResponsible" placeholder="Definir responsável">
+            <select id="chSummaryResponsible"><option value="">Ainda não definido</option></select>
           </div>
           <div class="ch-summary-card">
             <small>Prioridade</small>
@@ -8670,11 +8755,9 @@ async function loadUpdateStatus(){
       <div class="ticket-info-box" id="ticketResponsibleSummary" style="margin-bottom:16px"></div>
       <div class="form-group">
         <label>Responsável pelo ajuste ou criação *</label>
-        <input id="ticketResponsibleName" list="ticketResponsibleSuggestions" placeholder="Digite o nome do responsável">
-        <datalist id="ticketResponsibleSuggestions">
-          <option value="Anderson Junior">
-          <option value="Vitor Souza">
-        </datalist>
+        <select id="ticketResponsibleName">
+          <option value="">Ainda não definido</option>
+        </select>
       </div>
       <div class="form-row">
         <div class="form-group">
