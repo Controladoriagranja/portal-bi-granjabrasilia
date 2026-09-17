@@ -5249,9 +5249,14 @@ function renderPortalTicketUserSelects(){
   const auth=authenticatedTicketRequester();
   const newRequester=document.getElementById('ticketRequesterName');
   const selectedNew=(newRequester?.value || auth.name || '');
-  fillPortalUserSelect('ticketRequesterName', selectedNew, false, portalTicketUsers);
+  const requesterUsers=isTicketAdmin()
+    ? portalTicketUsers
+    : (portalTicketUsers.some(u=>Number(u.id)===Number(auth.id))
+        ? portalTicketUsers.filter(u=>Number(u.id)===Number(auth.id))
+        : [{id:auth.id,nome:auth.name,email:auth.email}]);
+  fillPortalUserSelect('ticketRequesterName', selectedNew, false, requesterUsers);
   if(newRequester){
-    if(!isTicketAdmin()) newRequester.value=auth.name;
+    newRequester.value=auth.name;
     newRequester.disabled=!isTicketAdmin();
   }
   const help=document.getElementById('ticketRequesterHelp');
@@ -5735,7 +5740,12 @@ function openNewTicket() {
   const requesterNameInput = document.getElementById('ticketRequesterName');
   const authRequester = authenticatedTicketRequester();
   if (requesterNameInput) {
-    fillPortalUserSelect('ticketRequesterName', authRequester.name, false, portalTicketUsers);
+    const requesterUsers=isTicketAdmin()
+      ? portalTicketUsers
+      : (portalTicketUsers.some(u=>Number(u.id)===Number(authRequester.id))
+          ? portalTicketUsers.filter(u=>Number(u.id)===Number(authRequester.id))
+          : [{id:authRequester.id,nome:authRequester.name,email:authRequester.email}]);
+    fillPortalUserSelect('ticketRequesterName', authRequester.name, false, requesterUsers);
     requesterNameInput.value = authRequester.name;
     requesterNameInput.disabled = !isTicketAdmin();
   }
@@ -5822,11 +5832,11 @@ function createTicket() {
   const next = ticketStore.tickets.reduce((m,t)=>Math.max(m, Number(t.number)||0), 1053) + 1;
   const now = new Date().toISOString();
   const authRequester=authenticatedTicketRequester();
-  const selectedRequester=isTicketAdmin() ? portalUserByName(requesterName) : portalUserByName(authRequester.name);
+  const selectedRequester=isTicketAdmin() ? portalUserByName(requesterName) : null;
   if(isTicketAdmin() && !selectedRequester){
     showToast('Selecione um solicitante válido.', 'error'); return;
   }
-  const requester=selectedRequester || authRequester;
+  const requester=isTicketAdmin() ? selectedRequester : authRequester;
   const t = {
     id: Date.now(), number: next, title, type, project, description, objective, formula,
     demandKind:'chamado',
