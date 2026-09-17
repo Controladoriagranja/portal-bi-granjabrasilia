@@ -5247,7 +5247,7 @@ const TICKET_STORE_KEY = 'granjabi_ticket_module_v1';
   A fonte oficial dos chamados é a própria API do Portal BI (mesmo host e mesma porta).
 */
 const TICKET_API = 'https://portal-bi-granjabrasilia.onrender.com';
-const TICKET_SYNC_INTERVAL_MS = 3000;
+const TICKET_SYNC_INTERVAL_MS = 5000;
 
 const TICKET_MAX_FILE_BYTES = 10 * 1024 * 1024;
 const TICKET_MAX_FILES_PER_SEND = 5;
@@ -5363,6 +5363,9 @@ let ticketApprovalFiles = [];
 let ticketSyncTimer = null;
 let ticketApiOnline = false;
 let ticketSaveInProgress = false;
+let ticketPullInProgress = false;
+let ticketConsecutiveFailures = 0;
+let ticketHasConnectedOnce = false;
 let ticketPendingSaves = 0;
 let ticketSaveQueue = Promise.resolve();
 let ticketLastRemoteSignature = '';
@@ -5426,7 +5429,8 @@ function ticketStoreSignature(store) {
 
 async function ticketApiRequest(path, options={}) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20000);
+  // Render Free pode levar 50s+ para acordar após inatividade.
+  const timeout = setTimeout(() => controller.abort(), 90000);
 
   try {
     const res = await fetch(TICKET_API + path, {
@@ -5447,6 +5451,8 @@ async function ticketApiRequest(path, options={}) {
     }
 
     ticketApiOnline = true;
+    ticketHasConnectedOnce = true;
+    ticketConsecutiveFailures = 0;
     updateTicketSyncIndicator();
     return data;
   } finally {
@@ -5481,10 +5487,14 @@ function updateTicketSyncIndicator() {
     el.textContent = '● Sincronizado';
     el.style.color = '#238636';
     el.style.background = 'rgba(46,160,67,.09)';
+  } else if (ticketPullInProgress || !ticketHasConnectedOnce) {
+    el.textContent = '● Conectando...';
+    el.style.color = '#2967a6';
+    el.style.background = 'rgba(47,129,247,.09)';
   } else {
-    el.textContent = '● Modo local';
-    el.style.color = '#b7791f';
-    el.style.background = 'rgba(212,153,58,.10)';
+    el.textContent = '● Sem conexão';
+    el.style.color = '#b42318';
+    el.style.background = 'rgba(248,81,73,.09)';
   }
 }
 
@@ -5513,7 +5523,10 @@ function renderTicketsAfterRemoteSync() {
 }
 
 async function pullTicketStoreFromServer({silent=true}={}) {
-  if (ticketSaveInProgress) return false;
+  if (ticketSaveInProgress || ticketPullInProgress) return false;
+
+  ticketPullInProgress = true;
+  updateTicketSyncIndicator();
 
   try {
     const remote = normalizeTicketStore(await ticketApiRequest('/api/chamados'));
@@ -5526,14 +5539,22 @@ async function pullTicketStoreFromServer({silent=true}={}) {
       renderTicketsAfterRemoteSync();
     }
 
+    ticketApiOnline = true;
+    ticketHasConnectedOnce = true;
+    ticketConsecutiveFailures = 0;
     return true;
   } catch(e) {
-    ticketApiOnline = false;
-    updateTicketSyncIndicator();
+    ticketConsecutiveFailures += 1;
+    if (ticketConsecutiveFailures >= 2) {
+      ticketApiOnline = false;
+    }
     if (!silent) {
       console.warn('API de chamados indisponível:', e);
     }
     return false;
+  } finally {
+    ticketPullInProgress = false;
+    updateTicketSyncIndicator();
   }
 }
 
@@ -5562,9 +5583,15 @@ async function migrateLocalTicketsToServer() {
 }
 
 async function initCentralTicketSync() {
+  ticketApiOnline = false;
+  ticketPullInProgress = true;
+  updateTicketSyncIndicator();
+
   await loadPortalTicketUsers();
+
   // Neon é a fonte oficial. NÃO reenviamos cache local no login, pois um
   // navegador antigo poderia ressuscitar chamados já excluídos.
+  ticketPullInProgress = false;
   await pullTicketStoreFromServer({silent:false});
 
   clearInterval(ticketSyncTimer);
@@ -5603,7 +5630,10 @@ function saveTicketStore() {
       ticketApiOnline = false;
       updateTicketSyncIndicator();
       console.warn('Não foi possível salvar a alteração no Neon:', err);
-      showToast('Não foi possível salvar o chamado no servidor. O estado oficial será recarregado.', 'error');
+      const msg = (err?.name === 'AbortError')
+        ? 'O servidor demorou para responder. Aguarde alguns segundos e tente novamente.'
+        : 'Não foi possível salvar o chamado no servidor. Verifique a conexão e tente novamente.';
+      showToast(msg, 'error');
       return false;
     } finally {
       ticketPendingSaves = Math.max(0, ticketPendingSaves - 1);
