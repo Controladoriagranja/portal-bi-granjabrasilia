@@ -3449,9 +3449,6 @@
                     <input type="radio" name="euStatus" value="active"> <span style="color:#3fb950">● Ativo</span>
                   </label>
                   <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
-                    <input type="radio" name="euStatus" value="pending"> <span style="color:#f0b429">● Pendente</span>
-                  </label>
-                  <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
                     <input type="radio" name="euStatus" value="blocked"> <span style="color:#f85149">● Bloqueado</span>
                   </label>
                 </div>
@@ -3485,6 +3482,14 @@
           <div class="form-row">
             <div class="form-group"><label>Nome completo</label><input type="text" id="newUserName" placeholder="Maria da Silva"></div>
             <div class="form-group"><label>E-mail</label><input type="email" id="newUserEmail" placeholder="maria@empresa.com.br"></div>
+          </div>
+          <div class="form-group">
+            <label>Senha inicial</label>
+            <div style="display:flex;gap:10px">
+              <input type="password" id="newUserPwd" placeholder="Mínimo de 8 caracteres" autocomplete="new-password" style="flex:1">
+              <button type="button" class="btn-sm" onclick="document.getElementById('newUserPwd').value=generatePwd()" style="flex-shrink:0;white-space:nowrap">🎲 Gerar</button>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:5px">A senha é enviada somente ao backend para gerar o hash e não fica salva no navegador.</div>
           </div>
           <div class="form-group">
             <label>Perfil de acesso</label>
@@ -4089,6 +4094,8 @@ function pagePermissionKey(reportId, pageId) {
 }
 
 
+const PORTAL_FRONTEND_VERSION = '2026.09.17-crud-integrado-v1';
+
 const DEFAULT_DB = {
   sectors: [...DEFAULT_SECTORS],
   users: [
@@ -4099,40 +4106,75 @@ const DEFAULT_DB = {
 
 // ── Persistência localStorage ──
 // ── Firestore persistence ──
-function saveDB() {
-  // Nunca persistir credenciais no cache local nem enviá-las para a API.
-  if (Array.isArray(db.users)) {
-    db.users = db.users.map(({ pass, password, senha, ...usuario }) => usuario);
-  }
-  try {
-    localStorage.setItem('granjabi_db', JSON.stringify(db));
-  } catch(e) {}
+let portalSaveQueue = Promise.resolve({ok:true});
 
-  // Mantemos a assinatura síncrona para não quebrar as funções antigas.
-  // A gravação oficial acontece no Neon em segundo plano.
-  if (currentUser && (neonSessionToken || getPortalToken())) {
-    portalApiRequest('/api/portal-data', {
-      method: 'PUT',
-      body: JSON.stringify(db)
-    }).then(resposta => {
+function portalDbSnapshot() {
+  const snapshot = JSON.parse(JSON.stringify(db || {}));
+  snapshot.users = Array.isArray(snapshot.users)
+    ? snapshot.users.map(({pass,password,senha,initialPassword,newPassword,...usuario}) => usuario)
+    : [];
+  snapshot.reports = Array.isArray(snapshot.reports) ? snapshot.reports : [];
+  snapshot.sectors = Array.isArray(snapshot.sectors) ? snapshot.sectors : [];
+  snapshot.sectorMeta = snapshot.sectorMeta && typeof snapshot.sectorMeta === 'object'
+    ? snapshot.sectorMeta
+    : {};
+  return snapshot;
+}
+
+function cachePortalDb() {
+  try { localStorage.setItem('granjabi_db', JSON.stringify(portalDbSnapshot())); } catch(e) {}
+}
+
+function saveDB({passwordUpdates=[]}={}) {
+  cachePortalDb();
+
+  if (!currentUser || !(neonSessionToken || getPortalToken())) {
+    return Promise.resolve({ok:false, error:new Error('Sessão não autenticada.')});
+  }
+
+  const snapshot = portalDbSnapshot();
+  const transientPasswords = Array.isArray(passwordUpdates)
+    ? passwordUpdates.map(x=>({email:String(x?.email||'').trim().toLowerCase(),password:String(x?.password||'')}))
+    : [];
+
+  const task = portalSaveQueue.catch(()=>({ok:false})).then(async () => {
+    try {
+      const resposta = await portalApiRequest('/api/portal-data', {
+        method: 'PUT',
+        body: JSON.stringify({...snapshot, passwordUpdates:transientPasswords})
+      });
+
       if (resposta?.data) {
         applyLoadedData(resposta.data);
         syncSectors();
-
-        try {
-          localStorage.setItem('granjabi_db', JSON.stringify(db));
-        } catch(e) {}
+        cachePortalDb();
       }
-    }).catch(erro => {
+      return {ok:true, data:resposta?.data || null};
+    } catch (erro) {
       console.error('Falha ao salvar dados no Neon:', erro);
-      showToast?.(
-        erro?.message || 'Não foi possível salvar os dados no servidor.',
-        'error'
-      );
-    });
-  }
+      showToast?.(erro?.message || 'Não foi possível salvar os dados no servidor.', 'error');
+      return {ok:false, error:erro};
+    }
+  });
+
+  portalSaveQueue = task;
+  return task;
 }
 
+async function reloadPortalDataFromServer() {
+  try {
+    const remote = await loadRemoteData();
+    if (remote) {
+      applyLoadedData(remote);
+      syncSectors();
+      cachePortalDb();
+      return true;
+    }
+  } catch (erro) {
+    console.error('Falha ao recarregar dados oficiais do Portal:', erro);
+  }
+  return false;
+}
 
 
 function syncSectors() {
@@ -4287,6 +4329,7 @@ async function initApp() {
     showScreen('login');return;
   }
   currentUser=user;saveSession(user.id);initPortal();showScreen('portal');
+  await initCentralTicketSync();
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
@@ -4295,7 +4338,6 @@ window.addEventListener('DOMContentLoaded', async () => {
     console.error('Falha ao iniciar o portal:', erro);
     currentUser=null;clearSession();clearPortalToken();showScreen('login');
   }
-  setTimeout(()=>{if(currentUser){initCentralTicketSync();}},900);
 });
 
 // ═══════════════════════════════════════
@@ -4362,6 +4404,7 @@ async function handleLogin() {
     if(user.status==='pending'){document.getElementById('pendingEmail').textContent=user.email;showScreen('pending');return;}
     if(user.status==='blocked'||user.status==='inactive'){clearPortalToken();err.style.display='block';err.textContent='Seu acesso está inativo. Entre em contato com o administrador.';return;}
     currentUser=user;saveSession(user.id);document.getElementById('loginPass').value='';initPortal();showScreen('portal');
+    await initCentralTicketSync();
   } catch(erro) {
     console.error('Erro no login/API do Portal:',erro);clearPortalToken();err.style.display='block';
     err.textContent=erro?.message||'Não foi possível conectar ao serviço de autenticação.';
@@ -4850,34 +4893,37 @@ function renderAllUsersTable() {
   </tr>`).join('')}</tbody></table>`;
 }
 
-function approveUser(id) {
+async function approveUser(id) {
   const u = db.users.find(x => x.id === id);
   if (!u) return;
-  if (u.sectors.length === 0 && u.role !== 'director') {
+  if ((u.sectors || []).length === 0 && u.role !== 'director') {
     showToast('Configure os setores antes de aprovar!', 'error');
     switchView('access', document.querySelector('#nav-access'));
     return;
   }
   u.status = 'active';
-  saveDB();
+  const result = await saveDB();
+  if (!result.ok) { await reloadPortalDataFromServer(); renderUsersTable(); return; }
   renderUsersTable();
   showToast(`Acesso liberado para ${u.name}!`, 'success');
 }
 
-function blockUser(id) {
+async function blockUser(id) {
   const u = db.users.find(x => x.id === id);
   if (!u) return;
   u.status = 'blocked';
-  saveDB();
+  const result = await saveDB();
+  if (!result.ok) { await reloadPortalDataFromServer(); renderUsersTable(); return; }
   renderUsersTable();
-  showToast(`Acesso de ${u.name} bloqueado.`, 'error');
+  showToast(`Acesso de ${u.name} bloqueado.`, 'success');
 }
 
-function unblockUser(id) {
+async function unblockUser(id) {
   const u = db.users.find(x => x.id === id);
   if (!u) return;
   u.status = 'active';
-  saveDB();
+  const result = await saveDB();
+  if (!result.ok) { await reloadPortalDataFromServer(); renderUsersTable(); return; }
   renderUsersTable();
   showToast(`Acesso de ${u.name} reativado!`, 'success');
 }
@@ -4956,12 +5002,23 @@ function toggleCheck(el) {
   if (el.closest('#euSectorCheckGroup')) rebuildEditUserPageChecks();
 }
 
-function addUser() {
+async function addUser() {
   const name  = document.getElementById('newUserName').value.trim();
-  const email = document.getElementById('newUserEmail').value.trim();
+  const email = document.getElementById('newUserEmail').value.trim().toLowerCase();
   const role  = document.getElementById('newUserRole').value;
+  const initialPwd = document.getElementById('newUserPwd')?.value || '';
 
-  if (!name || !email || !role) { showToast('Preencha todos os campos!', 'error'); return; }
+  if (!name || !email || !role) { showToast('Preencha nome, e-mail e perfil!', 'error'); return; }
+
+  const existing = db.users.find(u => String(u.email||'').toLowerCase() === email);
+  if (!existing && initialPwd.length < 8) {
+    showToast('Defina uma senha inicial com pelo menos 8 caracteres.', 'error');
+    return;
+  }
+  if (initialPwd && initialPwd.length < 8) {
+    showToast('A senha deve possuir pelo menos 8 caracteres.', 'error');
+    return;
+  }
 
   const sectors = (role === 'sector')
     ? [...document.querySelectorAll('#sectorCheckGroup input:checked')].map(i => i.value)
@@ -4983,7 +5040,6 @@ function addUser() {
     showToast('Selecione pelo menos um relatório específico.', 'error'); return;
   }
 
-  const existing = db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
   if (existing) {
     existing.name = name;
     existing.status = 'active';
@@ -4992,19 +5048,24 @@ function addUser() {
     existing.reportAccessMode = reportAccessMode;
     existing.pageIds = [];
     existing.reportIds = reportIds;
-    saveDB();
-    showToast(`Acesso de ${name} atualizado!`, 'success');
   } else {
     db.users.push({
       id: Date.now(), name, email, role, sectors,
-      reportAccessMode, pageIds:[], reportIds, status: 'active'
+      reportAccessMode, pageIds:[], reportIds, status:'active', ticketPanelAccess:false
     });
-    saveDB();
-    showToast(`Usuário ${name} adicionado com sucesso!`, 'success');
+  }
+
+  const passwordUpdates = initialPwd ? [{email, password:initialPwd}] : [];
+  const result = await saveDB({passwordUpdates});
+  if (!result.ok) {
+    await reloadPortalDataFromServer();
+    renderUsersTable();
+    return;
   }
 
   document.getElementById('newUserName').value = '';
   document.getElementById('newUserEmail').value = '';
+  document.getElementById('newUserPwd').value = '';
   document.getElementById('newUserRole').value = '';
   document.getElementById('newUserReportMode').value = 'sector';
   document.getElementById('sectorField').style.display = 'none';
@@ -5013,6 +5074,7 @@ function addUser() {
   document.getElementById('newUserReportWarn').style.display = 'none';
   document.querySelectorAll('#sectorCheckGroup .check-item, #newUserReportCheckGroup .check-item').forEach(el => el.classList.remove('checked'));
   renderUsersTable();
+  showToast(existing ? `Acesso de ${name} atualizado!` : `Usuário ${name} criado com sucesso!`, 'success');
 }
 
 // ═══════════════════════════════════════
@@ -5073,7 +5135,7 @@ function previewUrl() {
   }
 }
 
-function saveReport() {
+async function saveReport() {
   const title  = document.getElementById('rTitle').value.trim();
   const desc   = document.getElementById('rDesc').value.trim();
   const embedInput = document.getElementById('rUrl').value.trim();
@@ -5092,7 +5154,8 @@ function saveReport() {
     url,
     updatedAt
   });
-  saveDB();
+  const result = await saveDB();
+  if (!result.ok) { await reloadPortalDataFromServer(); renderReportsMgr(); renderDashboard(); renderReportTabs(); return; }
   document.getElementById('rFormPanel').style.display = 'none';
   renderReportsMgr();
   renderDashboard();
@@ -5114,7 +5177,7 @@ function openEditReport(id) {
   document.getElementById('editModalOverlay').classList.add('open');
 }
 
-function saveEditReport() {
+async function saveEditReport() {
   const id     = parseInt(document.getElementById('eId').value);
   const title  = document.getElementById('eTitle').value.trim();
   const desc   = document.getElementById('eDesc').value.trim();
@@ -5129,7 +5192,8 @@ function saveEditReport() {
   const now = new Date();
   r.title = title; r.desc = desc; r.url = url; r.sector = sector;
   r.updatedAt = now.toISOString();
-  saveDB();
+  const result = await saveDB();
+  if (!result.ok) { await reloadPortalDataFromServer(); renderReportsMgr(); renderDashboard(); renderReportTabs(); return; }
   closeEditModal();
   renderReportsMgr();
   renderDashboard();
@@ -5157,15 +5221,16 @@ function confirmRemoveReport(id) {
   }
 }
 
-function removeReport(id) {
+async function removeReport(id) {
   const r = db.reports.find(x => x.id === id);
   const name = r ? r.title : '';
   db.reports = db.reports.filter(r => r.id !== id);
-  saveDB();
+  const result = await saveDB();
+  if (!result.ok) { await reloadPortalDataFromServer(); renderReportsMgr(); renderDashboard(); renderReportTabs(); return; }
   renderReportsMgr();
   renderDashboard();
   renderReportTabs();
-  showToast('Relatório "' + name + '" excluído.', 'error');
+  showToast('Relatório "' + name + '" excluído.', 'success');
 }
 
 
@@ -5298,6 +5363,8 @@ let ticketApprovalFiles = [];
 let ticketSyncTimer = null;
 let ticketApiOnline = false;
 let ticketSaveInProgress = false;
+let ticketPendingSaves = 0;
+let ticketSaveQueue = Promise.resolve();
 let ticketLastRemoteSignature = '';
 
 function defaultTicketStore() {
@@ -5309,10 +5376,22 @@ function defaultTicketStore() {
   };
 }
 
+function normalizeTicketStatus(status) {
+  const key=String(status||'').trim().toLowerCase();
+  return ({
+    pending:'queue',
+    approval:'awaiting_manager',
+    validation:'manager_validation',
+    completed:'done',
+    concluded:'done'
+  })[key] || key || 'queue';
+}
+
 function normalizeTicketStore(store) {
   const s = store && typeof store === 'object' ? store : {};
   if (!Array.isArray(s.managers)) s.managers = [];
   if (!Array.isArray(s.tickets)) s.tickets = [];
+  s.tickets = s.tickets.map(t=>({...t,status:normalizeTicketStatus(t?.status)}));
   if (!Number.isFinite(Number(s.revision))) s.revision = 0;
   return s;
 }
@@ -5347,7 +5426,7 @@ function ticketStoreSignature(store) {
 
 async function ticketApiRequest(path, options={}) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 7000);
+  const timeout = setTimeout(() => controller.abort(), 20000);
 
   try {
     const res = await fetch(TICKET_API + path, {
@@ -5484,10 +5563,9 @@ async function migrateLocalTicketsToServer() {
 
 async function initCentralTicketSync() {
   await loadPortalTicketUsers();
-  // Na primeira abertura desta versão, envia os chamados antigos deste navegador
-  // para o servidor central e recebe de volta a base consolidada.
-  await migrateLocalTicketsToServer();
-  await pullTicketStoreFromServer({silent:true});
+  // Neon é a fonte oficial. NÃO reenviamos cache local no login, pois um
+  // navegador antigo poderia ressuscitar chamados já excluídos.
+  await pullTicketStoreFromServer({silent:false});
 
   clearInterval(ticketSyncTimer);
   ticketSyncTimer = setInterval(() => {
@@ -5504,31 +5582,42 @@ async function initCentralTicketSync() {
 */
 function saveTicketStore() {
   cacheTicketStore();
-
   const snapshot = JSON.parse(JSON.stringify(ticketStore));
+  ticketPendingSaves += 1;
   ticketSaveInProgress = true;
 
-  ticketApiRequest('/api/chamados', {
-    method: 'PUT',
-    body: JSON.stringify(snapshot)
-  }).then(remote => {
-    ticketStore = normalizeTicketStore(remote);
-    ticketLastRemoteSignature = ticketStoreSignature(ticketStore);
-    cacheTicketStore();
-    ticketApiOnline = true;
-    updateTicketSyncIndicator();
-    renderTicketsAfterRemoteSync();
-  }).catch(err => {
-    ticketApiOnline = false;
-    updateTicketSyncIndicator();
-    console.warn('Alteração salva somente no cache local. API central indisponível:', err);
-  }).finally(() => {
-    ticketSaveInProgress = false;
+  const task = ticketSaveQueue.catch(()=>null).then(async () => {
+    try {
+      const remote = await ticketApiRequest('/api/chamados', {
+        method: 'PUT',
+        body: JSON.stringify(snapshot)
+      });
+      ticketStore = normalizeTicketStore(remote);
+      ticketLastRemoteSignature = ticketStoreSignature(ticketStore);
+      cacheTicketStore();
+      ticketApiOnline = true;
+      updateTicketSyncIndicator();
+      renderTicketsAfterRemoteSync();
+      return true;
+    } catch (err) {
+      ticketApiOnline = false;
+      updateTicketSyncIndicator();
+      console.warn('Não foi possível salvar a alteração no Neon:', err);
+      showToast('Não foi possível salvar o chamado no servidor. O estado oficial será recarregado.', 'error');
+      return false;
+    } finally {
+      ticketPendingSaves = Math.max(0, ticketPendingSaves - 1);
+      ticketSaveInProgress = ticketPendingSaves > 0;
+    }
   });
+
+  ticketSaveQueue = task;
+  return task;
 }
 
 async function deleteTicketFromServer(id) {
   try {
+    await ticketSaveQueue.catch(()=>null);
     const remote = normalizeTicketStore(await ticketApiRequest(`/api/chamados/${encodeURIComponent(id)}`, {
       method: 'DELETE'
     }));
@@ -5551,12 +5640,15 @@ function ticketStatusText(status) {
     done:'Concluído',
     returned:'Pendentes',
     rejected:'Aguardando aprovação',
-    requester_revision:'Aguardando aprovação'
+    requester_revision:'Aguardando aprovação',
+    pending:'Pendentes',
+    approval:'Aguardando aprovação',
+    validation:'Em validação'
   }[status] || status;
 }
 function ticketStatusClass(status) {
   if (status==='awaiting_manager' || status==='requester_revision') return 'wait';
-  if (status==='technical_review' || status==='queue') return 'queue';
+  if (status==='technical_review' || status==='queue' || status==='pending') return 'queue';
   if (status==='development') return 'dev';
   if (status==='manager_validation') return 'validate';
   if (status==='done') return 'done';
@@ -6142,11 +6234,12 @@ function renderTicketAdmin(){
 let draggedChamadoId = null;
 
 function ticketColumnKey(t){
-  if(t.status==='awaiting_manager') return 'approval';
-  if(['requester_revision','queue','returned','rejected'].includes(t.status)) return 'pending';
-  if(t.status==='development') return 'development';
-  if(t.status==='manager_validation') return 'validation';
-  if(t.status==='done') return 'done';
+  const status=normalizeTicketStatus(t?.status);
+  if(status==='awaiting_manager') return 'approval';
+  if(['requester_revision','queue','returned','rejected'].includes(status)) return 'pending';
+  if(status==='development') return 'development';
+  if(status==='manager_validation') return 'validation';
+  if(status==='done') return 'done';
   return 'pending';
 }
 
@@ -6406,7 +6499,7 @@ function openChamadoDetail(id){
   document.getElementById('chSummaryType').value=t.type||'';
   document.getElementById('chSummaryResponsible').value=t.assignedTo||'';
   document.getElementById('chSummaryPriority').value=t.priority||'Média';
-  document.getElementById('chSummaryStatus').value=t.status||'pending';
+  document.getElementById('chSummaryStatus').value=normalizeTicketStatus(t.status);
   document.getElementById('chSummaryStart').value=t.plannedStart||'';
   document.getElementById('chSummaryEnd').value=t.plannedEnd||'';
 
@@ -6443,7 +6536,7 @@ function openChamadoDetail(id){
 }
 
 
-function deleteCurrentChamado(){
+async function deleteCurrentChamado(){
   const t=getActiveChamado();
   if(!t){
     showToast('Nenhum chamado selecionado.','error');
@@ -6452,29 +6545,20 @@ function deleteCurrentChamado(){
 
   const tipo=(t.demandKind||'chamado')==='interna' ? 'demanda interna' : 'chamado';
   const nome=`${ticketDisplayNumber(t)} — ${t.title}`;
-
-  const ok=confirm(
-    `Excluir ${tipo} ${nome}?\n\nEsta ação removerá o item do quadro e não poderá ser desfeita.`
-  );
-
+  const ok=confirm(`Excluir ${tipo} ${nome}?\n\nEsta ação removerá o item da base central e não poderá ser desfeita.`);
   if(!ok) return;
 
-  ticketStore.tickets=ticketStore.tickets.filter(x=>Number(x.id)!==Number(t.id));
-  cacheTicketStore();
+  const apagado=await deleteTicketFromServer(t.id);
+  if(!apagado){
+    await pullTicketStoreFromServer({silent:false});
+    showToast('Não foi possível excluir no servidor. Nenhuma exclusão foi confirmada.','error');
+    return;
+  }
 
   closeChamadoDetail();
   renderTicketAdmin();
   updateTicketApprovalBadge();
-
-  deleteTicketFromServer(t.id).then(ok => {
-    if (ok) {
-      showToast(`${tipo==='chamado'?'Chamado':'Demanda interna'} excluído(a).`,'success');
-    } else {
-      // Fallback: sincroniza o estado atual completo.
-      saveTicketStore();
-      showToast('Exclusão registrada. A sincronização será tentada novamente.','success');
-    }
-  });
+  showToast(`${tipo==='chamado'?'Chamado':'Demanda interna'} excluído(a).`,'success');
 }
 
 function closeChamadoDetail(){
@@ -7935,7 +8019,7 @@ function toggleEuReportMode() {
   document.getElementById('euReportsField').style.display = (role === 'sector' && mode === 'specific') ? 'block' : 'none';
 }
 
-function saveEditUser() {
+async function saveEditUser() {
   const id     = parseInt(document.getElementById('euId').value);
   const name   = document.getElementById('euName').value.trim();
   const email  = document.getElementById('euEmail').value.trim();
@@ -7956,6 +8040,7 @@ function saveEditUser() {
   if (!name)   { showToast('Informe o nome!', 'error'); return; }
   if (!email)  { showToast('Informe o e-mail!', 'error'); return; }
   if (!status) { showToast('Selecione o status!', 'error'); return; }
+  if (newPwd && newPwd.length < 8) { showToast('A nova senha deve possuir pelo menos 8 caracteres.', 'error'); return; }
 
   let sectors = role === 'sector'
     ? [...document.querySelectorAll('#euSectorCheckGroup input:checked')].map(i => i.value)
@@ -7987,7 +8072,9 @@ function saveEditUser() {
   u.reportIds = reportIds;
   u.ticketPanelAccess = ticketPanelAccess;
 
-  saveDB();
+  const passwordUpdates = newPwd ? [{email, password:newPwd}] : [];
+  const result = await saveDB({passwordUpdates});
+  if (!result.ok) { await reloadPortalDataFromServer(); renderUsersTable(); return; }
   closeEditUser();
   renderUsersTable();
   showToast(`✅ Usuário ${name} atualizado!`, 'success');
@@ -7999,7 +8086,7 @@ function closeEditUser(e) {
   }
 }
 function statusBadge(s) {
-  const map = { active:['status-active','Ativo'], pending:['status-pending','Pendente'], blocked:['status-blocked','Bloqueado'] };
+  const map = { active:['status-active','Ativo'], pending:['status-pending','Pendente'], blocked:['status-blocked','Bloqueado'], inactive:['status-blocked','Bloqueado'] };
   const [cls,lbl] = map[s] || ['',''];
   return `<span class="status-badge ${cls}"><span class="status-dot"></span>${lbl}</span>`;
 }
@@ -8052,7 +8139,7 @@ function slugify(str) {
   return str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'');
 }
 
-function addSector() {
+async function addSector() {
   const name = document.getElementById('newSectorName').value.trim();
   if (!name) { showToast('Digite o nome do setor!', 'error'); return; }
   const slug = slugify(name);
@@ -8062,7 +8149,8 @@ function addSector() {
   db.sectorMeta[slug] = { label: name, color };
   db.sectors.push(slug);
   SECTORS.push(slug);
-  saveDB();
+  const result = await saveDB();
+  if (!result.ok) { await reloadPortalDataFromServer(); syncSectors(); renderSectorsList(); rebuildSectorSelects(); rebuildSectorCheckboxes(); return; }
   document.getElementById('newSectorName').value = '';
   renderSectorsList();
   rebuildSectorSelects();
@@ -8070,7 +8158,7 @@ function addSector() {
   showToast('Setor "' + name + '" criado!', 'success');
 }
 
-function removeSector(slug) {
+async function removeSector(slug) {
   const label = sectorLabel(slug);
   const usedInReports = db.reports.some(r => r.sector === slug);
   const usedInUsers   = db.users.some(u => u.sectors && u.sectors.includes(slug));
@@ -8082,11 +8170,30 @@ function removeSector(slug) {
   db.sectors = db.sectors.filter(s => s !== slug);
   SECTORS.splice(SECTORS.indexOf(slug), 1);
   if (db.sectorMeta) delete db.sectorMeta[slug];
-  saveDB();
+  const result = await saveDB();
+  if (!result.ok) { await reloadPortalDataFromServer(); syncSectors(); renderSectorsList(); rebuildSectorSelects(); rebuildSectorCheckboxes(); return; }
   renderSectorsList();
   rebuildSectorSelects();
   rebuildSectorCheckboxes();
-  showToast('Setor removido.', 'error');
+  showToast('Setor removido.', 'success');
+}
+
+async function editSector(slug) {
+  const atual=sectorLabel(slug);
+  const novo=prompt('Novo nome de exibição do setor:', atual);
+  if(novo===null) return;
+  const nome=String(novo||'').trim();
+  if(!nome){ showToast('O nome do setor não pode ficar vazio.','error'); return; }
+  if(!db.sectorMeta) db.sectorMeta={};
+  db.sectorMeta[slug]={...(db.sectorMeta[slug]||{}),label:nome};
+  const result=await saveDB();
+  if(!result.ok){ await reloadPortalDataFromServer(); syncSectors(); renderSectorsList(); return; }
+  renderSectorsList();
+  rebuildSectorSelects();
+  rebuildSectorCheckboxes();
+  renderReportsMgr();
+  renderReportTabs();
+  showToast('Setor atualizado.','success');
 }
 
 function renderSectorsList() {
@@ -8104,6 +8211,7 @@ function renderSectorsList() {
       <div class="sector-dot" style="background:${c}"></div>
       <div class="sector-name">${sectorLabel(s)}</div>
       <div class="sector-meta">${rCount} relatório${rCount!==1?'s':''} · ${uCount} usuário${uCount!==1?'s':''}</div>
+      <button class="action-btn edit" onclick="editSector('${s}')">✏ Editar</button>
       ${isDefault
         ? '<span style="font-size:11px;color:var(--text-dim);padding:3px 8px">padrão</span>'
         : `<button class="action-btn block" onclick="removeSector('${s}')">✕</button>`}
@@ -8731,10 +8839,10 @@ async function loadUpdateStatus(){
           <div class="ch-summary-card">
             <small>Status</small>
             <select id="chSummaryStatus">
-  <option value="approval">Aguardando aprovação</option>
-  <option value="pending">Pendentes</option>
+  <option value="awaiting_manager">Aguardando aprovação</option>
+  <option value="queue">Pendentes</option>
   <option value="development">Em desenvolvimento</option>
-  <option value="validation">Em validação</option>
+  <option value="manager_validation">Em validação</option>
   <option value="done">Concluídos</option>
 </select>
           </div>
