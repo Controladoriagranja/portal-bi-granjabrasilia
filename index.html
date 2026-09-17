@@ -38,6 +38,38 @@
   .screen { display: none; }
   .screen.active { display: flex; }
 
+
+  /* ══════════════ CARREGAMENTO INICIAL ══════════════ */
+  #screen-loading {
+    min-height: 100vh;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg);
+  }
+  .startup-loading-card {
+    width: min(420px, calc(100vw - 32px));
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 34px 30px;
+    text-align: center;
+    box-shadow: 0 14px 40px rgba(23,42,60,.08);
+  }
+  .startup-loading-card .spinner {
+    margin: 0 auto 18px;
+  }
+  .startup-loading-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 7px;
+  }
+  .startup-loading-text {
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--text-muted);
+  }
+
   /* ══════════════ LOGIN ══════════════ */
   #screen-login {
     min-height: 100vh;
@@ -3117,6 +3149,18 @@
 </head>
 <body>
 
+<!-- ═══════════ SCREEN: CARREGAMENTO ═══════════ -->
+<div id="screen-loading" class="screen active">
+  <div class="startup-loading-card">
+    <div class="spinner"></div>
+    <div class="startup-loading-title">Carregando Portal BI</div>
+    <div class="startup-loading-text">
+      Validando sua sessão e conectando ao servidor.<br>
+      No plano gratuito do Render, a primeira abertura pode levar alguns segundos.
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════ SCREEN: LOGIN ═══════════ -->
 <div id="screen-login" class="screen">
   <div class="login-card">
@@ -4274,10 +4318,13 @@ function clearPortalToken() {
 async function getNeonSession() {
   const token = neonSessionToken || getPortalToken();
   if (!token) return null;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 90000);
   try {
     const resposta = await fetch(PORTAL_API_BASE + "/api/auth/me", {
       method: "GET",
-      headers: {"Accept":"application/json", "Authorization": `Bearer ${token}`}
+      headers: {"Accept":"application/json", "Authorization": `Bearer ${token}`},
+      signal: controller.signal
     });
     if (!resposta.ok) { clearPortalToken(); return null; }
     const dados = await resposta.json();
@@ -4286,7 +4333,12 @@ async function getNeonSession() {
     return {user: dados.user, session: {token}};
   } catch (erro) {
     console.warn("Não foi possível validar a sessão do Portal:", erro);
-    return null;
+    if (erro?.name === 'AbortError') {
+      throw new Error("O servidor demorou para acordar. Atualize a página em alguns segundos.");
+    }
+    throw erro;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -4333,10 +4385,18 @@ async function initApp() {
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
-  try { await initApp(); }
-  catch (erro) {
+  try {
+    await initApp();
+  } catch (erro) {
     console.error('Falha ao iniciar o portal:', erro);
-    currentUser=null;clearSession();clearPortalToken();showScreen('login');
+    currentUser=null;
+    clearSession();
+    showScreen('login');
+    const err=document.getElementById('loginError');
+    if(err){
+      err.style.display='block';
+      err.textContent=erro?.message || 'Não foi possível carregar o Portal. Tente novamente.';
+    }
   }
 });
 
@@ -4372,11 +4432,24 @@ async function portalApiRequest(path, options = {}) {
   headers.set("Accept","application/json");
   headers.set("Authorization",`Bearer ${neonSessionToken}`);
   if(options.body&&!headers.has("Content-Type"))headers.set("Content-Type","application/json");
-  const resposta=await fetch(PORTAL_API_BASE+path,{...options,headers});
-  let dados=null;try{dados=await resposta.json();}catch(_){}
-  if(resposta.status===401){clearPortalToken();clearSession();throw new Error("Sessão expirada. Entre novamente.");}
-  if(!resposta.ok)throw new Error(dados?.erro||`Falha na API do Portal (${resposta.status}).`);
-  return dados;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 90000);
+
+  try {
+    const resposta=await fetch(PORTAL_API_BASE+path,{...options,headers,signal:controller.signal});
+    let dados=null;try{dados=await resposta.json();}catch(_){}
+    if(resposta.status===401){clearPortalToken();clearSession();throw new Error("Sessão expirada. Entre novamente.");}
+    if(!resposta.ok)throw new Error(dados?.erro||`Falha na API do Portal (${resposta.status}).`);
+    return dados;
+  } catch (erro) {
+    if (erro?.name === 'AbortError') {
+      throw new Error("O servidor demorou para responder. Aguarde alguns segundos e tente novamente.");
+    }
+    throw erro;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function handleLogin() {
@@ -8012,8 +8085,10 @@ function openEditUser(id) {
 
   const ticketPanelAccess = document.getElementById('euTicketPanelAccess');
   if (ticketPanelAccess) {
-    ticketPanelAccess.checked = u.role === 'admin' || u.ticketPanelAccess === true;
-    ticketPanelAccess.disabled = u.role === 'admin';
+    // Mostra exatamente o valor persistido no banco. Admin continua tendo
+    // acesso operacional ao painel pela própria role, independentemente da flag.
+    ticketPanelAccess.checked = u.ticketPanelAccess === true;
+    ticketPanelAccess.disabled = false;
   }
   rebuildEditUserPageChecks(u.reportIds || []);
 
@@ -8036,8 +8111,7 @@ function toggleEuSectors() {
 
   const ticketPanelAccess = document.getElementById('euTicketPanelAccess');
   if (ticketPanelAccess) {
-    ticketPanelAccess.disabled = role === 'admin';
-    if (role === 'admin') ticketPanelAccess.checked = true;
+    ticketPanelAccess.disabled = false;
   }
 
   toggleEuReportMode();
@@ -8052,27 +8126,24 @@ function toggleEuReportMode() {
 async function saveEditUser() {
   const id     = parseInt(document.getElementById('euId').value);
   const name   = document.getElementById('euName').value.trim();
-  const email  = document.getElementById('euEmail').value.trim();
+  const email  = document.getElementById('euEmail').value.trim().toLowerCase();
   const role   = document.getElementById('euRole').value;
   const status = document.querySelector('input[name="euStatus"]:checked')?.value;
-  const newPwd = document.getElementById('euNewPwd').value.trim();
+  const newPwd = document.getElementById('euNewPwd').value;
   const warn   = document.getElementById('euSectorWarn');
   const reportWarn = document.getElementById('euReportWarn');
   const reportAccessMode = role === 'sector' ? document.getElementById('euReportMode').value : 'sector';
   const reportIds = reportAccessMode === 'specific'
     ? [...document.querySelectorAll('#euReportCheckGroup input:checked')].map(i => Number(i.value))
     : [];
-
-  const ticketPanelAccess = role === 'admin'
-    ? true
-    : !!document.getElementById('euTicketPanelAccess')?.checked;
+  const ticketPanelAccess = !!document.getElementById('euTicketPanelAccess')?.checked;
 
   if (!name)   { showToast('Informe o nome!', 'error'); return; }
   if (!email)  { showToast('Informe o e-mail!', 'error'); return; }
   if (!status) { showToast('Selecione o status!', 'error'); return; }
   if (newPwd && newPwd.length < 8) { showToast('A nova senha deve possuir pelo menos 8 caracteres.', 'error'); return; }
 
-  let sectors = role === 'sector'
+  const sectors = role === 'sector'
     ? [...document.querySelectorAll('#euSectorCheckGroup input:checked')].map(i => i.value)
     : [...SECTORS];
 
@@ -8089,25 +8160,70 @@ async function saveEditUser() {
   warn.style.display = 'none';
   reportWarn.style.display = 'none';
 
-  const u = db.users.find(x => x.id === id);
+  const u = db.users.find(x => Number(x.id) === Number(id));
   if (!u) return;
 
-  u.name    = name;
-  u.email   = email;
-  u.role    = role;
-  u.status  = status;
-  u.sectors = sectors;
-  u.reportAccessMode = reportAccessMode;
-  u.pageIds = [];
-  u.reportIds = reportIds;
-  u.ticketPanelAccess = ticketPanelAccess;
+  const dbId = Number(u.dbId || u.id);
+  if (!Number.isFinite(dbId)) {
+    showToast('Não foi possível identificar o usuário no banco.', 'error');
+    return;
+  }
 
-  const passwordUpdates = newPwd ? [{email, password:newPwd}] : [];
-  const result = await saveDB({passwordUpdates});
-  if (!result.ok) { await reloadPortalDataFromServer(); renderUsersTable(); return; }
-  closeEditUser();
-  renderUsersTable();
-  showToast(`✅ Usuário ${name} atualizado!`, 'success');
+  const saveBtn = document.querySelector('#editUserOverlay .btn-sm.accent');
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Salvando...';
+  }
+
+  try {
+    const resposta = await portalApiRequest(`/api/admin/usuarios/${dbId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        name,
+        email,
+        role,
+        status,
+        sectors,
+        reportAccessMode,
+        reportIds,
+        ticketPanelAccess,
+        password: newPwd || ''
+      })
+    });
+
+    if (!resposta?.ok || !resposta?.data) {
+      throw new Error(resposta?.erro || 'Não foi possível atualizar o usuário.');
+    }
+
+    applyLoadedData(resposta.data);
+    syncSectors();
+    cachePortalDb();
+
+    // Reaplica currentUser caso o admin tenha editado a própria conta.
+    if (currentUser) {
+      const currentEmail = String(currentUser.email || '').toLowerCase();
+      const atualizado = db.users.find(x =>
+        Number(x.dbId || x.id) === Number(dbId) ||
+        String(x.email || '').toLowerCase() === currentEmail
+      );
+      if (atualizado) currentUser = atualizado;
+    }
+
+    document.getElementById('euNewPwd').value = '';
+    closeEditUser();
+    renderUsersTable();
+    showToast(`✅ Usuário ${name} atualizado no Neon!`, 'success');
+  } catch (erro) {
+    console.error('Falha ao atualizar usuário:', erro);
+    showToast(erro?.message || 'Não foi possível salvar o usuário.', 'error');
+    await reloadPortalDataFromServer();
+    renderUsersTable();
+  } finally {
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = '💾 Salvar Alterações';
+    }
+  }
 }
 
 function closeEditUser(e) {
