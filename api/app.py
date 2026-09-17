@@ -44,7 +44,7 @@ EXEC_THREAD = None
 
 EXTENSOES_DADOS = {".xlsx", ".xls", ".csv", ".parquet", ".html"}
 
-APP_VERSION = "2026.09.17-chamados-usuarios-v1"
+APP_VERSION = "2026.09.17-chamados-identidade-v1"
 APP_FILE = Path(__file__).resolve()
 
 # =============================================================================
@@ -348,6 +348,17 @@ def _numero_para_novo_chamado(conn, ticket_id, numero_solicitado):
 
 ANEXO_MAX_BYTES = 10 * 1024 * 1024
 ANEXOS_MAX_POR_ENVIO = 5
+RESPONSAVEIS_BI_IDS = (1, 36)
+
+
+def _usuario_portal_atual(conn, usuario_sessao):
+    if not isinstance(usuario_sessao, dict):
+        return None
+    for chave in ("id", "usuario_id", "user_id"):
+        usuario = _usuario_ativo_por_id(conn, usuario_sessao.get(chave))
+        if usuario:
+            return usuario
+    return _usuario_ativo_por_email(conn, usuario_sessao.get("email"))
 
 
 def _usuario_ativo_por_id(conn, usuario_id):
@@ -443,7 +454,7 @@ def _salvar_historico_ticket(conn, chamado_id, history):
         })
 
 
-def _upsert_ticket(conn, ticket):
+def _upsert_ticket(conn, ticket, usuario_sessao=None):
     if not isinstance(ticket, dict):
         return False
 
@@ -470,17 +481,35 @@ def _upsert_ticket(conn, ticket):
     criado_em = _timestamp_ou_none(ticket.get("createdAt"))
     _validar_anexos_ticket(ticket)
 
-    # Solicitante: e-mail do Portal é a referência principal; ID legado do
-    # navegador nunca prevalece sobre um usuário real encontrado pelo e-mail.
-    solicitante = _usuario_ativo_por_email(conn, ticket.get("requesterEmail"))
-    if solicitante is None:
-        solicitante = _usuario_ativo_por_id(conn, ticket.get("requesterId"))
+    # Solicitante = pessoa que abriu o chamado.
+    # Em chamado existente, nunca muda durante uma edição da equipe BI.
+    existente = conn.execute(text("""
+        SELECT solicitante_id, solicitante_nome, solicitante_email
+        FROM public.chamados
+        WHERE id = :id
+        LIMIT 1
+    """), {"id": ticket_id}).mappings().first()
 
-    # Responsável: usa o ID selecionado no Portal; mantém resolução pelo nome
+    solicitante = None
+    if existente:
+        solicitante = _usuario_ativo_por_id(conn, existente["solicitante_id"])
+        if solicitante is None:
+            solicitante = _usuario_ativo_por_email(conn, existente["solicitante_email"])
+    else:
+        solicitante = _usuario_portal_atual(conn, usuario_sessao)
+
+    if solicitante is None and existente:
+        solicitante = _usuario_ativo_por_email(conn, ticket.get("requesterEmail"))
+        if solicitante is None:
+            solicitante = _usuario_ativo_por_id(conn, ticket.get("requesterId"))
+
+    # Responsável = analista/desenvolvedor BI.
     # para chamados antigos que ainda não possuíam responsavel_id.
     responsavel_usuario = _usuario_ativo_por_id(conn, ticket.get("assignedToId"))
     if responsavel_usuario is None:
         responsavel_usuario = _usuario_ativo_por_nome(conn, ticket.get("assignedTo"))
+    if responsavel_usuario and int(responsavel_usuario["id"]) not in RESPONSAVEIS_BI_IDS:
+        raise ValueError("Responsável inválido. Selecione Vitor Souza ou Anderson Jr.")
 
     params = {
         "id": ticket_id,
@@ -599,7 +628,7 @@ def salvar_chamados_store(data, somente_gestores_se_vazio=False):
     with CHAMADOS_LOCK:
         with engine.begin() as conn:
             for ticket in incoming_tickets:
-                _upsert_ticket(conn, ticket)
+                _upsert_ticket(conn, ticket, usuario)
 
             if incoming_managers:
                 if not somente_gestores_se_vazio:
@@ -3212,6 +3241,7 @@ def api_chamados_usuarios():
                 SELECT id, nome, email, perfil, role
                 FROM public.usuarios
                 WHERE ativo = TRUE
+                  AND id IN (1, 36)
                 ORDER BY nome, id
             """)).mappings().all()
 
