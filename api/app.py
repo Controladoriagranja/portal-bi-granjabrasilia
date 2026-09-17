@@ -44,7 +44,7 @@ EXEC_THREAD = None
 
 EXTENSOES_DADOS = {".xlsx", ".xls", ".csv", ".parquet", ".html"}
 
-APP_VERSION = "2026.09.17-chamados-identidade-v1"
+APP_VERSION = "2026.09.17-chamados-solicitante-admin-v1"
 APP_FILE = Path(__file__).resolve()
 
 # =============================================================================
@@ -361,6 +361,15 @@ def _usuario_portal_atual(conn, usuario_sessao):
     return _usuario_ativo_por_email(conn, usuario_sessao.get("email"))
 
 
+def _usuario_portal_e_admin(conn, usuario_sessao):
+    usuario = _usuario_portal_atual(conn, usuario_sessao)
+    if not usuario:
+        return False
+    perfil = str(usuario.get("perfil") or "").strip().lower()
+    role = str(usuario.get("role") or "").strip().lower()
+    return perfil == "admin" or role == "admin"
+
+
 def _usuario_ativo_por_id(conn, usuario_id):
     try:
         usuario_id = int(usuario_id)
@@ -481,8 +490,10 @@ def _upsert_ticket(conn, ticket, usuario_sessao=None):
     criado_em = _timestamp_ou_none(ticket.get("createdAt"))
     _validar_anexos_ticket(ticket)
 
-    # Solicitante = pessoa que abriu o chamado.
-    # Em chamado existente, nunca muda durante uma edição da equipe BI.
+    # Solicitante:
+    # - usuário comum: sempre ele próprio ao abrir; não pode trocar depois;
+    # - admin: pode abrir em nome de qualquer usuário ativo e também trocar
+    #   o solicitante de um chamado existente.
     existente = conn.execute(text("""
         SELECT solicitante_id, solicitante_nome, solicitante_email
         FROM public.chamados
@@ -490,18 +501,29 @@ def _upsert_ticket(conn, ticket, usuario_sessao=None):
         LIMIT 1
     """), {"id": ticket_id}).mappings().first()
 
+    usuario_atual = _usuario_portal_atual(conn, usuario_sessao)
+    admin_atual = _usuario_portal_e_admin(conn, usuario_sessao)
     solicitante = None
-    if existente:
+
+    if admin_atual:
+        solicitante = _usuario_ativo_por_id(conn, ticket.get("requesterId"))
+        if solicitante is None:
+            solicitante = _usuario_ativo_por_email(conn, ticket.get("requesterEmail"))
+        if solicitante is None:
+            solicitante = _usuario_ativo_por_nome(conn, ticket.get("requesterName"))
+        if solicitante is None:
+            raise ValueError("Solicitante inválido. Selecione um usuário ativo do Portal.")
+    elif existente:
         solicitante = _usuario_ativo_por_id(conn, existente["solicitante_id"])
         if solicitante is None:
             solicitante = _usuario_ativo_por_email(conn, existente["solicitante_email"])
-    else:
-        solicitante = _usuario_portal_atual(conn, usuario_sessao)
-
-    if solicitante is None and existente:
-        solicitante = _usuario_ativo_por_email(conn, ticket.get("requesterEmail"))
         if solicitante is None:
-            solicitante = _usuario_ativo_por_id(conn, ticket.get("requesterId"))
+            solicitante = usuario_atual
+    else:
+        solicitante = usuario_atual
+
+    if solicitante is None:
+        raise ValueError("Não foi possível identificar o solicitante do chamado.")
 
     # Responsável = analista/desenvolvedor BI.
     # para chamados antigos que ainda não possuíam responsavel_id.
@@ -620,7 +642,7 @@ def _salvar_gestores(conn, managers):
         })
 
 
-def salvar_chamados_store(data, somente_gestores_se_vazio=False):
+def salvar_chamados_store(data, somente_gestores_se_vazio=False, usuario_sessao=None):
     data = data if isinstance(data, dict) else {}
     incoming_tickets = data.get("tickets") if isinstance(data.get("tickets"), list) else []
     incoming_managers = data.get("managers") if isinstance(data.get("managers"), list) else []
@@ -628,7 +650,7 @@ def salvar_chamados_store(data, somente_gestores_se_vazio=False):
     with CHAMADOS_LOCK:
         with engine.begin() as conn:
             for ticket in incoming_tickets:
-                _upsert_ticket(conn, ticket, usuario)
+                _upsert_ticket(conn, ticket, usuario_sessao)
 
             if incoming_managers:
                 if not somente_gestores_se_vazio:
@@ -3241,7 +3263,6 @@ def api_chamados_usuarios():
                 SELECT id, nome, email, perfil, role
                 FROM public.usuarios
                 WHERE ativo = TRUE
-                  AND id IN (1, 36)
                 ORDER BY nome, id
             """)).mappings().all()
 
@@ -3253,6 +3274,7 @@ def api_chamados_usuarios():
                 "email": r["email"],
                 "perfil": r["perfil"],
                 "role": r["role"],
+                "pode_ser_responsavel": int(r["id"]) in RESPONSAVEIS_BI_IDS,
             } for r in rows]
         })
     except Exception as e:
@@ -3290,7 +3312,7 @@ def api_chamados():
             return jsonify(ler_chamados_store())
 
         body = request.get_json(silent=True) or {}
-        salvo = salvar_chamados_store(body)
+        salvo = salvar_chamados_store(body, usuario_sessao=usuario)
 
         log(
             f"Base de chamados sincronizada no Neon. "
@@ -3312,7 +3334,7 @@ def api_chamados_merge():
         return _resposta_nao_autorizado()
     try:
         body = request.get_json(silent=True) or {}
-        salvo = salvar_chamados_store(body, somente_gestores_se_vazio=True)
+        salvo = salvar_chamados_store(body, somente_gestores_se_vazio=True, usuario_sessao=usuario)
 
         log(
             f"Migração/mesclagem de chamados para o Neon executada. "
