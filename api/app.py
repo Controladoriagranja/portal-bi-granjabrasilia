@@ -44,7 +44,7 @@ EXEC_THREAD = None
 
 EXTENSOES_DADOS = {".xlsx", ".xls", ".csv", ".parquet", ".html"}
 
-APP_VERSION = "2026.09.17-chamados-solicitante-admin-v1"
+APP_VERSION = "2026.09.17-crud-integrado-v1"
 APP_FILE = Path(__file__).resolve()
 
 # =============================================================================
@@ -219,6 +219,19 @@ def _ticket_timestamp(ticket):
     return str(ticket.get("updatedAt") or ticket.get("createdAt") or "")
 
 
+def _normalizar_status_chamado(status):
+    status = str(status or "").strip().lower()
+    mapa = {
+        "": "queue",
+        "pending": "queue",
+        "approval": "awaiting_manager",
+        "validation": "manager_validation",
+        "completed": "done",
+        "concluded": "done",
+    }
+    return mapa.get(status, status)
+
+
 def _linha_para_ticket(row, historico=None):
     return {
         "id": int(row["id"]),
@@ -234,7 +247,7 @@ def _linha_para_ticket(row, historico=None):
         "requesterName": row["solicitante_nome"] or "",
         "requesterContact": row["solicitante_contato"] or "",
         "requesterEmail": row["solicitante_email"] or "",
-        "status": row["status"] or "queue",
+        "status": _normalizar_status_chamado(row["status"]),
         "priority": row["prioridade"] or "Média",
         "assignedTo": row["responsavel"] or "",
         "assignedToId": int(row["responsavel_id"]) if row["responsavel_id"] is not None else None,
@@ -319,7 +332,22 @@ def _montar_store_chamados(conn):
 
 def ler_chamados_store():
     try:
-        with engine.connect() as conn:
+        with engine.begin() as conn:
+            # Normalização definitiva de valores legados gerados por versões
+            # antigas do frontend. Isso elimina o status literal "pending".
+            conn.execute(text("""
+                UPDATE public.chamados
+                SET status = CASE
+                    WHEN LOWER(status) = 'pending' THEN 'queue'
+                    WHEN LOWER(status) = 'approval' THEN 'awaiting_manager'
+                    WHEN LOWER(status) = 'validation' THEN 'manager_validation'
+                    WHEN LOWER(status) IN ('completed', 'concluded') THEN 'done'
+                    ELSE status
+                END
+                WHERE LOWER(status) IN (
+                    'pending', 'approval', 'validation', 'completed', 'concluded'
+                )
+            """))
             return _montar_store_chamados(conn)
     except Exception as e:
         log(f"Falha ao ler chamados no Neon: {e}", "ERRO")
@@ -547,7 +575,7 @@ def _upsert_ticket(conn, ticket, usuario_sessao=None):
         "solicitante_nome": solicitante["nome"] if solicitante else (str(ticket.get("requesterName") or "")[:200] or None),
         "solicitante_contato": str(ticket.get("requesterContact") or "")[:200] or None,
         "solicitante_email": solicitante["email"] if solicitante else (str(ticket.get("requesterEmail") or "")[:250] or None),
-        "status": str(ticket.get("status") or "queue")[:50],
+        "status": _normalizar_status_chamado(ticket.get("status"))[:50],
         "prioridade": str(ticket.get("priority") or "Média")[:30],
         "responsavel": responsavel_usuario["nome"] if responsavel_usuario else (str(ticket.get("assignedTo") or "")[:200] or None),
         "responsavel_id": int(responsavel_usuario["id"]) if responsavel_usuario else None,
@@ -2283,11 +2311,12 @@ def carregar_portal_data_neon():
             uid = r["id"]
             users.append({
                 "id": r["legacy_id"] if r["legacy_id"] is not None else uid,
+                "dbId": int(uid),
                 "name": r["nome"],
                 "email": r["email"],
                 "role": r["role"] or "sector",
                 "sectors": setores_por_usuario.get(uid, []),
-                "status": "active" if r["ativo"] else "inactive",
+                "status": "active" if r["ativo"] else "blocked",
                 "reportAccessMode": r["report_access_mode"] or "sector",
                 "pageIds": paginas_por_usuario.get(uid, []),
                 "reportIds": relatorios_por_usuario.get(uid, []),
@@ -2312,6 +2341,7 @@ def carregar_portal_data_neon():
         """)).mappings():
             reports.append({
                 "id": r["legacy_id"] if r["legacy_id"] is not None else r["id"],
+                "dbId": int(r["id"]),
                 "title": r["titulo"],
                 "desc": r["descricao"] or "",
                 "sector": r["setor"],
@@ -2329,72 +2359,121 @@ def carregar_portal_data_neon():
 
 
 def salvar_portal_data_neon(payload):
-    users = payload.get("users") or []
-    reports = payload.get("reports") or []
-    sectors = payload.get("sectors") or []
+    if not isinstance(payload, dict):
+        raise ValueError("Payload inválido.")
+
+    users = payload.get("users")
+    reports = payload.get("reports")
+    sectors = payload.get("sectors")
     sector_meta = payload.get("sectorMeta") or {}
+    password_updates = payload.get("passwordUpdates") or []
+
+    # O PUT representa o estado oficial completo do Portal. Exigimos as três
+    # coleções para evitar que um payload parcial remova dados por acidente.
+    if not isinstance(users, list) or not isinstance(reports, list) or not isinstance(sectors, list):
+        raise ValueError("users, reports e sectors devem ser listas.")
+    if not isinstance(sector_meta, dict):
+        raise ValueError("sectorMeta inválido.")
+    if not isinstance(password_updates, list):
+        raise ValueError("passwordUpdates inválido.")
 
     with engine.begin() as conn:
+        # ------------------------------------------------------------------
+        # SETORES — cria/atualiza por código estável; remoção é soft-delete.
+        # ------------------------------------------------------------------
         setor_ids = {}
         codigos = set(str(s).strip() for s in sectors if str(s).strip())
         for u in users:
-            codigos.update(str(s).strip() for s in (u.get("sectors") or []) if str(s).strip())
+            if isinstance(u, dict):
+                codigos.update(
+                    str(s).strip()
+                    for s in (u.get("sectors") or [])
+                    if str(s).strip()
+                )
         for r in reports:
-            if r.get("sector"):
+            if isinstance(r, dict) and r.get("sector"):
                 codigos.add(str(r.get("sector")).strip())
 
         for codigo in sorted(codigos):
             meta = sector_meta.get(codigo, {}) or {}
-            label = meta.get("label") or codigo.replace("_", " ").title()
+            label = str(meta.get("label") or codigo.replace("_", " ").title()).strip()
             cor = meta.get("color")
-            setor_id = conn.execute(text("""
-                INSERT INTO setores (nome, codigo, label, cor, ativo)
-                VALUES (:nome, :codigo, :label, :cor, TRUE)
-                ON CONFLICT (nome) DO UPDATE SET
-                    codigo = EXCLUDED.codigo,
-                    label = EXCLUDED.label,
-                    cor = EXCLUDED.cor,
-                    ativo = TRUE
-                RETURNING id
-            """), {"nome": label, "codigo": codigo, "label": label, "cor": cor}).scalar_one()
+
+            existente = conn.execute(text("""
+                SELECT id
+                FROM public.setores
+                WHERE codigo = :codigo
+                ORDER BY id
+                LIMIT 1
+            """), {"codigo": codigo}).scalar()
+
+            if existente is not None:
+                setor_id = int(existente)
+                conn.execute(text("""
+                    UPDATE public.setores
+                    SET nome = :nome,
+                        label = :label,
+                        cor = :cor,
+                        ativo = TRUE
+                    WHERE id = :id
+                """), {
+                    "id": setor_id,
+                    "nome": label,
+                    "label": label,
+                    "cor": cor,
+                })
+            else:
+                setor_id = int(conn.execute(text("""
+                    INSERT INTO public.setores (nome, codigo, label, cor, ativo)
+                    VALUES (:nome, :codigo, :label, :cor, TRUE)
+                    RETURNING id
+                """), {
+                    "nome": label,
+                    "codigo": codigo,
+                    "label": label,
+                    "cor": cor,
+                }).scalar_one())
+
             setor_ids[codigo] = setor_id
 
+        # ------------------------------------------------------------------
+        # USUÁRIOS — update por dbId/legacy_id; e-mail pode ser alterado sem
+        # duplicar a pessoa. Bloqueio usa ativo=FALSE em vez de exclusão física.
+        # ------------------------------------------------------------------
         usuario_ids = {}
         for u in users:
+            if not isinstance(u, dict):
+                continue
             email = str(u.get("email") or "").strip().lower()
             if not email:
                 continue
-            legacy_id = u.get("id")
-            try:
-                legacy_id = int(legacy_id) if legacy_id is not None else None
-            except Exception:
-                legacy_id = None
 
-            usuario_id = conn.execute(text("""
-                INSERT INTO usuarios (
-                    legacy_id, nome, email, perfil, ativo, role,
-                    report_access_mode, allow_updates, ticket_panel_access,
-                    supervisor_code, atualizado_em
-                ) VALUES (
-                    :legacy_id, :nome, :email, :perfil, :ativo, :role,
-                    :report_access_mode, :allow_updates, :ticket_panel_access,
-                    :supervisor_code, NOW()
-                )
-                ON CONFLICT (email) DO UPDATE SET
-                    legacy_id = EXCLUDED.legacy_id,
-                    nome = EXCLUDED.nome,
-                    perfil = EXCLUDED.perfil,
-                    ativo = EXCLUDED.ativo,
-                    role = EXCLUDED.role,
-                    report_access_mode = EXCLUDED.report_access_mode,
-                    allow_updates = EXCLUDED.allow_updates,
-                    ticket_panel_access = EXCLUDED.ticket_panel_access,
-                    supervisor_code = EXCLUDED.supervisor_code,
-                    atualizado_em = NOW()
-                RETURNING id
-            """), {
+            def _int_ou_none(valor):
+                try:
+                    return int(valor) if valor is not None and str(valor).strip() != "" else None
+                except Exception:
+                    return None
+
+            db_id = _int_ou_none(u.get("dbId"))
+            legacy_id = _int_ou_none(u.get("id"))
+
+            usuario_id = None
+            if db_id is not None:
+                usuario_id = conn.execute(text("""
+                    SELECT id FROM public.usuarios WHERE id = :id LIMIT 1
+                """), {"id": db_id}).scalar()
+            if usuario_id is None and legacy_id is not None:
+                usuario_id = conn.execute(text("""
+                    SELECT id FROM public.usuarios WHERE legacy_id = :legacy_id LIMIT 1
+                """), {"legacy_id": legacy_id}).scalar()
+            if usuario_id is None:
+                usuario_id = conn.execute(text("""
+                    SELECT id FROM public.usuarios WHERE LOWER(email) = :email LIMIT 1
+                """), {"email": email}).scalar()
+
+            params_usuario = {
                 "legacy_id": legacy_id,
-                "nome": u.get("name") or email,
+                "nome": str(u.get("name") or email).strip(),
                 "email": email,
                 "perfil": _perfil_portal_por_role(u.get("role")),
                 "ativo": str(u.get("status") or "active").lower() == "active",
@@ -2403,69 +2482,145 @@ def salvar_portal_data_neon(payload):
                 "allow_updates": bool(u.get("allowUpdates", False)),
                 "ticket_panel_access": bool(u.get("ticketPanelAccess", False)),
                 "supervisor_code": str(u.get("supervisorCode")) if u.get("supervisorCode") is not None else None,
-            }).scalar_one()
+            }
+
+            if usuario_id is not None:
+                usuario_id = int(usuario_id)
+                conn.execute(text("""
+                    UPDATE public.usuarios
+                    SET legacy_id = COALESCE(:legacy_id, legacy_id),
+                        nome = :nome,
+                        email = :email,
+                        perfil = :perfil,
+                        ativo = :ativo,
+                        role = :role,
+                        report_access_mode = :report_access_mode,
+                        allow_updates = :allow_updates,
+                        ticket_panel_access = :ticket_panel_access,
+                        supervisor_code = :supervisor_code,
+                        atualizado_em = NOW()
+                    WHERE id = :id
+                """), {**params_usuario, "id": usuario_id})
+            else:
+                usuario_id = int(conn.execute(text("""
+                    INSERT INTO public.usuarios (
+                        legacy_id, nome, email, perfil, ativo, role,
+                        report_access_mode, allow_updates, ticket_panel_access,
+                        supervisor_code, atualizado_em
+                    ) VALUES (
+                        :legacy_id, :nome, :email, :perfil, :ativo, :role,
+                        :report_access_mode, :allow_updates, :ticket_panel_access,
+                        :supervisor_code, NOW()
+                    )
+                    RETURNING id
+                """), params_usuario).scalar_one())
+
             usuario_ids[email] = usuario_id
 
-            conn.execute(text("DELETE FROM usuario_setores WHERE usuario_id = :id"), {"id": usuario_id})
+            conn.execute(text(
+                "DELETE FROM public.usuario_setores WHERE usuario_id = :id"
+            ), {"id": usuario_id})
             for codigo in u.get("sectors") or []:
                 sid = setor_ids.get(str(codigo))
                 if sid:
                     conn.execute(text("""
-                        INSERT INTO usuario_setores (usuario_id, setor_id)
+                        INSERT INTO public.usuario_setores (usuario_id, setor_id)
                         VALUES (:uid, :sid) ON CONFLICT DO NOTHING
                     """), {"uid": usuario_id, "sid": sid})
 
-            conn.execute(text("DELETE FROM usuario_paginas WHERE usuario_id = :id"), {"id": usuario_id})
+            conn.execute(text(
+                "DELETE FROM public.usuario_paginas WHERE usuario_id = :id"
+            ), {"id": usuario_id})
             for page_id in u.get("pageIds") or []:
-                # O schema atual aceita BIGINT. Chaves compostas antigas (ex. 123::visao)
-                # serão tratadas quando migrarmos definitivamente as permissões de páginas.
                 try:
                     page_id_int = int(page_id)
                 except Exception:
                     continue
                 conn.execute(text("""
-                    INSERT INTO usuario_paginas (usuario_id, page_id)
+                    INSERT INTO public.usuario_paginas (usuario_id, page_id)
                     VALUES (:uid, :pid) ON CONFLICT DO NOTHING
                 """), {"uid": usuario_id, "pid": page_id_int})
 
+        # ------------------------------------------------------------------
+        # RELATÓRIOS — cria/atualiza por dbId ou legacy_id.
+        # ------------------------------------------------------------------
         relatorio_ids = {}
+        incoming_report_db_ids = set()
+        incoming_report_legacy_ids = set()
+
         for r in reports:
-            legacy_id = r.get("id")
-            try:
-                legacy_id = int(legacy_id) if legacy_id is not None else None
-            except Exception:
-                legacy_id = None
+            if not isinstance(r, dict):
+                continue
+
+            def _int_rel(valor):
+                try:
+                    return int(valor) if valor is not None and str(valor).strip() != "" else None
+                except Exception:
+                    return None
+
+            db_id = _int_rel(r.get("dbId"))
+            legacy_id = _int_rel(r.get("id"))
             sid = setor_ids.get(str(r.get("sector") or ""))
-            relatorio_id = conn.execute(text("""
-                INSERT INTO relatorios (
-                    legacy_id, titulo, descricao, setor_id, url, atualizado_em
-                ) VALUES (
-                    :legacy_id, :titulo, :descricao, :setor_id, :url, :atualizado_em
-                )
-                ON CONFLICT (legacy_id) WHERE legacy_id IS NOT NULL DO UPDATE SET
-                    titulo = EXCLUDED.titulo,
-                    descricao = EXCLUDED.descricao,
-                    setor_id = EXCLUDED.setor_id,
-                    url = EXCLUDED.url,
-                    atualizado_em = EXCLUDED.atualizado_em
-                RETURNING id
-            """), {
+
+            relatorio_id = None
+            if db_id is not None:
+                relatorio_id = conn.execute(text("""
+                    SELECT id FROM public.relatorios WHERE id = :id LIMIT 1
+                """), {"id": db_id}).scalar()
+            if relatorio_id is None and legacy_id is not None:
+                relatorio_id = conn.execute(text("""
+                    SELECT id FROM public.relatorios WHERE legacy_id = :legacy_id LIMIT 1
+                """), {"legacy_id": legacy_id}).scalar()
+
+            params_relatorio = {
                 "legacy_id": legacy_id,
-                "titulo": r.get("title") or "Sem título",
+                "titulo": str(r.get("title") or "Sem título").strip(),
                 "descricao": r.get("desc"),
                 "setor_id": sid,
                 "url": r.get("url") or "",
                 "atualizado_em": r.get("updatedAt"),
-            }).scalar_one()
+            }
+
+            if relatorio_id is not None:
+                relatorio_id = int(relatorio_id)
+                conn.execute(text("""
+                    UPDATE public.relatorios
+                    SET legacy_id = COALESCE(:legacy_id, legacy_id),
+                        titulo = :titulo,
+                        descricao = :descricao,
+                        setor_id = :setor_id,
+                        url = :url,
+                        atualizado_em = COALESCE(:atualizado_em, NOW())
+                    WHERE id = :id
+                """), {**params_relatorio, "id": relatorio_id})
+            else:
+                relatorio_id = int(conn.execute(text("""
+                    INSERT INTO public.relatorios (
+                        legacy_id, titulo, descricao, setor_id, url, atualizado_em
+                    ) VALUES (
+                        :legacy_id, :titulo, :descricao, :setor_id, :url,
+                        COALESCE(:atualizado_em, NOW())
+                    )
+                    RETURNING id
+                """), params_relatorio).scalar_one())
+
+            incoming_report_db_ids.add(relatorio_id)
             if legacy_id is not None:
+                incoming_report_legacy_ids.add(legacy_id)
                 relatorio_ids[legacy_id] = relatorio_id
 
+        # Regrava permissões de relatórios dos usuários usando apenas relatórios
+        # que continuam existindo no payload oficial.
         for u in users:
+            if not isinstance(u, dict):
+                continue
             email = str(u.get("email") or "").strip().lower()
             usuario_id = usuario_ids.get(email)
             if not usuario_id:
                 continue
-            conn.execute(text("DELETE FROM usuario_relatorios WHERE usuario_id = :id"), {"id": usuario_id})
+            conn.execute(text(
+                "DELETE FROM public.usuario_relatorios WHERE usuario_id = :id"
+            ), {"id": usuario_id})
             for legacy_rid in u.get("reportIds") or []:
                 try:
                     legacy_rid = int(legacy_rid)
@@ -2474,12 +2629,63 @@ def salvar_portal_data_neon(payload):
                 rid = relatorio_ids.get(legacy_rid)
                 if rid:
                     conn.execute(text("""
-                        INSERT INTO usuario_relatorios (usuario_id, relatorio_id)
+                        INSERT INTO public.usuario_relatorios (usuario_id, relatorio_id)
                         VALUES (:uid, :rid) ON CONFLICT DO NOTHING
                     """), {"uid": usuario_id, "rid": rid})
 
-    return carregar_portal_data_neon()
+        # Excluir de verdade relatórios removidos no CRUD. Relações são apagadas
+        # primeiro para não depender de ON DELETE CASCADE do schema.
+        existentes_relatorios = conn.execute(text("""
+            SELECT id FROM public.relatorios ORDER BY id
+        """)).scalars().all()
+        for rid in existentes_relatorios:
+            rid = int(rid)
+            if rid in incoming_report_db_ids:
+                continue
+            conn.execute(text(
+                "DELETE FROM public.usuario_relatorios WHERE relatorio_id = :rid"
+            ), {"rid": rid})
+            conn.execute(text(
+                "DELETE FROM public.relatorios WHERE id = :rid"
+            ), {"rid": rid})
 
+        # Setores retirados do CRUD ficam inativos (soft-delete). Isso preserva
+        # histórico sem fazê-los reaparecer no Portal.
+        setores_existentes = conn.execute(text("""
+            SELECT id, codigo FROM public.setores WHERE ativo = TRUE
+        """)).mappings().all()
+        for setor in setores_existentes:
+            codigo = str(setor.get("codigo") or "").strip()
+            if codigo and codigo not in codigos:
+                conn.execute(text("""
+                    UPDATE public.setores SET ativo = FALSE WHERE id = :id
+                """), {"id": int(setor["id"])})
+
+        # Atualizações de senha são transitórias: nunca entram no retorno, cache
+        # ou localStorage. O hash é gerado no PostgreSQL com pgcrypto.
+        for item in password_updates:
+            if not isinstance(item, dict):
+                continue
+            email = str(item.get("email") or "").strip().lower()
+            senha = str(item.get("password") or "")
+            if not email:
+                raise ValueError("E-mail obrigatório para redefinir senha.")
+            if len(senha) < 8:
+                raise ValueError("A senha deve possuir pelo menos 8 caracteres.")
+            if len(senha) > 128:
+                raise ValueError("A senha excede o limite permitido.")
+
+            atualizado = conn.execute(text("""
+                UPDATE public.usuarios
+                SET senha_hash = crypt(:senha, gen_salt('bf', 12)),
+                    atualizado_em = NOW()
+                WHERE LOWER(email) = :email
+                RETURNING id
+            """), {"email": email, "senha": senha}).scalar()
+            if atualizado is None:
+                raise ValueError("Usuário não encontrado para redefinição de senha.")
+
+    return carregar_portal_data_neon()
 
 
 # =============================================================================
@@ -2726,6 +2932,8 @@ def api_portal_data():
 
         return jsonify({"ok": True, "data": salvo})
 
+    except ValueError as e:
+        return jsonify({"ok": False, "erro": str(e)}), 400
     except RuntimeError as e:
         log(f"Configuração de autenticação inválida: {e}", "ERRO")
         return jsonify({
