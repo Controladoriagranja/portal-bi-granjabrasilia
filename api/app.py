@@ -44,7 +44,7 @@ EXEC_THREAD = None
 
 EXTENSOES_DADOS = {".xlsx", ".xls", ".csv", ".parquet", ".html"}
 
-APP_VERSION = "2026.09.16-heartbeat-v1"
+APP_VERSION = "2026.09.17-chamados-neon-v1"
 APP_FILE = Path(__file__).resolve()
 
 # =============================================================================
@@ -186,144 +186,358 @@ def resolver_caminho_script(robo):
 
 
 # =============================================================================
-# CHAMADOS — PERSISTÊNCIA CENTRAL
+# CHAMADOS — PERSISTÊNCIA CENTRAL NO NEON
 # =============================================================================
 
 def chamados_now_iso():
     return datetime.now().astimezone().isoformat()
 
 
-def normalizar_chamados_store(data):
-    if not isinstance(data, dict):
-        data = {}
+def _json_lista(valor):
+    return valor if isinstance(valor, list) else []
 
-    tickets = data.get("tickets")
-    managers = data.get("managers")
 
-    if not isinstance(tickets, list):
-        tickets = []
+def _data_ou_none(valor):
+    valor = str(valor or "").strip()
+    return valor[:10] if valor else None
 
-    if not isinstance(managers, list):
-        managers = []
 
+def _timestamp_ou_none(valor):
+    if not valor:
+        return None
     try:
-        revision = int(data.get("revision", 0))
+        return datetime.fromisoformat(str(valor).replace("Z", "+00:00"))
     except Exception:
-        revision = 0
+        return None
+
+
+def _iso(valor):
+    return valor.isoformat() if valor is not None else None
+
+
+def _ticket_timestamp(ticket):
+    return str(ticket.get("updatedAt") or ticket.get("createdAt") or "")
+
+
+def _linha_para_ticket(row, historico=None):
+    return {
+        "id": int(row["id"]),
+        "number": int(row["numero"]),
+        "title": row["titulo"] or "",
+        "type": row["tipo"] or "",
+        "project": row["setor"] or "",
+        "description": row["descricao"] or "",
+        "objective": row["objetivo"] or "",
+        "formula": row["formula"] or "",
+        "demandKind": row["tipo_demanda"] or "externa",
+        "requesterId": int(row["solicitante_id"]) if row["solicitante_id"] is not None else None,
+        "requesterName": row["solicitante_nome"] or "",
+        "requesterContact": row["solicitante_contato"] or "",
+        "requesterEmail": row["solicitante_email"] or "",
+        "status": row["status"] or "queue",
+        "priority": row["prioridade"] or "Média",
+        "assignedTo": row["responsavel"] or "",
+        "plannedStart": str(row["inicio_previsto"]) if row["inicio_previsto"] else "",
+        "plannedEnd": str(row["fim_previsto"]) if row["fim_previsto"] else "",
+        "attachments": _json_lista(row["anexos"]),
+        "comments": _json_lista(row["comentarios"]),
+        "checklist": _json_lista(row["checklist"]),
+        "tags": _json_lista(row["tags"]),
+        "boardOrder": row["ordem_kanban"],
+        "delayReason": row["motivo_atraso"] or "",
+        "delayReasonUpdatedAt": _iso(row["motivo_atraso_atualizado_em"]),
+        "returnPriority": row["prioridade_retorno"] or "",
+        "createdAt": _iso(row["criado_em"]),
+        "updatedAt": _iso(row["atualizado_em"]),
+        "history": historico or [],
+    }
+
+
+def _ler_historico_chamados(conn):
+    rows = conn.execute(text("""
+        SELECT chamado_id, usuario_id, usuario_nome, acao, detalhe, criado_em
+        FROM public.historico_chamados
+        ORDER BY criado_em ASC, id ASC
+    """)).mappings().all()
+
+    por_chamado = {}
+    for row in rows:
+        por_chamado.setdefault(int(row["chamado_id"]), []).append({
+            "at": _iso(row["criado_em"]),
+            "by": row["usuario_nome"] or "",
+            "action": row["acao"] or "",
+            "detail": row["detalhe"] or "",
+        })
+    return por_chamado
+
+
+def _ler_gestores_chamados(conn):
+    rows = conn.execute(text("""
+        SELECT id, nome, email, tipo_aprovacao, ativo
+        FROM public.gestores_chamados
+        ORDER BY nome, id
+    """)).mappings().all()
+    return [{
+        "id": int(r["id"]),
+        "name": r["nome"],
+        "email": r["email"],
+        "approvalType": r["tipo_aprovacao"] or "both",
+        "active": bool(r["ativo"]),
+    } for r in rows]
+
+
+def _montar_store_chamados(conn):
+    historico = _ler_historico_chamados(conn)
+    rows = conn.execute(text("""
+        SELECT
+            id, numero, titulo, tipo, setor, descricao, objetivo, formula,
+            tipo_demanda, solicitante_id, solicitante_nome, solicitante_contato,
+            solicitante_email, status, prioridade, responsavel,
+            inicio_previsto, fim_previsto, anexos, comentarios, checklist, tags,
+            ordem_kanban, motivo_atraso, motivo_atraso_atualizado_em,
+            prioridade_retorno, criado_em, atualizado_em
+        FROM public.chamados
+        ORDER BY atualizado_em DESC, id DESC
+    """)).mappings().all()
+
+    tickets = [
+        _linha_para_ticket(row, historico.get(int(row["id"]), []))
+        for row in rows
+    ]
+
+    ultima = max((r["atualizado_em"] for r in rows), default=None)
+    revision = int(ultima.timestamp() * 1000) if ultima else 0
 
     return {
-        "managers": managers,
+        "managers": _ler_gestores_chamados(conn),
         "tickets": tickets,
         "revision": revision,
-        "updatedAt": data.get("updatedAt"),
+        "updatedAt": _iso(ultima),
     }
 
 
 def ler_chamados_store():
-    with CHAMADOS_LOCK:
-        if not CHAMADOS_FILE.exists():
-            CHAMADOS_FILE.parent.mkdir(parents=True, exist_ok=True)
-            CHAMADOS_FILE.write_text(
-                json.dumps(CHAMADOS_EMPTY_STORE, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-
-        try:
-            data = json.loads(CHAMADOS_FILE.read_text(encoding="utf-8"))
-            return normalizar_chamados_store(data)
-        except Exception as e:
-            log(f"Falha ao ler base de chamados: {e}", "ERRO")
-            return dict(CHAMADOS_EMPTY_STORE)
-
-
-def backup_chamados_store():
     try:
-        if not CHAMADOS_FILE.exists():
-            return
-
-        CHAMADOS_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-
-        stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        destino = CHAMADOS_BACKUP_DIR / f"chamados_{stamp}.json"
-        shutil.copy2(CHAMADOS_FILE, destino)
-
-        backups = sorted(
-            CHAMADOS_BACKUP_DIR.glob("chamados_*.json"),
-            reverse=True
-        )
-
-        # Mantém somente os 100 backups mais recentes.
-        for antigo in backups[100:]:
-            antigo.unlink(missing_ok=True)
-
+        with engine.connect() as conn:
+            return _montar_store_chamados(conn)
     except Exception as e:
-        log(f"Falha ao criar backup dos chamados: {e}", "WARN")
+        log(f"Falha ao ler chamados no Neon: {e}", "ERRO")
+        raise
 
 
-def salvar_chamados_store(data):
-    with CHAMADOS_LOCK:
-        atual = ler_chamados_store()
-        store = normalizar_chamados_store(data)
+def _numero_para_novo_chamado(conn, ticket_id, numero_solicitado):
+    try:
+        numero = int(numero_solicitado)
+    except Exception:
+        numero = None
 
-        backup_chamados_store()
+    if numero is not None:
+        dono = conn.execute(text("""
+            SELECT id FROM public.chamados WHERE numero = :numero LIMIT 1
+        """), {"numero": numero}).scalar()
+        if dono is None or int(dono) == int(ticket_id):
+            return numero
 
-        store["revision"] = int(atual.get("revision", 0)) + 1
-        store["updatedAt"] = chamados_now_iso()
+    return int(conn.execute(text("""
+        SELECT GREATEST(COALESCE(MAX(numero), 1053) + 1, 1054)
+        FROM public.chamados
+    """)).scalar_one())
 
-        CHAMADOS_FILE.parent.mkdir(parents=True, exist_ok=True)
 
-        temporario = CHAMADOS_FILE.with_suffix(".json.tmp")
-        temporario.write_text(
-            json.dumps(store, ensure_ascii=False, indent=2),
-            encoding="utf-8",
+def _salvar_historico_ticket(conn, chamado_id, history):
+    conn.execute(text(
+        "DELETE FROM public.historico_chamados WHERE chamado_id = :chamado_id"
+    ), {"chamado_id": chamado_id})
+
+    for item in _json_lista(history):
+        if not isinstance(item, dict):
+            continue
+        acao = str(item.get("action") or "Atualização")[:250]
+        conn.execute(text("""
+            INSERT INTO public.historico_chamados
+                (chamado_id, usuario_nome, acao, detalhe, criado_em)
+            VALUES
+                (:chamado_id, :usuario_nome, :acao, :detalhe,
+                 COALESCE(:criado_em, NOW()))
+        """), {
+            "chamado_id": chamado_id,
+            "usuario_nome": str(item.get("by") or "")[:200] or None,
+            "acao": acao,
+            "detalhe": str(item.get("detail") or "") or None,
+            "criado_em": _timestamp_ou_none(item.get("at")),
+        })
+
+
+def _upsert_ticket(conn, ticket):
+    if not isinstance(ticket, dict):
+        return False
+
+    try:
+        ticket_id = int(ticket.get("id"))
+    except Exception:
+        return False
+
+    existente = conn.execute(text("""
+        SELECT id, atualizado_em
+        FROM public.chamados
+        WHERE id = :id
+    """), {"id": ticket_id}).mappings().first()
+
+    incoming_updated = _timestamp_ou_none(ticket.get("updatedAt"))
+    if existente is not None and incoming_updated is not None:
+        db_updated = existente["atualizado_em"]
+        if db_updated is not None and incoming_updated < db_updated - timedelta(seconds=2):
+            return False
+
+    numero = _numero_para_novo_chamado(conn, ticket_id, ticket.get("number"))
+    titulo = str(ticket.get("title") or "").strip() or f"Chamado #{numero}"
+    descricao = str(ticket.get("description") or "").strip() or "Sem descrição."
+    criado_em = _timestamp_ou_none(ticket.get("createdAt"))
+
+    params = {
+        "id": ticket_id,
+        "numero": numero,
+        "titulo": titulo[:250],
+        "tipo": str(ticket.get("type") or "")[:100] or None,
+        "setor": str(ticket.get("project") or "")[:150] or None,
+        "descricao": descricao,
+        "objetivo": str(ticket.get("objective") or "") or None,
+        "formula": str(ticket.get("formula") or "") or None,
+        "tipo_demanda": str(ticket.get("demandKind") or "externa")[:30],
+        "solicitante_id": ticket.get("requesterId") if str(ticket.get("requesterId") or "").isdigit() else None,
+        "solicitante_nome": str(ticket.get("requesterName") or "")[:200] or None,
+        "solicitante_contato": str(ticket.get("requesterContact") or "")[:200] or None,
+        "solicitante_email": str(ticket.get("requesterEmail") or "")[:250] or None,
+        "status": str(ticket.get("status") or "queue")[:50],
+        "prioridade": str(ticket.get("priority") or "Média")[:30],
+        "responsavel": str(ticket.get("assignedTo") or "")[:200] or None,
+        "inicio_previsto": _data_ou_none(ticket.get("plannedStart")),
+        "fim_previsto": _data_ou_none(ticket.get("plannedEnd")),
+        "anexos": json.dumps(_json_lista(ticket.get("attachments")), ensure_ascii=False),
+        "comentarios": json.dumps(_json_lista(ticket.get("comments")), ensure_ascii=False),
+        "checklist": json.dumps(_json_lista(ticket.get("checklist")), ensure_ascii=False),
+        "tags": json.dumps(_json_lista(ticket.get("tags")), ensure_ascii=False),
+        "ordem_kanban": int(ticket.get("boardOrder")) if str(ticket.get("boardOrder") or "").lstrip("-").isdigit() else None,
+        "motivo_atraso": str(ticket.get("delayReason") or "") or None,
+        "motivo_atraso_atualizado_em": _timestamp_ou_none(ticket.get("delayReasonUpdatedAt")),
+        "prioridade_retorno": str(ticket.get("returnPriority") or "")[:30] or None,
+        "criado_em": criado_em,
+    }
+
+    conn.execute(text("""
+        INSERT INTO public.chamados (
+            id, numero, titulo, tipo, setor, descricao, objetivo, formula,
+            tipo_demanda, solicitante_id, solicitante_nome, solicitante_contato,
+            solicitante_email, status, prioridade, responsavel,
+            inicio_previsto, fim_previsto, anexos, comentarios, checklist, tags,
+            ordem_kanban, motivo_atraso, motivo_atraso_atualizado_em,
+            prioridade_retorno, criado_em
+        ) VALUES (
+            :id, :numero, :titulo, :tipo, :setor, :descricao, :objetivo, :formula,
+            :tipo_demanda, :solicitante_id, :solicitante_nome, :solicitante_contato,
+            :solicitante_email, :status, :prioridade, :responsavel,
+            :inicio_previsto, :fim_previsto, CAST(:anexos AS jsonb),
+            CAST(:comentarios AS jsonb), CAST(:checklist AS jsonb), CAST(:tags AS jsonb),
+            :ordem_kanban, :motivo_atraso, :motivo_atraso_atualizado_em,
+            :prioridade_retorno, COALESCE(:criado_em, NOW())
         )
-        os.replace(temporario, CHAMADOS_FILE)
+        ON CONFLICT (id) DO UPDATE SET
+            numero = EXCLUDED.numero,
+            titulo = EXCLUDED.titulo,
+            tipo = EXCLUDED.tipo,
+            setor = EXCLUDED.setor,
+            descricao = EXCLUDED.descricao,
+            objetivo = EXCLUDED.objetivo,
+            formula = EXCLUDED.formula,
+            tipo_demanda = EXCLUDED.tipo_demanda,
+            solicitante_id = EXCLUDED.solicitante_id,
+            solicitante_nome = EXCLUDED.solicitante_nome,
+            solicitante_contato = EXCLUDED.solicitante_contato,
+            solicitante_email = EXCLUDED.solicitante_email,
+            status = EXCLUDED.status,
+            prioridade = EXCLUDED.prioridade,
+            responsavel = EXCLUDED.responsavel,
+            inicio_previsto = EXCLUDED.inicio_previsto,
+            fim_previsto = EXCLUDED.fim_previsto,
+            anexos = EXCLUDED.anexos,
+            comentarios = EXCLUDED.comentarios,
+            checklist = EXCLUDED.checklist,
+            tags = EXCLUDED.tags,
+            ordem_kanban = EXCLUDED.ordem_kanban,
+            motivo_atraso = EXCLUDED.motivo_atraso,
+            motivo_atraso_atualizado_em = EXCLUDED.motivo_atraso_atualizado_em,
+            prioridade_retorno = EXCLUDED.prioridade_retorno
+    """), params)
 
-        return store
+    _salvar_historico_ticket(conn, ticket_id, ticket.get("history"))
+    return True
 
 
-def _ticket_timestamp(ticket):
-    return str(
-        ticket.get("updatedAt")
-        or ticket.get("createdAt")
-        or ""
-    )
+def _salvar_gestores(conn, managers):
+    if not isinstance(managers, list):
+        return
+    for manager in managers:
+        if not isinstance(manager, dict):
+            continue
+        email = str(manager.get("email") or "").strip().lower()
+        nome = str(manager.get("name") or "").strip()
+        if not email or not nome:
+            continue
+        conn.execute(text("""
+            INSERT INTO public.gestores_chamados
+                (nome, email, tipo_aprovacao, ativo)
+            VALUES
+                (:nome, :email, :tipo_aprovacao, :ativo)
+            ON CONFLICT ((LOWER(email))) DO UPDATE SET
+                nome = EXCLUDED.nome,
+                tipo_aprovacao = EXCLUDED.tipo_aprovacao,
+                ativo = EXCLUDED.ativo,
+                atualizado_em = NOW()
+        """), {
+            "nome": nome[:200],
+            "email": email[:250],
+            "tipo_aprovacao": str(manager.get("approvalType") or "both")[:30],
+            "ativo": bool(manager.get("active", True)),
+        })
+
+
+def salvar_chamados_store(data, somente_gestores_se_vazio=False):
+    data = data if isinstance(data, dict) else {}
+    incoming_tickets = data.get("tickets") if isinstance(data.get("tickets"), list) else []
+    incoming_managers = data.get("managers") if isinstance(data.get("managers"), list) else []
+
+    with CHAMADOS_LOCK:
+        with engine.begin() as conn:
+            for ticket in incoming_tickets:
+                _upsert_ticket(conn, ticket)
+
+            if incoming_managers:
+                if not somente_gestores_se_vazio:
+                    _salvar_gestores(conn, incoming_managers)
+                else:
+                    total = conn.execute(text(
+                        "SELECT COUNT(*) FROM public.gestores_chamados"
+                    )).scalar_one()
+                    if int(total or 0) == 0:
+                        _salvar_gestores(conn, incoming_managers)
+
+            return _montar_store_chamados(conn)
 
 
 def mesclar_chamados(server_tickets, incoming_tickets):
-    """
-    Mescla chamados antigos vindos do localStorage de diferentes PCs.
-    O ID do chamado é usado como chave.
-    Em caso de repetição, mantém a versão com updatedAt mais recente.
-    """
+    """Compatibilidade com o frontend legado; a decisão final ocorre no Neon."""
     merged = {}
-
     for item in server_tickets or []:
-        if not isinstance(item, dict):
-            continue
-
-        key = str(item.get("id", ""))
-        if key:
-            merged[key] = item
-
+        if isinstance(item, dict) and item.get("id") is not None:
+            merged[str(item["id"])] = item
     for item in incoming_tickets or []:
-        if not isinstance(item, dict):
+        if not isinstance(item, dict) or item.get("id") is None:
             continue
-
-        key = str(item.get("id", ""))
-        if not key:
-            continue
-
+        key = str(item["id"])
         anterior = merged.get(key)
-
-        if (
-            anterior is None
-            or _ticket_timestamp(item) >= _ticket_timestamp(anterior)
-        ):
+        if anterior is None or _ticket_timestamp(item) >= _ticket_timestamp(anterior):
             merged[key] = item
-
     return list(merged.values())
-
 
 
 # =============================================================================
@@ -2394,6 +2608,36 @@ def api_portal_data():
 # Estes endpoints reutilizam a autenticação atual do Portal e exigem ADMIN.
 # =============================================================================
 
+
+HEARTBEAT_STALE_MINUTES = 3
+
+def _interromper_jobs_sem_heartbeat(conn):
+    """Marca jobs executando sem heartbeat há mais de 3 minutos como interrompidos."""
+    rows = conn.execute(text("""
+        UPDATE public.jobs
+        SET
+            status = 'interrompido',
+            finalizado_em = NOW(),
+            erro = CASE
+                WHEN erro IS NULL OR BTRIM(erro) = '' THEN
+                    'Execução interrompida automaticamente: BI Agent sem heartbeat por mais de 3 minutos.'
+                ELSE erro
+            END
+        WHERE status = 'executando'
+          AND ultimo_heartbeat IS NOT NULL
+          AND ultimo_heartbeat < NOW() - INTERVAL '3 minutes'
+        RETURNING id, agent_id, ultimo_heartbeat
+    """)).mappings().all()
+
+    for row in rows:
+        log(
+            f"Job #{row['id']} marcado como interrompido: heartbeat expirado | "
+            f"agent_id={row.get('agent_id') or 'não informado'} | "
+            f"ultimo_heartbeat={row.get('ultimo_heartbeat')}",
+            "AVISO",
+        )
+    return len(rows)
+
 def _job_publico(row):
     """Converte uma linha de public.jobs em JSON estável para o frontend."""
     if not row:
@@ -2538,7 +2782,8 @@ def api_listar_jobs():
         if bloqueio:
             return bloqueio
 
-        with engine.connect() as conn:
+        with engine.begin() as conn:
+            _interromper_jobs_sem_heartbeat(conn)
             rows = conn.execute(text("""
                 SELECT
                     j.id,
@@ -2588,7 +2833,8 @@ def api_consultar_job(job_id):
         if bloqueio:
             return bloqueio
 
-        with engine.connect() as conn:
+        with engine.begin() as conn:
+            _interromper_jobs_sem_heartbeat(conn)
             row = conn.execute(text("""
                 SELECT
                     j.id,
@@ -2677,6 +2923,7 @@ def api_agent_claim_job():
         ).strip()[:255] or None
 
         with engine.begin() as conn:
+            _interromper_jobs_sem_heartbeat(conn)
             row = conn.execute(text("""
                 WITH proximo AS (
                     SELECT j.id
@@ -2860,113 +3107,92 @@ def api_agent_finish_job(job_id):
 
 
 # =============================================================================
-# ROTAS — CHAMADOS MULTIUSUÁRIO
+# ROTAS — CHAMADOS MULTIUSUÁRIO (NEON)
 # =============================================================================
 
 @app.route("/api/chamados/health", methods=["GET"])
 def api_chamados_health():
-    store = ler_chamados_store()
-    return jsonify({
-        "ok": True,
-        "servico": "chamados",
-        "revision": store.get("revision", 0),
-        "total_chamados": len(store.get("tickets", [])),
-        "arquivo": str(CHAMADOS_FILE),
-        "hora": chamados_now_iso(),
-    })
+    try:
+        with engine.connect() as conn:
+            total = conn.execute(text("SELECT COUNT(*) FROM public.chamados")).scalar_one()
+            ultima = conn.execute(text(
+                "SELECT MAX(atualizado_em) FROM public.chamados"
+            )).scalar_one()
+        return jsonify({
+            "ok": True,
+            "servico": "chamados",
+            "persistencia": "neon-postgresql",
+            "total_chamados": int(total or 0),
+            "updatedAt": _iso(ultima),
+            "hora": chamados_now_iso(),
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "erro": str(e)}), 500
 
 
 @app.route("/api/chamados", methods=["GET", "PUT"])
 def api_chamados():
-    if request.method == "GET":
-        return jsonify(ler_chamados_store())
+    try:
+        if request.method == "GET":
+            return jsonify(ler_chamados_store())
 
-    body = request.get_json(silent=True) or {}
+        body = request.get_json(silent=True) or {}
+        salvo = salvar_chamados_store(body)
 
-    # IMPORTANTE:
-    # nunca substitui a base inteira pelo estado de um único navegador.
-    # Faz merge por ID e updatedAt para impedir que um PC com tela antiga
-    # apague chamados criados em outro PC.
-    with CHAMADOS_LOCK:
-        atual = ler_chamados_store()
-
-        atualizado = dict(atual)
-        atualizado["tickets"] = mesclar_chamados(
-            atual.get("tickets", []),
-            body.get("tickets", []),
+        log(
+            f"Base de chamados sincronizada no Neon. "
+            f"Total: {len(salvo.get('tickets', []))}",
+            "INFO",
         )
-
-        if isinstance(body.get("managers"), list):
-            atualizado["managers"] = body.get("managers", [])
-
-        salvo = salvar_chamados_store(atualizado)
-
-    log(
-        f"Base central de chamados sincronizada. "
-        f"Total: {len(salvo.get('tickets', []))}",
-        "INFO",
-    )
-
-    return jsonify(salvo)
+        return jsonify(salvo)
+    except Exception as e:
+        log(f"Falha ao sincronizar chamados no Neon: {e}", "ERRO")
+        return jsonify({"erro": "Falha ao sincronizar chamados no Neon."}), 500
 
 
 @app.route("/api/chamados/merge", methods=["POST"])
 def api_chamados_merge():
-    body = request.get_json(silent=True) or {}
+    try:
+        body = request.get_json(silent=True) or {}
+        salvo = salvar_chamados_store(body, somente_gestores_se_vazio=True)
 
-    incoming_tickets = body.get("tickets", [])
-    incoming_managers = body.get("managers", [])
-
-    with CHAMADOS_LOCK:
-        atual = ler_chamados_store()
-
-        atualizado = dict(atual)
-        atualizado["tickets"] = mesclar_chamados(
-            atual.get("tickets", []),
-            incoming_tickets,
+        log(
+            f"Migração/mesclagem de chamados para o Neon executada. "
+            f"Total central: {len(salvo.get('tickets', []))}",
+            "INFO",
         )
-
-        # managers antigos ficam apenas para compatibilidade.
-        if (
-            not atualizado.get("managers")
-            and isinstance(incoming_managers, list)
-        ):
-            atualizado["managers"] = incoming_managers
-
-        salvo = salvar_chamados_store(atualizado)
-
-    log(
-        f"Migração/mesclagem de chamados executada. "
-        f"Total central: {len(salvo.get('tickets', []))}",
-        "INFO",
-    )
-
-    return jsonify(salvo)
+        return jsonify(salvo)
+    except Exception as e:
+        log(f"Falha ao mesclar chamados no Neon: {e}", "ERRO")
+        return jsonify({"erro": "Falha ao mesclar chamados no Neon."}), 500
 
 
 @app.route("/api/chamados/<ticket_id>", methods=["DELETE"])
 def api_chamados_delete(ticket_id):
-    with CHAMADOS_LOCK:
-        atual = ler_chamados_store()
-        antes = len(atual.get("tickets", []))
+    try:
+        chamado_id = int(ticket_id)
+    except Exception:
+        return jsonify({"erro": "ID de chamado inválido"}), 400
 
-        atual["tickets"] = [
-            t
-            for t in atual.get("tickets", [])
-            if str(t.get("id")) != str(ticket_id)
-        ]
+    try:
+        with CHAMADOS_LOCK:
+            with engine.begin() as conn:
+                apagado = conn.execute(text("""
+                    DELETE FROM public.chamados
+                    WHERE id = :id
+                    RETURNING id
+                """), {"id": chamado_id}).scalar()
 
-        depois = len(atual["tickets"])
+                if apagado is None:
+                    return jsonify({"erro": "Chamado não encontrado"}), 404
 
-        if antes == depois:
-            return jsonify({"erro": "Chamado não encontrado"}), 404
+                salvo = _montar_store_chamados(conn)
 
-        salvo = salvar_chamados_store(atual)
-
-    log(f"Chamado excluído: {ticket_id}", "INFO")
-
-    return jsonify(salvo)
-
+        log(f"Chamado excluído do Neon: {ticket_id}", "INFO")
+        return jsonify(salvo)
+    except Exception as e:
+        log(f"Falha ao excluir chamado {ticket_id}: {e}", "ERRO")
+        return jsonify({"erro": "Falha ao excluir chamado no Neon."}), 500
 
 
 # =============================================================================
@@ -2975,9 +3201,6 @@ def api_chamados_delete(ticket_id):
 
 if __name__ == "__main__":
     cfg = load_config()
-
-    # Garante que a base central de chamados exista.
-    ler_chamados_store()
 
     if not STATUS_FILE.exists():
         salvar_status(estado_padrao())
