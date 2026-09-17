@@ -44,7 +44,7 @@ EXEC_THREAD = None
 
 EXTENSOES_DADOS = {".xlsx", ".xls", ".csv", ".parquet", ".html"}
 
-APP_VERSION = "2026.09.17-chamados-neon-v1"
+APP_VERSION = "2026.09.17-chamados-usuarios-v1"
 APP_FILE = Path(__file__).resolve()
 
 # =============================================================================
@@ -237,6 +237,7 @@ def _linha_para_ticket(row, historico=None):
         "status": row["status"] or "queue",
         "priority": row["prioridade"] or "Média",
         "assignedTo": row["responsavel"] or "",
+        "assignedToId": int(row["responsavel_id"]) if row["responsavel_id"] is not None else None,
         "plannedStart": str(row["inicio_previsto"]) if row["inicio_previsto"] else "",
         "plannedEnd": str(row["fim_previsto"]) if row["fim_previsto"] else "",
         "attachments": _json_lista(row["anexos"]),
@@ -292,7 +293,7 @@ def _montar_store_chamados(conn):
         SELECT
             id, numero, titulo, tipo, setor, descricao, objetivo, formula,
             tipo_demanda, solicitante_id, solicitante_nome, solicitante_contato,
-            solicitante_email, status, prioridade, responsavel,
+            solicitante_email, status, prioridade, responsavel, responsavel_id,
             inicio_previsto, fim_previsto, anexos, comentarios, checklist, tags,
             ordem_kanban, motivo_atraso, motivo_atraso_atualizado_em,
             prioridade_retorno, criado_em, atualizado_em
@@ -344,6 +345,77 @@ def _numero_para_novo_chamado(conn, ticket_id, numero_solicitado):
     """)).scalar_one())
 
 
+
+ANEXO_MAX_BYTES = 10 * 1024 * 1024
+ANEXOS_MAX_POR_ENVIO = 5
+
+
+def _usuario_ativo_por_id(conn, usuario_id):
+    try:
+        usuario_id = int(usuario_id)
+    except Exception:
+        return None
+    return conn.execute(text("""
+        SELECT id, nome, email, perfil, role
+        FROM public.usuarios
+        WHERE id = :id AND ativo = TRUE
+        LIMIT 1
+    """), {"id": usuario_id}).mappings().first()
+
+
+def _usuario_ativo_por_email(conn, email):
+    email = str(email or "").strip().lower()
+    if not email:
+        return None
+    return conn.execute(text("""
+        SELECT id, nome, email, perfil, role
+        FROM public.usuarios
+        WHERE LOWER(email) = :email AND ativo = TRUE
+        LIMIT 1
+    """), {"email": email}).mappings().first()
+
+
+def _usuario_ativo_por_nome(conn, nome):
+    nome = str(nome or "").strip()
+    if not nome:
+        return None
+    return conn.execute(text("""
+        SELECT id, nome, email, perfil, role
+        FROM public.usuarios
+        WHERE LOWER(nome) = LOWER(:nome) AND ativo = TRUE
+        ORDER BY id
+        LIMIT 1
+    """), {"nome": nome}).mappings().first()
+
+
+def _validar_lista_anexos(anexos, contexto="anexos"):
+    anexos = _json_lista(anexos)
+    if len(anexos) > ANEXOS_MAX_POR_ENVIO:
+        raise ValueError(
+            f"Máximo de {ANEXOS_MAX_POR_ENVIO} anexos por envio."
+        )
+    for anexo in anexos:
+        if not isinstance(anexo, dict):
+            continue
+        try:
+            tamanho = int(anexo.get("size") or 0)
+        except Exception:
+            tamanho = 0
+        if tamanho > ANEXO_MAX_BYTES:
+            nome = str(anexo.get("name") or "arquivo")
+            raise ValueError(
+                f'O anexo "{nome}" excede o limite de 10 MB.'
+            )
+    return anexos
+
+
+def _validar_anexos_ticket(ticket):
+    _validar_lista_anexos(ticket.get("attachments"), "chamado")
+    for comentario in _json_lista(ticket.get("comments")):
+        if isinstance(comentario, dict):
+            _validar_lista_anexos(comentario.get("attachments"), "comentário")
+
+
 def _salvar_historico_ticket(conn, chamado_id, history):
     conn.execute(text(
         "DELETE FROM public.historico_chamados WHERE chamado_id = :chamado_id"
@@ -353,15 +425,18 @@ def _salvar_historico_ticket(conn, chamado_id, history):
         if not isinstance(item, dict):
             continue
         acao = str(item.get("action") or "Atualização")[:250]
+        usuario_nome = str(item.get("by") or "")[:200] or None
+        usuario = _usuario_ativo_por_nome(conn, usuario_nome)
         conn.execute(text("""
             INSERT INTO public.historico_chamados
-                (chamado_id, usuario_nome, acao, detalhe, criado_em)
+                (chamado_id, usuario_id, usuario_nome, acao, detalhe, criado_em)
             VALUES
-                (:chamado_id, :usuario_nome, :acao, :detalhe,
+                (:chamado_id, :usuario_id, :usuario_nome, :acao, :detalhe,
                  COALESCE(:criado_em, NOW()))
         """), {
             "chamado_id": chamado_id,
-            "usuario_nome": str(item.get("by") or "")[:200] or None,
+            "usuario_id": int(usuario["id"]) if usuario else None,
+            "usuario_nome": usuario["nome"] if usuario else usuario_nome,
             "acao": acao,
             "detalhe": str(item.get("detail") or "") or None,
             "criado_em": _timestamp_ou_none(item.get("at")),
@@ -393,6 +468,19 @@ def _upsert_ticket(conn, ticket):
     titulo = str(ticket.get("title") or "").strip() or f"Chamado #{numero}"
     descricao = str(ticket.get("description") or "").strip() or "Sem descrição."
     criado_em = _timestamp_ou_none(ticket.get("createdAt"))
+    _validar_anexos_ticket(ticket)
+
+    # Solicitante: e-mail do Portal é a referência principal; ID legado do
+    # navegador nunca prevalece sobre um usuário real encontrado pelo e-mail.
+    solicitante = _usuario_ativo_por_email(conn, ticket.get("requesterEmail"))
+    if solicitante is None:
+        solicitante = _usuario_ativo_por_id(conn, ticket.get("requesterId"))
+
+    # Responsável: usa o ID selecionado no Portal; mantém resolução pelo nome
+    # para chamados antigos que ainda não possuíam responsavel_id.
+    responsavel_usuario = _usuario_ativo_por_id(conn, ticket.get("assignedToId"))
+    if responsavel_usuario is None:
+        responsavel_usuario = _usuario_ativo_por_nome(conn, ticket.get("assignedTo"))
 
     params = {
         "id": ticket_id,
@@ -404,13 +492,14 @@ def _upsert_ticket(conn, ticket):
         "objetivo": str(ticket.get("objective") or "") or None,
         "formula": str(ticket.get("formula") or "") or None,
         "tipo_demanda": str(ticket.get("demandKind") or "externa")[:30],
-        "solicitante_id": ticket.get("requesterId") if str(ticket.get("requesterId") or "").isdigit() else None,
-        "solicitante_nome": str(ticket.get("requesterName") or "")[:200] or None,
+        "solicitante_id": int(solicitante["id"]) if solicitante else None,
+        "solicitante_nome": solicitante["nome"] if solicitante else (str(ticket.get("requesterName") or "")[:200] or None),
         "solicitante_contato": str(ticket.get("requesterContact") or "")[:200] or None,
-        "solicitante_email": str(ticket.get("requesterEmail") or "")[:250] or None,
+        "solicitante_email": solicitante["email"] if solicitante else (str(ticket.get("requesterEmail") or "")[:250] or None),
         "status": str(ticket.get("status") or "queue")[:50],
         "prioridade": str(ticket.get("priority") or "Média")[:30],
-        "responsavel": str(ticket.get("assignedTo") or "")[:200] or None,
+        "responsavel": responsavel_usuario["nome"] if responsavel_usuario else (str(ticket.get("assignedTo") or "")[:200] or None),
+        "responsavel_id": int(responsavel_usuario["id"]) if responsavel_usuario else None,
         "inicio_previsto": _data_ou_none(ticket.get("plannedStart")),
         "fim_previsto": _data_ou_none(ticket.get("plannedEnd")),
         "anexos": json.dumps(_json_lista(ticket.get("attachments")), ensure_ascii=False),
@@ -428,14 +517,14 @@ def _upsert_ticket(conn, ticket):
         INSERT INTO public.chamados (
             id, numero, titulo, tipo, setor, descricao, objetivo, formula,
             tipo_demanda, solicitante_id, solicitante_nome, solicitante_contato,
-            solicitante_email, status, prioridade, responsavel,
+            solicitante_email, status, prioridade, responsavel, responsavel_id,
             inicio_previsto, fim_previsto, anexos, comentarios, checklist, tags,
             ordem_kanban, motivo_atraso, motivo_atraso_atualizado_em,
             prioridade_retorno, criado_em
         ) VALUES (
             :id, :numero, :titulo, :tipo, :setor, :descricao, :objetivo, :formula,
             :tipo_demanda, :solicitante_id, :solicitante_nome, :solicitante_contato,
-            :solicitante_email, :status, :prioridade, :responsavel,
+            :solicitante_email, :status, :prioridade, :responsavel, :responsavel_id,
             :inicio_previsto, :fim_previsto, CAST(:anexos AS jsonb),
             CAST(:comentarios AS jsonb), CAST(:checklist AS jsonb), CAST(:tags AS jsonb),
             :ordem_kanban, :motivo_atraso, :motivo_atraso_atualizado_em,
@@ -457,6 +546,7 @@ def _upsert_ticket(conn, ticket):
             status = EXCLUDED.status,
             prioridade = EXCLUDED.prioridade,
             responsavel = EXCLUDED.responsavel,
+            responsavel_id = EXCLUDED.responsavel_id,
             inicio_previsto = EXCLUDED.inicio_previsto,
             fim_previsto = EXCLUDED.fim_previsto,
             anexos = EXCLUDED.anexos,
@@ -3110,6 +3200,36 @@ def api_agent_finish_job(job_id):
 # ROTAS — CHAMADOS MULTIUSUÁRIO (NEON)
 # =============================================================================
 
+@app.route("/api/chamados/usuarios", methods=["GET"])
+def api_chamados_usuarios():
+    usuario = _usuario_autenticado()
+    if not usuario:
+        return _resposta_nao_autorizado()
+
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(text("""
+                SELECT id, nome, email, perfil, role
+                FROM public.usuarios
+                WHERE ativo = TRUE
+                ORDER BY nome, id
+            """)).mappings().all()
+
+        return jsonify({
+            "ok": True,
+            "usuarios": [{
+                "id": int(r["id"]),
+                "nome": r["nome"],
+                "email": r["email"],
+                "perfil": r["perfil"],
+                "role": r["role"],
+            } for r in rows]
+        })
+    except Exception as e:
+        log(f"Falha ao listar usuários para Chamados: {e}", "ERRO")
+        return jsonify({"ok": False, "erro": "Falha ao listar usuários."}), 500
+
+
 @app.route("/api/chamados/health", methods=["GET"])
 def api_chamados_health():
     try:
@@ -3132,6 +3252,9 @@ def api_chamados_health():
 
 @app.route("/api/chamados", methods=["GET", "PUT"])
 def api_chamados():
+    usuario = _usuario_autenticado()
+    if not usuario:
+        return _resposta_nao_autorizado()
     try:
         if request.method == "GET":
             return jsonify(ler_chamados_store())
@@ -3145,6 +3268,8 @@ def api_chamados():
             "INFO",
         )
         return jsonify(salvo)
+    except ValueError as e:
+        return jsonify({"erro": str(e)}), 400
     except Exception as e:
         log(f"Falha ao sincronizar chamados no Neon: {e}", "ERRO")
         return jsonify({"erro": "Falha ao sincronizar chamados no Neon."}), 500
@@ -3152,6 +3277,9 @@ def api_chamados():
 
 @app.route("/api/chamados/merge", methods=["POST"])
 def api_chamados_merge():
+    usuario = _usuario_autenticado()
+    if not usuario:
+        return _resposta_nao_autorizado()
     try:
         body = request.get_json(silent=True) or {}
         salvo = salvar_chamados_store(body, somente_gestores_se_vazio=True)
@@ -3169,6 +3297,11 @@ def api_chamados_merge():
 
 @app.route("/api/chamados/<ticket_id>", methods=["DELETE"])
 def api_chamados_delete(ticket_id):
+    usuario = _usuario_autenticado()
+    if not usuario:
+        return _resposta_nao_autorizado()
+    if not _usuario_e_admin(usuario):
+        return jsonify({"erro": "Apenas administradores podem excluir chamados."}), 403
     try:
         chamado_id = int(ticket_id)
     except Exception:
