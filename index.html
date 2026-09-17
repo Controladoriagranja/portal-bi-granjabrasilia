@@ -3704,7 +3704,7 @@
             <div class="ticket-form-grid">
               <div class="form-group">
                 <label>Nome do solicitante *</label>
-                <input id="ticketRequesterName" placeholder="Nome do solicitante">
+                <input id="ticketRequesterName" readonly placeholder="Nome do solicitante">
                 <div style="font-size:11px;color:var(--text-muted);margin-top:5px">Preenchido automaticamente pelo login, mas pode ser ajustado se necessário.</div>
               </div>
               <div class="form-group">
@@ -5187,6 +5187,14 @@ const TICKET_SYNC_INTERVAL_MS = 3000;
 const TICKET_MAX_FILE_BYTES = 10 * 1024 * 1024;
 const TICKET_MAX_FILES_PER_SEND = 5;
 let portalTicketUsers = [];
+function authenticatedTicketRequester(){
+  return {
+    id: Number(currentUser?.id || 0) || null,
+    name: String(currentUser?.name || currentUser?.nome || currentName() || ''),
+    email: String(currentUser?.email || currentEmail() || '')
+  };
+}
+
 
 async function loadPortalTicketUsers(){
   try{
@@ -5646,10 +5654,10 @@ function createInternalDemand(){
     formula:'',
     demandKind:'interna',
 
-    requesterId:currentUser?.id||null,
-    requesterName:currentName(),
+    requesterId:authenticatedTicketRequester().id,
+    requesterName:authenticatedTicketRequester().name,
     requesterContact:'',
-    requesterEmail:currentEmail(),
+    requesterEmail:authenticatedTicketRequester().email,
 
     status:'queue',
     priority,
@@ -8618,7 +8626,7 @@ async function loadUpdateStatus(){
         <div class="ch-summary">
           <div class="ch-summary-card">
             <small>Solicitante</small>
-            <input id="chSummaryRequester" placeholder="Solicitante">
+            <input id="chSummaryRequester" readonly placeholder="Solicitante">
           </div>
           <div class="ch-summary-card">
             <small>Contato</small>
