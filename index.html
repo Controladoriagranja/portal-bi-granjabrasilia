@@ -3146,6 +3146,254 @@
   .update-manual-period.show { display:flex; }
   .update-manual-period input { min-width:145px; background:var(--bg); border:1px solid var(--border); border-radius:var(--radius); padding:9px 11px; color:var(--text); font-family:inherit; font-size:13px; outline:none; }
   .update-manual-period input:focus { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-glow); }
+
+  /* ═════════════ AJUSTES 18/09/2026 — LOGIN / CHAMADOS / GANTT ═════════════ */
+
+  /* Login */
+  .login-access-hint{
+    line-height:1.5!important;
+  }
+  .login-access-hint strong{
+    white-space:nowrap;
+  }
+
+  /* Painel de Chamados — ações no canto direito */
+  #view-ticketadmin > .section-header{
+    display:flex!important;
+    align-items:flex-start!important;
+    justify-content:space-between!important;
+    gap:18px!important;
+  }
+
+  .ticket-admin-header-actions{
+    margin-left:auto;
+    display:flex;
+    align-items:center;
+    justify-content:flex-end;
+    gap:8px;
+    flex-wrap:wrap;
+    flex-shrink:0;
+  }
+
+  /* Indicador de sincronização no topo */
+  .topbar-actions{
+    display:flex;
+    align-items:center;
+    justify-content:flex-end;
+    gap:8px;
+  }
+
+  .ticket-sync-pill{
+    min-height:28px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:6px;
+    padding:5px 10px;
+    border-radius:999px;
+    border:1px solid #d7e1ea;
+    font-size:10px;
+    font-weight:750;
+    white-space:nowrap;
+    background:#fff;
+    box-shadow:0 1px 2px rgba(23,42,60,.04);
+  }
+  .ticket-sync-pill.online{
+    color:#287b4e;
+    background:#eaf7ef;
+    border-color:#c9e8d5;
+  }
+  .ticket-sync-pill.connecting{
+    color:#2967a6;
+    background:#edf5ff;
+    border-color:#c9ddf3;
+  }
+  .ticket-sync-pill.offline{
+    color:#b42318;
+    background:#fff0ee;
+    border-color:#f2cbc6;
+  }
+
+  /* Gantt — viewport e rolagem */
+  #chGanttPanel .ch-gantt-shell{
+    overflow:hidden!important;
+    background:#fff!important;
+  }
+
+  #chGanttPanel .ch-gantt-scroll{
+    overflow-x:auto!important;
+    overflow-y:hidden!important;
+    max-width:100%!important;
+    padding-bottom:4px;
+    scrollbar-gutter:stable;
+    overscroll-behavior-x:contain;
+  }
+
+  #chGanttContent .ch-gantt{
+    min-width:max-content!important;
+  }
+
+  /* Cabeçalho: mês + dias ficam em uma faixa própria e nunca invadem as tarefas */
+  #chGanttContent .ch-gantt-head{
+    min-height:68px!important;
+    height:68px!important;
+    align-items:stretch!important;
+    position:relative;
+    z-index:8;
+    background:#eef4f9!important;
+  }
+
+  #chGanttContent .ch-gantt-head > .ch-gantt-label{
+    height:68px!important;
+    min-height:68px!important;
+    max-height:68px!important;
+    display:flex!important;
+    align-items:center!important;
+    background:#e8f0f6!important;
+    z-index:10!important;
+  }
+
+  #chGanttContent .ch-gantt-head > div:last-child{
+    height:68px!important;
+    min-height:68px!important;
+    background:#eef4f9!important;
+    position:relative;
+    z-index:9;
+  }
+
+  #chGanttContent .ch-gantt-month-band{
+    height:24px!important;
+    min-height:24px!important;
+    overflow:hidden!important;
+  }
+
+  #chGanttContent .ch-gantt-days{
+    height:44px!important;
+    min-height:44px!important;
+    overflow:hidden!important;
+  }
+
+  #chGanttContent .ch-gantt-day{
+    height:44px!important;
+    min-height:44px!important;
+    flex:0 0 32px!important;
+    position:relative;
+    z-index:1;
+  }
+
+  /* Cada tarefa ocupa uma linha única e consistente */
+  #chGanttContent .ch-gantt-row{
+    height:72px!important;
+    min-height:72px!important;
+    max-height:72px!important;
+    align-items:stretch!important;
+    overflow:visible!important;
+  }
+
+  #chGanttContent .ch-gantt-row > .ch-gantt-label{
+    height:72px!important;
+    min-height:72px!important;
+    max-height:72px!important;
+    padding:7px 10px!important;
+    background:#f7fafc!important;
+    border-bottom:1px solid #e1e8ef!important;
+    overflow:hidden!important;
+    z-index:4!important;
+  }
+
+  #chGanttContent .ch-gantt-row .ch-gantt-label-wrap{
+    height:100%!important;
+    min-height:0!important;
+    overflow:hidden!important;
+    padding-right:4px;
+  }
+
+  #chGanttContent .ch-gantt-row .ch-gantt-label strong{
+    display:-webkit-box!important;
+    -webkit-box-orient:vertical;
+    -webkit-line-clamp:2;
+    line-clamp:2;
+    overflow:hidden!important;
+    white-space:normal!important;
+    line-height:1.2!important;
+    max-height:28px!important;
+    margin-bottom:2px;
+  }
+
+  #chGanttContent .ch-gantt-row .ch-gantt-label small{
+    display:block!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+    white-space:nowrap!important;
+    line-height:1.2!important;
+    max-width:100%!important;
+  }
+
+  /* A faixa da timeline preenche toda a altura da linha */
+  #chGanttContent .ch-gantt-track{
+    height:72px!important;
+    min-height:72px!important;
+    max-height:72px!important;
+    align-self:stretch!important;
+    display:flex!important;
+    position:relative!important;
+    overflow:visible!important;
+    background:#fff!important;
+    border-bottom:1px solid #e1e8ef!important;
+  }
+
+  #chGanttContent .ch-gantt-cell{
+    height:72px!important;
+    min-height:72px!important;
+    flex:0 0 32px!important;
+    align-self:stretch!important;
+  }
+
+  /* Barras centralizadas verticalmente na linha */
+  #chGanttContent .ch-gantt-bar{
+    top:50%!important;
+    transform:translateY(-50%)!important;
+    height:24px!important;
+    z-index:4!important;
+  }
+
+  #chGanttContent .ch-gantt-overdue-zone{
+    top:50%!important;
+    transform:translateY(-50%)!important;
+    height:24px!important;
+  }
+
+  #chGanttContent .ch-gantt-overdue-pill{
+    top:50%!important;
+    transform:translate(4px,-50%)!important;
+    height:28px!important;
+  }
+
+  #chGanttContent .ch-gantt-today-line{
+    top:0!important;
+    bottom:0!important;
+    z-index:5!important;
+  }
+
+  /* Mantém o redimensionador da descrição utilizável sem aumentar a linha */
+  #chGanttContent .ch-gantt-row .ch-gantt-label-resizer{
+    top:0!important;
+    bottom:0!important;
+    height:72px!important;
+  }
+
+  @media(max-width:760px){
+    #view-ticketadmin > .section-header{
+      flex-direction:column!important;
+      align-items:stretch!important;
+    }
+    .ticket-admin-header-actions{
+      width:100%;
+      margin-left:0;
+      justify-content:flex-end;
+    }
+  }
+
 </style>
 
 </head>
@@ -3183,8 +3431,8 @@
     <button class="btn-primary" id="loginBtn" onclick="handleLogin(this)">Entrar no Portal</button>
 
     <div class="login-access-hint">
-      Ainda não tem acesso? Envie seu e-mail para<br>
-      <strong>asalvino@granjabrasilia.com.br</strong> para solicitar liberação.
+      Ainda não possui acesso? Solicite ao seu gestor que abra um chamado
+      ou entre em contato pelo <strong>ramal 5236</strong>.
     </div>
 
     <div class="login-footer">© 2026 Granja Brasília · Portal Interno de BI</div>
@@ -3827,7 +4075,7 @@
               Aprovações e mudanças de etapa são feitas diretamente no quadro: arraste os cartões entre as colunas.
             </div>
           </div>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <div class="ticket-admin-header-actions">
             <button class="btn-sm" onclick="openInternalDemandModal()">＋ Nova Demanda Interna</button>
             <button class="btn-sm accent" onclick="switchView('tickets',document.getElementById('nav-tickets'));openNewTicket()">＋ Abrir Chamado</button>
           </div>
@@ -5892,41 +6140,34 @@ async function ticketApiRequest(path, options={}) {
 }
 
 function updateTicketSyncIndicator() {
+  const host = document.getElementById('topbarActions');
+  if (!host) return;
+
   let el = document.getElementById('ticketSyncIndicator');
   if (!el) {
-    const title = document.querySelector('#view-ticketadmin .section-header');
-    if (!title) return;
-
     el = document.createElement('div');
     el.id = 'ticketSyncIndicator';
-    el.style.cssText = `
-      margin-left:10px;
-      display:inline-flex;
-      align-items:center;
-      gap:6px;
-      font-size:10px;
-      font-weight:700;
-      padding:4px 8px;
-      border-radius:999px;
-      border:1px solid var(--border);
-      white-space:nowrap;
-    `;
-    title.appendChild(el);
+    el.className = 'ticket-sync-pill';
+    host.appendChild(el);
   }
+
+  const ticketPanelActive =
+    document.getElementById('view-ticketadmin')?.classList.contains('active') === true;
+
+  el.style.display = ticketPanelActive ? 'inline-flex' : 'none';
 
   if (ticketApiOnline) {
     el.textContent = '● Sincronizado';
-    el.style.color = '#238636';
-    el.style.background = 'rgba(46,160,67,.09)';
+    el.className = 'ticket-sync-pill online';
   } else if (ticketPullInProgress || !ticketHasConnectedOnce) {
     el.textContent = '● Conectando...';
-    el.style.color = '#2967a6';
-    el.style.background = 'rgba(47,129,247,.09)';
+    el.className = 'ticket-sync-pill connecting';
   } else {
     el.textContent = '● Sem conexão';
-    el.style.color = '#b42318';
-    el.style.background = 'rgba(248,81,73,.09)';
+    el.className = 'ticket-sync-pill offline';
   }
+
+  el.style.display = ticketPanelActive ? 'inline-flex' : 'none';
 }
 
 function renderTicketsAfterRemoteSync() {
@@ -8366,6 +8607,9 @@ function switchView(viewId, navEl) {
   if (viewId === 'updates') startUpdateMonitor();
   if (viewId === 'tickets') { renderTickets(); renderTicketProjects(); updateTicketManagerInfo(); }
   if (viewId === 'ticketadmin') renderTicketAdmin();
+
+  // O status de sincronização pertence ao topo e só aparece no Painel de Chamados.
+  updateTicketSyncIndicator();
 }
 
 function switchUserTab(tab, el) {
