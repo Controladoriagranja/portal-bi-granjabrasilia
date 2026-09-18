@@ -10,6 +10,7 @@ import subprocess
 import sys
 import threading
 import time
+import unicodedata
 from collections import deque
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -44,7 +45,7 @@ EXEC_THREAD = None
 
 EXTENSOES_DADOS = {".xlsx", ".xls", ".csv", ".parquet", ".html"}
 
-APP_VERSION = "2026.09.17-usuario-edicao-v2"
+APP_VERSION = "2026.09.18-crud-estavel-v1"
 APP_FILE = Path(__file__).resolve()
 
 # =============================================================================
@@ -2290,13 +2291,12 @@ def carregar_portal_data_neon():
 
         relatorios_por_usuario = {}
         for r in conn.execute(text("""
-            SELECT ur.usuario_id, r.legacy_id
+            SELECT ur.usuario_id, COALESCE(r.legacy_id, r.id) AS report_key
             FROM usuario_relatorios ur
             JOIN relatorios r ON r.id = ur.relatorio_id
-            WHERE r.legacy_id IS NOT NULL
             ORDER BY ur.usuario_id, r.id
         """)).mappings():
-            relatorios_por_usuario.setdefault(r["usuario_id"], []).append(r["legacy_id"])
+            relatorios_por_usuario.setdefault(r["usuario_id"], []).append(int(r["report_key"]))
 
         paginas_por_usuario = {}
         for r in conn.execute(text("""
@@ -2852,11 +2852,20 @@ def api_auth_login():
 
         log(f"Login Portal BI realizado: {usuario.get('email')}", "INFO")
 
+        # O login já devolve o snapshot do Portal para evitar uma segunda
+        # requisição logo após autenticar. Isso reduz o tempo percebido.
+        portal_data = None
+        try:
+            portal_data = carregar_portal_data_neon()
+        except Exception as portal_error:
+            log(f"Login realizado, mas falhou bootstrap do Portal: {portal_error}", "ERRO")
+
         return jsonify({
             "ok": True,
             "token": token,
             "expiresIn": AUTH_TOKEN_MAX_AGE,
             "user": _usuario_publico(usuario),
+            "portalData": portal_data,
         })
 
     except RuntimeError as e:
@@ -2902,6 +2911,82 @@ def api_auth_me():
 def api_auth_logout():
     # O token é stateless. O logout efetivo ocorre ao removê-lo do navegador.
     return jsonify({"ok": True})
+
+
+@app.route("/api/health", methods=["GET"])
+def api_health():
+    """Endpoint leve para acordar a instância do Render antes do login."""
+    return jsonify({
+        "ok": True,
+        "version": APP_VERSION,
+        "service": "portal-bi-api",
+    })
+
+
+@app.route("/api/auth/bootstrap", methods=["GET"])
+def api_auth_bootstrap():
+    """Valida a sessão e devolve os dados do Portal em uma única chamada."""
+    try:
+        usuario = _usuario_autenticado()
+        if not usuario:
+            return _resposta_nao_autorizado()
+        return jsonify({
+            "ok": True,
+            "user": _usuario_publico(usuario),
+            "portalData": carregar_portal_data_neon(),
+        })
+    except RuntimeError as e:
+        log(f"Configuração de autenticação inválida no bootstrap: {e}", "ERRO")
+        return jsonify({"ok": False, "erro": "Serviço de autenticação não configurado."}), 503
+    except Exception as e:
+        log(f"Erro em /api/auth/bootstrap: {e}", "ERRO")
+        return jsonify({"ok": False, "erro": "Erro interno ao carregar o Portal."}), 500
+
+
+@app.route("/api/auth/change-password", methods=["POST"])
+def api_auth_change_password():
+    """Troca a senha do próprio usuário, validando a senha atual."""
+    usuario = _usuario_autenticado()
+    if not usuario:
+        return _resposta_nao_autorizado()
+
+    body = request.get_json(silent=True) or {}
+    senha_atual = str(body.get("currentPassword") or "")
+    nova_senha = str(body.get("newPassword") or "")
+
+    if not senha_atual:
+        return jsonify({"ok": False, "erro": "Informe a senha atual."}), 400
+    if len(nova_senha) < 8:
+        return jsonify({"ok": False, "erro": "A nova senha deve possuir pelo menos 8 caracteres."}), 400
+    if len(nova_senha) > 128:
+        return jsonify({"ok": False, "erro": "A nova senha excede o limite permitido."}), 400
+    if senha_atual == nova_senha:
+        return jsonify({"ok": False, "erro": "A nova senha deve ser diferente da senha atual."}), 400
+
+    try:
+        with engine.begin() as conn:
+            atualizado = conn.execute(text("""
+                UPDATE public.usuarios
+                SET senha_hash = crypt(:nova_senha, gen_salt('bf', 12)),
+                    atualizado_em = NOW()
+                WHERE id = :id
+                  AND senha_hash IS NOT NULL
+                  AND crypt(:senha_atual, senha_hash) = senha_hash
+                RETURNING id
+            """), {
+                "id": int(usuario["usuario_id"]),
+                "senha_atual": senha_atual,
+                "nova_senha": nova_senha,
+            }).scalar()
+
+        if atualizado is None:
+            return jsonify({"ok": False, "erro": "Senha atual incorreta."}), 400
+
+        log(f"Senha alterada pelo próprio usuário: {usuario.get('email')}", "INFO")
+        return jsonify({"ok": True})
+    except Exception as e:
+        log(f"Erro ao trocar senha do usuário {usuario.get('email')}: {e}", "ERRO")
+        return jsonify({"ok": False, "erro": "Erro interno ao alterar a senha."}), 500
 
 
 
@@ -3055,6 +3140,335 @@ def api_admin_usuario_patch(usuario_id):
     except Exception as e:
         log(f"Erro ao editar usuário {usuario_id}: {e}", "ERRO")
         return jsonify({"ok": False, "erro": "Erro interno ao atualizar o usuário."}), 500
+
+
+
+def _normalizar_codigo_setor(valor):
+    texto = unicodedata.normalize("NFKD", str(valor or "")).encode("ascii", "ignore").decode("ascii")
+    texto = re.sub(r"[^a-zA-Z0-9]+", "_", texto).strip("_").lower()
+    return texto[:80]
+
+
+def _admin_atual_ou_resposta():
+    usuario = _usuario_autenticado()
+    if not usuario:
+        return None, _resposta_nao_autorizado()
+    if not _usuario_e_admin(usuario):
+        return None, (jsonify({"ok": False, "erro": "Apenas administradores podem realizar esta operação."}), 403)
+    return usuario, None
+
+
+def _validar_role_status(role, status):
+    role = str(role or "sector").strip().lower()
+    status = str(status or "active").strip().lower()
+    if role not in {"admin", "director", "sector"}:
+        raise ValueError("Perfil de acesso inválido.")
+    if status not in {"active", "blocked", "inactive"}:
+        raise ValueError("Status inválido.")
+    return role, status
+
+
+def _sincronizar_usuario_relacoes(conn, usuario_id, sectors, report_ids):
+    conn.execute(text("DELETE FROM public.usuario_setores WHERE usuario_id = :id"), {"id": usuario_id})
+    for codigo in sectors or []:
+        codigo = str(codigo or "").strip()
+        if not codigo:
+            continue
+        sid = conn.execute(text("""
+            SELECT id FROM public.setores
+            WHERE codigo = :codigo AND ativo = TRUE
+            LIMIT 1
+        """), {"codigo": codigo}).scalar()
+        if sid is not None:
+            conn.execute(text("""
+                INSERT INTO public.usuario_setores (usuario_id, setor_id)
+                VALUES (:uid, :sid) ON CONFLICT DO NOTHING
+            """), {"uid": usuario_id, "sid": int(sid)})
+
+    conn.execute(text("DELETE FROM public.usuario_relatorios WHERE usuario_id = :id"), {"id": usuario_id})
+    for rid in report_ids or []:
+        try:
+            rid_int = int(rid)
+        except Exception:
+            continue
+        relatorio_id = conn.execute(text("""
+            SELECT id FROM public.relatorios
+            WHERE legacy_id = :rid OR id = :rid
+            ORDER BY CASE WHEN legacy_id = :rid THEN 0 ELSE 1 END
+            LIMIT 1
+        """), {"rid": rid_int}).scalar()
+        if relatorio_id is not None:
+            conn.execute(text("""
+                INSERT INTO public.usuario_relatorios (usuario_id, relatorio_id)
+                VALUES (:uid, :rid) ON CONFLICT DO NOTHING
+            """), {"uid": usuario_id, "rid": int(relatorio_id)})
+
+
+@app.route("/api/admin/usuarios", methods=["POST"])
+def api_admin_usuario_create():
+    usuario_atual, erro = _admin_atual_ou_resposta()
+    if erro:
+        return erro
+
+    body = request.get_json(silent=True) or {}
+    nome = str(body.get("name") or "").strip()
+    email = str(body.get("email") or "").strip().lower()
+    try:
+        role, status = _validar_role_status(body.get("role"), body.get("status"))
+    except ValueError as e:
+        return jsonify({"ok": False, "erro": str(e)}), 400
+    senha = str(body.get("password") or "")
+    sectors = body.get("sectors") if isinstance(body.get("sectors"), list) else []
+    report_ids = body.get("reportIds") if isinstance(body.get("reportIds"), list) else []
+    report_access_mode = str(body.get("reportAccessMode") or "sector").strip()
+    ticket_panel_access = bool(body.get("ticketPanelAccess", False))
+
+    if not nome:
+        return jsonify({"ok": False, "erro": "Informe o nome do usuário."}), 400
+    if not email or "@" not in email:
+        return jsonify({"ok": False, "erro": "Informe um e-mail válido."}), 400
+    if len(senha) < 8:
+        return jsonify({"ok": False, "erro": "A senha inicial deve possuir pelo menos 8 caracteres."}), 400
+    if len(senha) > 128:
+        return jsonify({"ok": False, "erro": "A senha excede o limite permitido."}), 400
+
+    try:
+        with engine.begin() as conn:
+            conflito = conn.execute(text("""
+                SELECT id FROM public.usuarios WHERE LOWER(email) = :email LIMIT 1
+            """), {"email": email}).scalar()
+            if conflito is not None:
+                return jsonify({"ok": False, "erro": "Já existe um usuário com este e-mail."}), 400
+
+            usuario_id = int(conn.execute(text("""
+                INSERT INTO public.usuarios (
+                    nome, email, perfil, ativo, role, report_access_mode,
+                    allow_updates, ticket_panel_access, senha_hash, atualizado_em
+                ) VALUES (
+                    :nome, :email, :perfil, :ativo, :role, :report_access_mode,
+                    FALSE, :ticket_panel_access, crypt(:senha, gen_salt('bf', 12)), NOW()
+                )
+                RETURNING id
+            """), {
+                "nome": nome,
+                "email": email,
+                "perfil": _perfil_portal_por_role(role),
+                "ativo": status == "active",
+                "role": role,
+                "report_access_mode": report_access_mode,
+                "ticket_panel_access": ticket_panel_access,
+                "senha": senha,
+            }).scalar_one())
+
+            _sincronizar_usuario_relacoes(conn, usuario_id, sectors, report_ids)
+
+        log(f"Usuário criado por {usuario_atual.get('email')}: {email}", "INFO")
+        return jsonify({"ok": True, "data": carregar_portal_data_neon()}), 201
+    except ValueError as e:
+        return jsonify({"ok": False, "erro": str(e)}), 400
+    except Exception as e:
+        log(f"Erro ao criar usuário {email}: {e}", "ERRO")
+        return jsonify({"ok": False, "erro": "Erro interno ao criar o usuário."}), 500
+
+
+@app.route("/api/admin/usuarios/<int:usuario_id>/password", methods=["PATCH"])
+def api_admin_usuario_password(usuario_id):
+    usuario_atual, erro = _admin_atual_ou_resposta()
+    if erro:
+        return erro
+    body = request.get_json(silent=True) or {}
+    senha = str(body.get("password") or "")
+    if len(senha) < 8:
+        return jsonify({"ok": False, "erro": "A senha deve possuir pelo menos 8 caracteres."}), 400
+    if len(senha) > 128:
+        return jsonify({"ok": False, "erro": "A senha excede o limite permitido."}), 400
+    try:
+        with engine.begin() as conn:
+            atualizado = conn.execute(text("""
+                UPDATE public.usuarios
+                SET senha_hash = crypt(:senha, gen_salt('bf', 12)),
+                    atualizado_em = NOW()
+                WHERE id = :id
+                RETURNING id
+            """), {"id": usuario_id, "senha": senha}).scalar()
+        if atualizado is None:
+            return jsonify({"ok": False, "erro": "Usuário não encontrado."}), 404
+        log(f"Senha do usuário {usuario_id} redefinida por {usuario_atual.get('email')}", "INFO")
+        return jsonify({"ok": True})
+    except Exception as e:
+        log(f"Erro ao redefinir senha do usuário {usuario_id}: {e}", "ERRO")
+        return jsonify({"ok": False, "erro": "Erro interno ao redefinir a senha."}), 500
+
+
+@app.route("/api/admin/relatorios", methods=["POST"])
+def api_admin_relatorio_create():
+    usuario_atual, erro = _admin_atual_ou_resposta()
+    if erro:
+        return erro
+    body = request.get_json(silent=True) or {}
+    titulo = str(body.get("title") or "").strip()
+    descricao = str(body.get("desc") or "").strip()
+    setor = str(body.get("sector") or "").strip()
+    url = str(body.get("url") or "").strip()
+    if not titulo:
+        return jsonify({"ok": False, "erro": "Informe o título do relatório."}), 400
+    if not url:
+        return jsonify({"ok": False, "erro": "Informe a URL do relatório."}), 400
+    try:
+        with engine.begin() as conn:
+            setor_id = conn.execute(text("""
+                SELECT id FROM public.setores WHERE codigo = :codigo AND ativo = TRUE LIMIT 1
+            """), {"codigo": setor}).scalar()
+            if setor_id is None:
+                return jsonify({"ok": False, "erro": "Setor inválido ou inativo."}), 400
+            conn.execute(text("""
+                INSERT INTO public.relatorios (titulo, descricao, setor_id, url, atualizado_em)
+                VALUES (:titulo, :descricao, :setor_id, :url, NOW())
+            """), {
+                "titulo": titulo, "descricao": descricao, "setor_id": int(setor_id), "url": url
+            })
+        log(f"Relatório criado por {usuario_atual.get('email')}: {titulo}", "INFO")
+        return jsonify({"ok": True, "data": carregar_portal_data_neon()}), 201
+    except Exception as e:
+        log(f"Erro ao criar relatório {titulo}: {e}", "ERRO")
+        return jsonify({"ok": False, "erro": "Erro interno ao criar o relatório."}), 500
+
+
+@app.route("/api/admin/relatorios/<int:relatorio_id>", methods=["PATCH", "DELETE"])
+def api_admin_relatorio_item(relatorio_id):
+    usuario_atual, erro = _admin_atual_ou_resposta()
+    if erro:
+        return erro
+    try:
+        with engine.begin() as conn:
+            existente = conn.execute(text("""
+                SELECT id, titulo FROM public.relatorios WHERE id = :id LIMIT 1
+            """), {"id": relatorio_id}).mappings().first()
+            if not existente:
+                return jsonify({"ok": False, "erro": "Relatório não encontrado."}), 404
+
+            if request.method == "DELETE":
+                conn.execute(text("DELETE FROM public.usuario_relatorios WHERE relatorio_id = :id"), {"id": relatorio_id})
+                conn.execute(text("DELETE FROM public.relatorios WHERE id = :id"), {"id": relatorio_id})
+            else:
+                body = request.get_json(silent=True) or {}
+                titulo = str(body.get("title") or "").strip()
+                descricao = str(body.get("desc") or "").strip()
+                setor = str(body.get("sector") or "").strip()
+                url = str(body.get("url") or "").strip()
+                if not titulo:
+                    return jsonify({"ok": False, "erro": "Informe o título do relatório."}), 400
+                if not url:
+                    return jsonify({"ok": False, "erro": "Informe a URL do relatório."}), 400
+                setor_id = conn.execute(text("""
+                    SELECT id FROM public.setores WHERE codigo = :codigo AND ativo = TRUE LIMIT 1
+                """), {"codigo": setor}).scalar()
+                if setor_id is None:
+                    return jsonify({"ok": False, "erro": "Setor inválido ou inativo."}), 400
+                conn.execute(text("""
+                    UPDATE public.relatorios
+                    SET titulo = :titulo, descricao = :descricao, setor_id = :setor_id,
+                        url = :url, atualizado_em = NOW()
+                    WHERE id = :id
+                """), {
+                    "id": relatorio_id, "titulo": titulo, "descricao": descricao,
+                    "setor_id": int(setor_id), "url": url
+                })
+
+        acao = "excluído" if request.method == "DELETE" else "atualizado"
+        log(f"Relatório {relatorio_id} {acao} por {usuario_atual.get('email')}", "INFO")
+        return jsonify({"ok": True, "data": carregar_portal_data_neon()})
+    except Exception as e:
+        log(f"Erro ao processar relatório {relatorio_id}: {e}", "ERRO")
+        return jsonify({"ok": False, "erro": "Erro interno ao processar o relatório."}), 500
+
+
+@app.route("/api/admin/setores", methods=["POST"])
+def api_admin_setor_create():
+    usuario_atual, erro = _admin_atual_ou_resposta()
+    if erro:
+        return erro
+    body = request.get_json(silent=True) or {}
+    nome = str(body.get("name") or "").strip()
+    cor = str(body.get("color") or "").strip() or None
+    codigo = _normalizar_codigo_setor(body.get("code") or nome)
+    if not nome or not codigo:
+        return jsonify({"ok": False, "erro": "Informe o nome do setor."}), 400
+    try:
+        with engine.begin() as conn:
+            row = conn.execute(text("""
+                SELECT id, ativo FROM public.setores WHERE codigo = :codigo LIMIT 1
+            """), {"codigo": codigo}).mappings().first()
+            if row:
+                if bool(row.get("ativo")):
+                    return jsonify({"ok": False, "erro": "Já existe um setor com este nome/código."}), 400
+                conn.execute(text("""
+                    UPDATE public.setores
+                    SET nome = :nome, label = :nome, cor = :cor, ativo = TRUE
+                    WHERE id = :id
+                """), {"id": int(row["id"]), "nome": nome, "cor": cor})
+            else:
+                conn.execute(text("""
+                    INSERT INTO public.setores (nome, codigo, label, cor, ativo)
+                    VALUES (:nome, :codigo, :nome, :cor, TRUE)
+                """), {"nome": nome, "codigo": codigo, "cor": cor})
+        log(f"Setor criado/reativado por {usuario_atual.get('email')}: {codigo}", "INFO")
+        return jsonify({"ok": True, "data": carregar_portal_data_neon()}), 201
+    except Exception as e:
+        log(f"Erro ao criar setor {codigo}: {e}", "ERRO")
+        return jsonify({"ok": False, "erro": "Erro interno ao criar o setor."}), 500
+
+
+@app.route("/api/admin/setores/<string:codigo>", methods=["PATCH", "DELETE"])
+def api_admin_setor_item(codigo):
+    usuario_atual, erro = _admin_atual_ou_resposta()
+    if erro:
+        return erro
+    codigo = str(codigo or "").strip()
+    try:
+        with engine.begin() as conn:
+            setor = conn.execute(text("""
+                SELECT id, codigo, nome FROM public.setores
+                WHERE codigo = :codigo AND ativo = TRUE LIMIT 1
+            """), {"codigo": codigo}).mappings().first()
+            if not setor:
+                return jsonify({"ok": False, "erro": "Setor não encontrado."}), 404
+            setor_id = int(setor["id"])
+
+            if request.method == "DELETE":
+                qtd_relatorios = int(conn.execute(text("""
+                    SELECT COUNT(*) FROM public.relatorios WHERE setor_id = :id
+                """), {"id": setor_id}).scalar() or 0)
+                qtd_usuarios = int(conn.execute(text("""
+                    SELECT COUNT(*) FROM public.usuario_setores WHERE setor_id = :id
+                """), {"id": setor_id}).scalar() or 0)
+                if qtd_relatorios or qtd_usuarios:
+                    return jsonify({
+                        "ok": False,
+                        "erro": "Não é possível remover: setor em uso em relatórios ou usuários."
+                    }), 400
+                conn.execute(text("""
+                    UPDATE public.setores SET ativo = FALSE WHERE id = :id
+                """), {"id": setor_id})
+            else:
+                body = request.get_json(silent=True) or {}
+                nome = str(body.get("name") or "").strip()
+                cor = body.get("color")
+                if not nome:
+                    return jsonify({"ok": False, "erro": "Informe o nome do setor."}), 400
+                conn.execute(text("""
+                    UPDATE public.setores
+                    SET nome = :nome, label = :nome,
+                        cor = COALESCE(:cor, cor)
+                    WHERE id = :id
+                """), {"id": setor_id, "nome": nome, "cor": cor})
+
+        acao = "removido" if request.method == "DELETE" else "atualizado"
+        log(f"Setor {codigo} {acao} por {usuario_atual.get('email')}", "INFO")
+        return jsonify({"ok": True, "data": carregar_portal_data_neon()})
+    except Exception as e:
+        log(f"Erro ao processar setor {codigo}: {e}", "ERRO")
+        return jsonify({"ok": False, "erro": "Erro interno ao processar o setor."}), 500
 
 
 @app.route("/api/portal-data", methods=["GET", "PUT"])
