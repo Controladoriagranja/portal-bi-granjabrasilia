@@ -3394,6 +3394,94 @@
     }
   }
 
+
+  /* ═════════════ 18/09/2026 — ORDENAÇÃO + PLANEJAMENTO DOS CHAMADOS ═════════════ */
+  .ticket-planning-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+  .ticket-planning-fields .form-group{margin-bottom:0}
+  .sortable-th{cursor:pointer;user-select:none;white-space:nowrap;transition:background .15s,color .15s}
+  .sortable-th:hover{background:#dde8f1!important;color:#17334d!important}
+  .sortable-th .sort-indicator{display:inline-block;min-width:12px;margin-left:5px;color:#91a4b6;font-size:10px;vertical-align:1px}
+  .sortable-th.active-sort .sort-indicator{color:#2967a6}
+  #ticketTable{overflow-x:auto!important}
+  #ticketTable table{min-width:1450px}
+  #ticketTable td,#ticketTable th{vertical-align:middle}
+  @media(max-width:760px){.ticket-planning-fields{grid-template-columns:1fr}}
+
+
+  /* ═════════════ CHAMADOS — PRIORIDADE + FILTRO DE DATA ═════════════ */
+  .ticket-date-range-filter{
+    display:inline-flex;
+    align-items:center;
+    gap:7px;
+    padding:5px 8px;
+    min-height:38px;
+    border:1px solid var(--border);
+    border-radius:8px;
+    background:var(--surface);
+  }
+  .ticket-date-range-label{
+    color:var(--text-muted);
+    font-size:11px;
+    font-weight:700;
+    white-space:nowrap;
+  }
+  .ticket-date-range-sep{
+    color:var(--text-muted);
+    font-size:11px;
+  }
+  .ticket-date-range-filter input[type="date"]{
+    width:138px;
+    padding:6px 8px!important;
+    font-size:12px!important;
+    border-radius:6px!important;
+  }
+  .ticket-date-clear{
+    width:26px;
+    height:26px;
+    display:grid;
+    place-items:center;
+    border:0;
+    border-radius:6px;
+    background:transparent;
+    color:var(--text-muted);
+    cursor:pointer;
+    font-size:17px;
+    line-height:1;
+  }
+  .ticket-date-clear:hover{
+    background:var(--surface2);
+    color:var(--red);
+  }
+
+  .ticket-planning-fields{
+    display:grid;
+    grid-template-columns:minmax(180px,1fr) minmax(360px,2fr);
+    gap:14px;
+    align-items:start;
+  }
+  .ticket-admin-planning-dates{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:14px;
+  }
+
+  @media(max-width:850px){
+    .ticket-date-range-filter{
+      width:100%;
+      flex-wrap:wrap;
+    }
+    .ticket-date-range-filter input[type="date"]{
+      flex:1 1 135px;
+      width:auto;
+    }
+    .ticket-planning-fields{
+      grid-template-columns:1fr;
+    }
+    .ticket-admin-planning-dates{
+      grid-template-columns:1fr;
+    }
+  }
+
 </style>
 
 </head>
@@ -3431,7 +3519,7 @@
     <button class="btn-primary" id="loginBtn" onclick="handleLogin(this)">Entrar no Portal</button>
 
     <div class="login-access-hint">
-      Ainda não possui acesso? Solicite ao seu gestor que abra um chamado
+      Ainda não tem acesso? Solicite ao seu gestor que abra um chamado
       ou entre em contato pelo <strong>ramal 5236</strong>.
     </div>
 
@@ -3497,6 +3585,9 @@
     </div>
 
     <div class="sidebar-section sidebar-group-gap">SISTEMA</div>
+    <div class="nav-item" id="nav-changepass" onclick="switchView('changepass', this)">
+      <span class="nav-icon">🔑</span> Trocar Senha
+    </div>
 
     <div class="sidebar-footer">
       <div class="user-pill" id="userPill">
@@ -3741,13 +3832,19 @@
                 </div>
               </div>
 
-              <div style="padding-top:16px;border-top:1px solid var(--border);margin-top:8px">
-                <label style="font-size:13px;color:var(--text-muted);font-weight:500">Redefinir senha (opcional)</label>
+              <div id="euAdminPasswordSection" style="padding-top:16px;border-top:1px solid var(--border);margin-top:8px">
+                <label style="font-size:13px;color:var(--text-muted);font-weight:500">Redefinir senha (somente Admin)</label>
                 <div style="display:flex;gap:10px;margin-top:8px">
-                  <input type="text" id="euNewPwd" placeholder="Nova senha para este usuário" style="flex:1">
-                  <button class="btn-sm" onclick="document.getElementById('euNewPwd').value=generatePwd()" style="flex-shrink:0;white-space:nowrap">🎲 Gerar</button>
+                  <input type="password" id="euNewPwd" minlength="8" autocomplete="new-password"
+                    placeholder="Mínimo de 8 caracteres" style="flex:1">
+                  <button type="button" class="btn-sm"
+                    onclick="document.getElementById('euNewPwd').value=generatePwd()"
+                    style="flex-shrink:0;white-space:nowrap">🎲 Gerar</button>
                 </div>
-                <div style="font-size:11px;color:var(--text-muted);margin-top:5px">Deixe em branco para manter a senha atual.</div>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:5px">
+                  Apenas administradores podem redefinir a senha de outro usuário.
+                  Deixe em branco para manter a senha atual.
+                </div>
               </div>
 
               <div style="display:flex;gap:10px;margin-top:24px;flex-wrap:wrap">
@@ -3980,6 +4077,14 @@
               <option value="done">Concluído</option>
               <option value="rejected">Reprovado</option>
             </select>
+
+            <div class="ticket-date-range-filter" title="Filtrar pela data de abertura do chamado">
+              <span class="ticket-date-range-label">Abertura</span>
+              <input id="ticketDateFrom" type="date" onchange="renderTickets()" aria-label="Data inicial de abertura">
+              <span class="ticket-date-range-sep">até</span>
+              <input id="ticketDateTo" type="date" onchange="renderTickets()" aria-label="Data final de abertura">
+              <button type="button" class="ticket-date-clear" onclick="clearTicketDateFilter()" title="Limpar período">×</button>
+            </div>
           </div>
           <div class="table-wrapper" id="ticketTable"></div>
         </div>
@@ -4027,6 +4132,33 @@
                   onchange="updateTicketManagerInfo()">
               </div>
               <div class="form-group full">
+                <div class="ticket-planning-fields">
+                  <div class="form-group">
+                    <label>Prioridade</label>
+                    <select id="ticketNewPriority">
+                      <option value="Baixa">Baixa</option>
+                      <option value="Média" selected>Média</option>
+                      <option value="Alta">Alta</option>
+                      <option value="Urgente">Urgente</option>
+                    </select>
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:5px">
+                      Informe a prioridade percebida para a solicitação.
+                    </div>
+                  </div>
+
+                  <div id="ticketAdminPlanningDates" class="ticket-admin-planning-dates">
+                    <div class="form-group">
+                      <label>Data de início prevista</label>
+                      <input id="ticketNewPlannedStart" type="date">
+                    </div>
+                    <div class="form-group">
+                      <label>Data de fim prevista</label>
+                      <input id="ticketNewPlannedEnd" type="date">
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="form-group full">
                 <label>O que precisa ser feito? *</label>
                 <textarea id="ticketDescription" placeholder="Descreva aqui a sua solicitação..."></textarea>
               </div>
@@ -4055,7 +4187,7 @@
             </div>
             <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:18px">
               <button class="btn-sm" onclick="closeNewTicket()">Cancelar</button>
-              <button class="btn-sm accent" onclick="createTicket()">Enviar Chamado</button>
+              <button class="btn-sm accent" id="createTicketBtn" onclick="createTicket(this)">Enviar Chamado</button>
             </div>
           </div>
         </div>
@@ -4100,9 +4232,21 @@
           </div>
           <select class="user-sector-filter" id="chKanbanPriority" onchange="renderTicketAdmin()" style="max-width:180px">
             <option value="">Todas prioridades</option>
+            <option value="Urgente">Urgente</option>
             <option value="Alta">Alta</option>
             <option value="Média">Média</option>
             <option value="Baixa">Baixa</option>
+          </select>
+          <select class="user-sector-filter" id="chKanbanStatus" onchange="renderTicketAdmin()" style="max-width:210px">
+            <option value="">Todos os status</option>
+            <option value="awaiting_manager">Aguardando aprovação</option>
+            <option value="queue">Pendentes</option>
+            <option value="development">Em desenvolvimento</option>
+            <option value="manager_validation">Em validação</option>
+            <option value="done">Concluído</option>
+            <option value="returned">Retornado</option>
+            <option value="requester_revision">Revisão do solicitante</option>
+            <option value="rejected">Reprovado</option>
           </select>
           
         </div>
@@ -4183,7 +4327,8 @@
         <div class="form-panel" style="max-width:440px">
           <div class="form-title">🔑 Trocar Senha</div>
           <p style="font-size:13px;color:var(--text-muted);margin-bottom:20px;line-height:1.6">
-            Defina uma nova senha para sua conta. Use no mínimo 8 caracteres.
+            Altere somente a senha da sua própria conta. Informe a senha atual e use
+            no mínimo 8 caracteres na nova senha.
           </p>
 
           <div class="form-group">
@@ -4231,22 +4376,6 @@
           </div>
         </div>
 
-        <!-- Admin: resetar senha de outro usuário -->
-        <div id="adminResetPwd" style="display:none;margin-top:28px;max-width:440px">
-          <div class="form-panel">
-            <div class="form-title">⚙️ Redefinir Senha de Usuário</div>
-            <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">Como admin, você pode redefinir a senha de qualquer usuário.</p>
-            <div class="form-group">
-              <label>Usuário</label>
-              <select id="resetUserSelect"></select>
-            </div>
-            <div class="form-group">
-              <label>Nova senha</label>
-              <input type="text" id="resetNewPwd" placeholder="Nova senha para o usuário">
-            </div>
-            <button class="btn-sm accent" id="adminResetPasswordBtn" onclick="adminResetPassword(this)">🔄 Redefinir Senha</button>
-          </div>
-        </div>
       </div>
 
     </div><!-- /content -->
@@ -4737,6 +4866,23 @@ function checkPwdStrength(value) {
   }
 }
 
+function prepareChangePasswordView() {
+  ['cpCurrent','cpNew','cpConfirm'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.value = '';
+      el.type = 'password';
+    }
+  });
+  const errorBox = document.getElementById('cpError');
+  const successBox = document.getElementById('cpSuccess');
+  const match = document.getElementById('cpMatchMsg');
+  if (errorBox) errorBox.style.display = 'none';
+  if (successBox) successBox.style.display = 'none';
+  if (match) match.style.display = 'none';
+  checkPwdStrength('');
+}
+
 async function changePassword(button=null) {
   const currentPassword = document.getElementById('cpCurrent')?.value || '';
   const newPassword = document.getElementById('cpNew')?.value || '';
@@ -4773,7 +4919,7 @@ async function changePassword(button=null) {
     const match = document.getElementById('cpMatchMsg');
     if (match) match.style.display = 'none';
     if (successBox) successBox.style.display = 'block';
-    showToast('Senha alterada com sucesso!', 'success');
+    showToast('Sua senha foi alterada e salva no Neon com sucesso!', 'success');
   } catch (erro) {
     if (errorBox) {
       errorBox.textContent = erro?.message || 'Não foi possível alterar a senha.';
@@ -4784,48 +4930,6 @@ async function changePassword(button=null) {
   }
 }
 
-function initAdminResetPanel() {
-  const panel = document.getElementById('adminResetPwd');
-  const select = document.getElementById('resetUserSelect');
-  if (!panel || !select) return;
-
-  const isAdmin = currentUser?.role === 'admin';
-  panel.style.display = isAdmin ? 'block' : 'none';
-  if (!isAdmin) return;
-
-  select.innerHTML = db.users
-    .filter(u => u.status !== 'inactive')
-    .map(u => `<option value="${Number(u.dbId || u.id)}">${u.name} — ${u.email}</option>`)
-    .join('');
-}
-
-async function adminResetPassword(button=null) {
-  const userId = Number(document.getElementById('resetUserSelect')?.value);
-  const password = document.getElementById('resetNewPwd')?.value || '';
-
-  if (!Number.isFinite(userId)) {
-    showToast('Selecione um usuário.', 'error');
-    return;
-  }
-  if (password.length < 8) {
-    showToast('A senha deve possuir pelo menos 8 caracteres.', 'error');
-    return;
-  }
-
-  setButtonBusy(button || document.getElementById('adminResetPasswordBtn'), true, 'Salvando...');
-  try {
-    await portalApiRequest(`/api/admin/usuarios/${userId}/password`, {
-      method:'PATCH',
-      body:JSON.stringify({password})
-    });
-    document.getElementById('resetNewPwd').value = '';
-    showToast('Senha redefinida com sucesso!', 'success');
-  } catch (erro) {
-    showToast(erro?.message || 'Não foi possível redefinir a senha.', 'error');
-  } finally {
-    setButtonBusy(button || document.getElementById('adminResetPasswordBtn'), false);
-  }
-}
 
 const PORTAL_API_BASE =
   "https://portal-bi-granjabrasilia.onrender.com";
@@ -5480,10 +5584,47 @@ function updateUserSectorFilterOptions() {
   userSectorFilter = select.value;
 }
 
+let userTableSort = { key:'name', dir:'asc' };
+
+function toggleUserTableSort(key){
+  if(userTableSort.key===key){
+    userTableSort.dir = userTableSort.dir==='asc' ? 'desc' : 'asc';
+  }else{
+    userTableSort = {key, dir:'asc'};
+  }
+  renderAllUsersTable();
+}
+
+function userSortValue(u,key){
+  if(key==='name') return String(u.name||'');
+  if(key==='role') return roleLabel(u.role||'');
+  if(key==='sectors'){
+    if(u.role!=='sector') return 'Todos';
+    if((u.reportAccessMode||'sector')==='specific') return `${(u.reportIds||[]).length} relatórios específicos`;
+    return (u.sectors||[]).map(sectorLabel).join(', ');
+  }
+  if(key==='status') return String(u.status||'');
+  return '';
+}
+
+function comparePortalValues(a,b,dir='asc'){
+  const mul=dir==='desc'?-1:1;
+  const an=typeof a==='number' && Number.isFinite(a);
+  const bn=typeof b==='number' && Number.isFinite(b);
+  if(an&&bn) return (a-b)*mul;
+  return String(a??'').localeCompare(String(b??''),'pt-BR',{sensitivity:'base',numeric:true})*mul;
+}
+
+function sortableHeader(label,key,state,handler){
+  const active=state.key===key;
+  const icon=active ? (state.dir==='asc'?'▲':'▼') : '↕';
+  return `<th class="sortable-th ${active?'active-sort':''}" onclick="${handler}('${key}')" title="Ordenar por ${escTicket(label)}">${escTicket(label)}<span class="sort-indicator">${icon}</span></th>`;
+}
+
 function renderAllUsersTable() {
   updateUserSectorFilterOptions();
 
-  const users = db.users.filter(u => {
+  let users = db.users.filter(u => {
     const matchesText = !userFilter ||
       u.name.toLowerCase().includes(userFilter) ||
       u.email.toLowerCase().includes(userFilter);
@@ -5493,13 +5634,22 @@ function renderAllUsersTable() {
 
     return matchesText && matchesSector;
   });
+  users = [...users].sort((a,b)=>comparePortalValues(
+    userSortValue(a,userTableSort.key),
+    userSortValue(b,userTableSort.key),
+    userTableSort.dir
+  ));
   const el = document.getElementById('allUsersTable');
   if (users.length === 0) {
     el.innerHTML = '<div class="empty-state"><div class="empty-icon">👥</div><h3>Nenhum usuário encontrado</h3><p>Tente outro termo de busca.</p></div>';
     return;
   }
   el.innerHTML = `<table><thead><tr>
-    <th>Usuário</th><th>Perfil</th><th>Setores / Telas</th><th>Status</th><th style="text-align:center">Ações</th>
+    ${sortableHeader('Usuário','name',userTableSort,'toggleUserTableSort')}
+    ${sortableHeader('Perfil','role',userTableSort,'toggleUserTableSort')}
+    ${sortableHeader('Setores / Telas','sectors',userTableSort,'toggleUserTableSort')}
+    ${sortableHeader('Status','status',userTableSort,'toggleUserTableSort')}
+    <th style="text-align:center">Ações</th>
   </tr></thead><tbody>${users.map(u => `<tr>
     <td>
       <div style="display:flex;align-items:center;gap:10px">
@@ -6550,6 +6700,16 @@ function openNewTicket() {
       : 'Preenchido automaticamente pelo seu login e não pode ser alterado.';
   }
 
+  const planningDates = document.getElementById('ticketAdminPlanningDates');
+  const canPlanDates = isTicketAdmin();
+  if (planningDates) planningDates.style.display = canPlanDates ? 'grid' : 'none';
+  if (!canPlanDates) {
+    const ps = document.getElementById('ticketNewPlannedStart');
+    const pe = document.getElementById('ticketNewPlannedEnd');
+    if (ps) ps.value = '';
+    if (pe) pe.value = '';
+  }
+
   ticketSelectedFiles = [];
   renderTicketFileList();
   renderTicketProjects();
@@ -6607,7 +6767,7 @@ function renderTicketFileList() {
     </div>`).join('');
 }
 
-function createTicket() {
+async function createTicket(button=null) {
   const requesterName = document.getElementById('ticketRequesterName').value.trim();
   const requesterContact = document.getElementById('ticketRequesterContact').value.trim();
   const title = document.getElementById('ticketTitle').value.trim();
@@ -6615,20 +6775,37 @@ function createTicket() {
   const project = document.getElementById('ticketProject').value;
   const description = document.getElementById('ticketDescription').value.trim();
   const objective = document.getElementById('ticketObjective').value.trim();
+  const priority = document.getElementById('ticketNewPriority')?.value || 'Média';
+  const plannedStart = isTicketAdmin()
+    ? (document.getElementById('ticketNewPlannedStart')?.value || '')
+    : '';
+  const plannedEnd = isTicketAdmin()
+    ? (document.getElementById('ticketNewPlannedEnd')?.value || '')
+    : '';
   const formula = '';
+
   if (!requesterName || !requesterContact || !title || !type || !project || !description) {
-    showToast('Preencha Nome do solicitante, WhatsApp/Ramal, Título, Tipo, Setor e a descrição da solicitação.', 'error'); return;
+    showToast('Preencha Nome do solicitante, WhatsApp/Ramal, Título, Tipo, Setor e a descrição da solicitação.', 'error');
+    return;
   }
+  if (plannedStart && plannedEnd && plannedEnd < plannedStart) {
+    showToast('A data de fim prevista não pode ser anterior à data de início.', 'error');
+    return;
+  }
+
   const managers = managersForProject(project,'initial');
   if (!managers.length) {
-    showToast('Ainda não existe nenhum gestor de aprovação ativo.', 'error'); return;
+    showToast('Ainda não existe nenhum gestor de aprovação ativo.', 'error');
+    return;
   }
+
   const next = ticketStore.tickets.reduce((m,t)=>Math.max(m, Number(t.number)||0), 1053) + 1;
   const now = new Date().toISOString();
   const authRequester=authenticatedTicketRequester();
   const selectedRequester=isTicketAdmin() ? portalUserByName(requesterName) : null;
   if(isTicketAdmin() && !selectedRequester){
-    showToast('Selecione um solicitante válido.', 'error'); return;
+    showToast('Selecione um solicitante válido.', 'error');
+    return;
   }
   const requester=isTicketAdmin() ? selectedRequester : authRequester;
   const t = {
@@ -6636,37 +6813,119 @@ function createTicket() {
     demandKind:'chamado',
     requesterId: requester?.id || authRequester.id || null,
     requesterName: requester?.nome || requester?.name || authRequester.name,
-    requesterContact: requesterContact,
+    requesterContact,
     requesterEmail: requester?.email || authRequester.email,
-    status:'awaiting_manager', priority:'Média', assignedTo:'', assignedToId:null,
+    status:'awaiting_manager', priority, assignedTo:'', assignedToId:null,
+    plannedStart, plannedEnd,
     attachments: ticketSelectedFiles.map(f=>({name:f.name,size:f.size,type:f.type})),
     createdAt:now, updatedAt:now,
-    history:[{at:now, by:currentName(), action:'Chamado aberto', detail:`Enviado para aprovação: ${managers.map(m=>m.name).join(', ')}`}]
+    history:[{
+      at:now,
+      by:currentName(),
+      action:'Chamado aberto',
+      detail:`Prioridade: ${priority}. ${
+        isTicketAdmin()
+          ? `Período previsto: ${plannedStart||'não definido'} até ${plannedEnd||'não definido'}. `
+          : ''
+      }Enviado para aprovação: ${managers.map(m=>m.name).join(', ')}`
+    }]
   };
+
+  if (button) setButtonBusy(button, true, 'Enviando...');
   ticketStore.tickets.unshift(t);
-  saveTicketStore();
-  ['ticketRequesterContact','ticketTitle','ticketDescription','ticketObjective'].forEach(id=>{ const e=document.getElementById(id); if(e)e.value=''; });
-  document.getElementById('ticketType').value='';
-  document.getElementById('ticketProject').value='';
-  ticketSelectedFiles=[];
-  closeNewTicket();
-  updateTicketApprovalBadge();
-  renderTicketAdmin();
-  showToast(`Chamado #${next} criado e enviado ao(s) gestor(es)!`, 'success');
+  cacheTicketStore();
+
+  try {
+    const saved = await saveTicketStore();
+    if (!saved) {
+      ticketStore.tickets = ticketStore.tickets.filter(x=>Number(x.id)!==Number(t.id));
+      cacheTicketStore();
+      renderTickets();
+      return;
+    }
+
+    ['ticketRequesterContact','ticketTitle','ticketDescription','ticketObjective'].forEach(id=>{ const e=document.getElementById(id); if(e)e.value=''; });
+    document.getElementById('ticketType').value='';
+    document.getElementById('ticketProject').value='';
+    const pr=document.getElementById('ticketNewPriority'); if(pr) pr.value='Média';
+    const ps=document.getElementById('ticketNewPlannedStart'); if(ps) ps.value='';
+    const pe=document.getElementById('ticketNewPlannedEnd'); if(pe) pe.value='';
+    ticketSelectedFiles=[];
+    closeNewTicket();
+    updateTicketApprovalBadge();
+    renderTicketAdmin();
+    showToast(`Chamado #${next} criado e salvo no servidor!`, 'success');
+  } finally {
+    if (button) setButtonBusy(button, false);
+  }
 }
 
 function visibleTicketsForCurrentUser() {
   if (currentUser?.role === 'admin') return ticketStore.tickets;
   return ticketStore.tickets.filter(t => String(t.requesterEmail||'').toLowerCase()===currentEmail());
 }
+let ticketTableSort = { key:'createdAt', dir:'asc' };
+
+function toggleTicketTableSort(key){
+  if(ticketTableSort.key===key){
+    ticketTableSort.dir = ticketTableSort.dir==='asc' ? 'desc' : 'asc';
+  }else{
+    ticketTableSort = {key, dir:'asc'};
+  }
+  renderTickets();
+}
+
+function ticketLocalDateKey(value){
+  if(!value) return '';
+  const d = new Date(value);
+  if(Number.isNaN(d.getTime())) return '';
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+
+function clearTicketDateFilter(){
+  const from = document.getElementById('ticketDateFrom');
+  const to = document.getElementById('ticketDateTo');
+  if(from) from.value = '';
+  if(to) to.value = '';
+  renderTickets();
+}
+
+function ticketTableSortValue(t,key){
+  if(key==='number') return Number(t.number)||0;
+  if(key==='title') return String(t.title||'');
+  if(key==='project') return String(t.project||'');
+  if(key==='type') return String(t.type||'');
+  if(key==='priority') return ({Urgente:4,Alta:3,'Média':2,Baixa:1}[t.priority||'Média']||0);
+  if(key==='status') return ticketStatusText(t.status||'');
+  if(key==='plannedStart') return t.plannedStart ? new Date(`${t.plannedStart}T00:00:00`).getTime() : 0;
+  if(key==='plannedEnd') return t.plannedEnd ? new Date(`${t.plannedEnd}T00:00:00`).getTime() : 0;
+  if(key==='createdAt' || key==='updatedAt') return t[key] ? new Date(t[key]).getTime() : 0;
+  return '';
+}
+
 function renderTickets() {
   const table = document.getElementById('ticketTable');
   if (!table) return;
   let rows = visibleTicketsForCurrentUser();
   const q = (document.getElementById('ticketSearch')?.value || '').trim().toLowerCase();
   const st = document.getElementById('ticketStatusFilter')?.value || '';
+  const dateFrom = document.getElementById('ticketDateFrom')?.value || '';
+  const dateTo = document.getElementById('ticketDateTo')?.value || '';
+
   if (q) rows = rows.filter(t => (`${t.number} ${t.title} ${t.project}`).toLowerCase().includes(q));
-  if (st) rows = rows.filter(t=>t.status===st);
+  if (st) rows = rows.filter(t=>normalizeTicketStatus(t.status)===st);
+  if (dateFrom || dateTo) {
+    rows = rows.filter(t => {
+      const key = ticketLocalDateKey(t.createdAt);
+      if (!key) return false;
+      if (dateFrom && key < dateFrom) return false;
+      if (dateTo && key > dateTo) return false;
+      return true;
+    });
+  }
 
   const mine = visibleTicketsForCurrentUser();
   const setText=(id,val)=>{const e=document.getElementById(id);if(e)e.textContent=val;};
@@ -6678,25 +6937,35 @@ function renderTickets() {
   if (!rows.length) {
     table.innerHTML='<div class="empty-state"><div class="empty-icon">🎫</div><h3>Nenhum chamado encontrado</h3><p>Use “Abrir Chamado” para registrar uma nova solicitação.</p></div>'; return;
   }
-  // Exibe uma ordem visual simples (01, 02, 03...) independente do número interno do chamado.
-  rows = [...rows].sort((a,b)=>new Date(a.createdAt||0)-new Date(b.createdAt||0));
+
+  rows = [...rows].sort((a,b)=>comparePortalValues(
+    ticketTableSortValue(a,ticketTableSort.key),
+    ticketTableSortValue(b,ticketTableSort.key),
+    ticketTableSort.dir
+  ));
 
   table.innerHTML=`<table><thead><tr>
-      <th>Nº do chamado</th>
-      <th>Título</th>
-      <th>Setor</th>
-      <th>Tipo</th>
-      <th>Status</th>
-      <th>Data de abertura</th>
-      <th>Última atualização</th>
+      ${sortableHeader('Nº do chamado','number',ticketTableSort,'toggleTicketTableSort')}
+      ${sortableHeader('Título','title',ticketTableSort,'toggleTicketTableSort')}
+      ${sortableHeader('Setor','project',ticketTableSort,'toggleTicketTableSort')}
+      ${sortableHeader('Tipo','type',ticketTableSort,'toggleTicketTableSort')}
+      ${sortableHeader('Prioridade','priority',ticketTableSort,'toggleTicketTableSort')}
+      ${sortableHeader('Status','status',ticketTableSort,'toggleTicketTableSort')}
+      ${sortableHeader('Início previsto','plannedStart',ticketTableSort,'toggleTicketTableSort')}
+      ${sortableHeader('Fim previsto','plannedEnd',ticketTableSort,'toggleTicketTableSort')}
+      ${sortableHeader('Data de abertura','createdAt',ticketTableSort,'toggleTicketTableSort')}
+      ${sortableHeader('Última atualização','updatedAt',ticketTableSort,'toggleTicketTableSort')}
       <th></th>
     </tr></thead>
-    <tbody>${rows.map((t,i)=>`<tr>
+    <tbody>${rows.map(t=>`<tr>
       <td><strong>${ticketDisplayNumber(t)}</strong></td>
       <td><strong>${escTicket(t.title)}</strong></td>
       <td>${escTicket(t.project)}</td>
       <td>${escTicket(t.type)}</td>
+      <td>${escTicket(t.priority||'Média')}</td>
       <td><span class="ticket-status ${ticketStatusClass(t.status)}">● ${ticketStatusText(t.status)}</span></td>
+      <td style="color:var(--text-muted);font-size:12px">${t.plannedStart ? formatTicketShortDate(t.plannedStart) : '—'}</td>
+      <td style="color:var(--text-muted);font-size:12px">${t.plannedEnd ? formatTicketShortDate(t.plannedEnd) : '—'}</td>
       <td style="color:var(--text-muted);font-size:12px">${formatTicketDate(t.createdAt)}</td>
       <td style="color:var(--text-muted);font-size:12px">${formatTicketDate(t.updatedAt)}</td>
       <td><button class="action-btn edit" onclick="openTicketDetail(${t.id})">Ver</button></td>
@@ -6758,6 +7027,9 @@ function openTicketDetail(id) {
           <div class="ticket-meta-item"><small>WhatsApp / Ramal</small>${escTicket(t.requesterContact || '-')}</div>
           <div class="ticket-meta-item"><small>Gestor(es)</small>${managers.map(m=>escTicket(m.name)).join(', ') || '-'}</div>
           <div class="ticket-meta-item"><small>Responsável pelo ajuste/criação</small>${escTicket(t.assignedTo || 'Ainda não definido')}</div>
+          <div class="ticket-meta-item"><small>Prioridade</small>${escTicket(t.priority || 'Média')}</div>
+          <div class="ticket-meta-item"><small>Início previsto</small>${t.plannedStart ? formatTicketFullDate(t.plannedStart) : 'Não definido'}</div>
+          <div class="ticket-meta-item"><small>Fim previsto</small>${t.plannedEnd ? formatTicketFullDate(t.plannedEnd) : 'Não definido'}</div>
         </div>
         <div class="ticket-section"><strong>O que precisa ser feito?</strong><p>${escTicket(t.description) || '-'}</p></div>
         <div class="ticket-section"><strong>Objetivo</strong><p>${escTicket(t.objective) || '-'}</p></div>
@@ -6894,10 +7166,12 @@ function setChamadosView(mode){
 function filteredAdminTickets(){
   const q=(document.getElementById('chKanbanSearch')?.value||'').trim().toLowerCase();
   const priority=(document.getElementById('chKanbanPriority')?.value||'');
+  const status=(document.getElementById('chKanbanStatus')?.value||'');
   let rows=[...ticketStore.tickets]
     .sort((a,b)=>(Number(a.number)||0)-(Number(b.number)||0));
   if(q)rows=rows.filter(t=>`${t.number} ${ticketDisplayNumber(t)} ${t.title} ${t.requesterName} ${t.project} ${t.assignedTo||''}`.toLowerCase().includes(q));
   if(priority)rows=rows.filter(t=>(t.priority||'Média')===priority);
+  if(status)rows=rows.filter(t=>normalizeTicketStatus(t.status)===status);
   return rows;
 }
 
@@ -7291,7 +7565,7 @@ function saveChamadoDescription(){
   showToast('Descrição salva.','success');
 }
 
-function saveChamadoSummary(){
+async function saveChamadoSummary(button=null){
   const t=getActiveChamado(); if(!t)return;
 
   const responsible=document.getElementById('chSummaryResponsible').value.trim();
@@ -7303,6 +7577,7 @@ function saveChamadoSummary(){
     return;
   }
 
+  const before=JSON.parse(JSON.stringify(t));
   t.assignedTo=responsible;
   t.assignedToId=selectedPortalUserId('chSummaryResponsible');
   t.plannedStart=start;
@@ -7333,12 +7608,23 @@ function saveChamadoSummary(){
     detail:'Dados gerais, responsável, prioridade, status e período revisados.'
   });
 
-  saveTicketStore();
-  renderTicketAdmin();
-  renderChamadoActivity();
-
-  document.getElementById('chDetailStatus').textContent=ticketStatusText(t.status);
-  showToast('Informações salvas.','success');
+  if(button) setButtonBusy(button,true,'Salvando...');
+  try{
+    const saved=await saveTicketStore();
+    if(!saved){
+      Object.keys(t).forEach(k=>delete t[k]);
+      Object.assign(t,before);
+      cacheTicketStore();
+      renderTicketAdmin();
+      return;
+    }
+    renderTicketAdmin();
+    renderChamadoActivity();
+    document.getElementById('chDetailStatus').textContent=ticketStatusText(t.status);
+    showToast('Informações salvas no servidor.','success');
+  }finally{
+    if(button) setButtonBusy(button,false);
+  }
 }
 function saveChamadoMeta(){
   saveChamadoSummary();
@@ -8577,6 +8863,7 @@ const viewMeta = {
   access:     { title: 'Controle de Acesso',    sub: 'Libere e configure permissões de usuários' },
   reportsmgr: { title: 'Gerenciar Relatórios',  sub: 'Adicione, edite e remova relatórios Power BI' },
   sectors:     { title: 'Gerenciar Setores',      sub: 'Crie, edite e remova setores do portal' },
+  changepass:  { title: 'Trocar Senha',           sub: 'Altere com segurança a senha da sua própria conta' },
 };
 
 function switchView(viewId, navEl) {
@@ -8602,7 +8889,7 @@ function switchView(viewId, navEl) {
     document.getElementById('topbarTitle').textContent = m.title;
     document.getElementById('topbarSub').textContent = m.sub;
   }
-  if (viewId === 'changepass') initAdminResetPanel();
+  if (viewId === 'changepass') prepareChangePasswordView();
   if (viewId === 'sectors') renderSectorsList();
   if (viewId === 'updates') startUpdateMonitor();
   if (viewId === 'tickets') { renderTickets(); renderTicketProjects(); updateTicketManagerInfo(); }
@@ -8656,6 +8943,10 @@ function generatePwd() {
 }
 
 function openEditUser(id) {
+  if (currentUser?.role !== 'admin') {
+    showToast('Apenas administradores podem editar usuários.', 'error');
+    return;
+  }
   const u = db.users.find(x => x.id === id);
   if (!u) return;
 
@@ -8726,6 +9017,10 @@ function toggleEuReportMode() {
 }
 
 async function saveEditUser(button=null) {
+  if (currentUser?.role !== 'admin') {
+    showToast('Apenas administradores podem editar usuários.', 'error');
+    return;
+  }
   const id = parseInt(document.getElementById('euId').value);
   const name = document.getElementById('euName').value.trim();
   const email = document.getElementById('euEmail').value.trim().toLowerCase();
@@ -8775,7 +9070,6 @@ async function saveEditUser(button=null) {
     document.getElementById('euNewPwd').value = '';
     closeEditUser();
     refreshAdminCrudViews();
-    initAdminResetPanel();
     showToast(`Usuário ${name} atualizado no Neon!`, 'success');
   } catch (erro) {
     console.error('Falha ao atualizar usuário:', erro);
@@ -8826,7 +9120,7 @@ function showMobileAdminBtn(show) {
 
 // ═══════════════════════════════════════
 // AUTENTICAÇÃO E DADOS
-// Senhas são gerenciadas exclusivamente pelo Neon Auth.
+// Senhas são gerenciadas pelo backend e persistidas como hash em public.usuarios no Neon.
 // Os dados oficiais do Portal ficam no Neon PostgreSQL.
 // ═══════════════════════════════════════
 
@@ -9455,6 +9749,7 @@ async function loadUpdateStatus(){
           <select id="internalDemandPriority">
             <option value="Média">Média</option>
             <option value="Alta">Alta</option>
+            <option value="Urgente">Urgente</option>
             <option value="Baixa">Baixa</option>
           </select>
         </div>
@@ -9574,7 +9869,7 @@ async function loadUpdateStatus(){
           </div>
         </div>
         <div class="ch-summary-actions">
-          <button class="btn-sm accent" onclick="saveChamadoSummary()">Salvar informações</button>
+          <button class="btn-sm accent" id="saveChamadoSummaryBtn" onclick="saveChamadoSummary(this)">Salvar informações</button>
           <button class="btn-sm" id="chDelayReasonDetailBtn" style="display:none" onclick="openDelayReasonModal(activeChamadoDetailId)">
             ⚠ Motivo do atraso
           </button>
