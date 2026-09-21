@@ -45,7 +45,7 @@ EXEC_THREAD = None
 
 EXTENSOES_DADOS = {".xlsx", ".xls", ".csv", ".parquet", ".html"}
 
-APP_VERSION = "2026.09.18-crud-estavel-v1"
+APP_VERSION = "2026.09.21-senha-propria-v1"
 APP_FILE = Path(__file__).resolve()
 
 # =============================================================================
@@ -200,7 +200,12 @@ def _json_lista(valor):
 
 def _data_ou_none(valor):
     valor = str(valor or "").strip()
-    return valor[:10] if valor else None
+    if not valor:
+        return None
+    try:
+        return datetime.strptime(valor[:10], "%Y-%m-%d").date()
+    except Exception as exc:
+        raise ValueError("Data prevista inválida. Use o formato AAAA-MM-DD.") from exc
 
 
 def _timestamp_ou_none(valor):
@@ -437,6 +442,26 @@ def _usuario_ativo_por_nome(conn, nome):
     """), {"nome": nome}).mappings().first()
 
 
+def _resolver_datas_planejamento_chamado(ticket, existente, pode_planejar):
+    """Resolve datas previstas respeitando permissão do usuário atual.
+
+    - Equipe/admin: pode definir/alterar as datas enviadas no payload.
+    - Usuário comum, chamado novo: datas ficam vazias.
+    - Usuário comum, chamado existente: preserva exatamente as datas já salvas.
+    """
+    if pode_planejar:
+        inicio = _data_ou_none(ticket.get("plannedStart"))
+        fim = _data_ou_none(ticket.get("plannedEnd"))
+        if inicio and fim and fim < inicio:
+            raise ValueError("A data de fim prevista não pode ser anterior à data de início.")
+        return inicio, fim
+
+    if existente:
+        return existente.get("inicio_previsto"), existente.get("fim_previsto")
+
+    return None, None
+
+
 def _validar_lista_anexos(anexos, contexto="anexos"):
     anexos = _json_lista(anexos)
     if len(anexos) > ANEXOS_MAX_POR_ENVIO:
@@ -524,7 +549,12 @@ def _upsert_ticket(conn, ticket, usuario_sessao=None):
     # - admin: pode abrir em nome de qualquer usuário ativo e também trocar
     #   o solicitante de um chamado existente.
     existente = conn.execute(text("""
-        SELECT solicitante_id, solicitante_nome, solicitante_email
+        SELECT
+            solicitante_id,
+            solicitante_nome,
+            solicitante_email,
+            inicio_previsto,
+            fim_previsto
         FROM public.chamados
         WHERE id = :id
         LIMIT 1
@@ -562,6 +592,22 @@ def _upsert_ticket(conn, ticket, usuario_sessao=None):
     if responsavel_usuario and int(responsavel_usuario["id"]) not in RESPONSAVEIS_BI_IDS:
         raise ValueError("Responsável inválido. Selecione Vitor Souza ou Anderson Jr.")
 
+    prioridade = str(ticket.get("priority") or "Média").strip() or "Média"
+    prioridades_validas = {"Baixa", "Média", "Alta", "Urgente"}
+    if prioridade not in prioridades_validas:
+        raise ValueError("Prioridade inválida. Use Baixa, Média, Alta ou Urgente.")
+
+    # Planejamento de datas:
+    # - prioridade pode ser informada pelo solicitante;
+    # - datas previstas são controladas pela equipe administrativa/BI;
+    # - usuário comum não consegue inserir ou sobrescrever datas via payload;
+    # - ao salvar comentários/checklist, datas já definidas são preservadas.
+    inicio_previsto, fim_previsto = _resolver_datas_planejamento_chamado(
+        ticket,
+        existente,
+        admin_atual,
+    )
+
     params = {
         "id": ticket_id,
         "numero": numero,
@@ -577,11 +623,11 @@ def _upsert_ticket(conn, ticket, usuario_sessao=None):
         "solicitante_contato": str(ticket.get("requesterContact") or "")[:200] or None,
         "solicitante_email": solicitante["email"] if solicitante else (str(ticket.get("requesterEmail") or "")[:250] or None),
         "status": _normalizar_status_chamado(ticket.get("status"))[:50],
-        "prioridade": str(ticket.get("priority") or "Média")[:30],
+        "prioridade": prioridade,
         "responsavel": responsavel_usuario["nome"] if responsavel_usuario else (str(ticket.get("assignedTo") or "")[:200] or None),
         "responsavel_id": int(responsavel_usuario["id"]) if responsavel_usuario else None,
-        "inicio_previsto": _data_ou_none(ticket.get("plannedStart")),
-        "fim_previsto": _data_ou_none(ticket.get("plannedEnd")),
+        "inicio_previsto": inicio_previsto,
+        "fim_previsto": fim_previsto,
         "anexos": json.dumps(_json_lista(ticket.get("attachments")), ensure_ascii=False),
         "comentarios": json.dumps(_json_lista(ticket.get("comments")), ensure_ascii=False),
         "checklist": json.dumps(_json_lista(ticket.get("checklist")), ensure_ascii=False),
