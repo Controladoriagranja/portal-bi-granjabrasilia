@@ -1,0 +1,17 @@
+# Credenciais e configuracoes exclusivas da instalacao
+.env
+.env.*
+**/config.py
+**/config_banco.py
+**/config_banco.py.*
+# Dados e execucoes locais
+__pycache__/
+*.pyc
+*.log
+.locks/
+downloads/
+html/
+logs/
+Exportacoes/
+Tratados/
+_backup*/

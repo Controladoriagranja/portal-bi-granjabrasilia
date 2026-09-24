@@ -3645,6 +3645,7 @@
       <!-- VIEW: CENTRAL DE ATUALIZAÇÕES (admin) -->
       <div class="view" id="view-updates">
         <div id="updateApiBanner" class="api-banner offline">● Verificando conexão com o Render...</div>
+        <p style="color:var(--text-muted);font-size:12px;margin:8px 0">Até 3 extrações simultâneas. O Agent atualizado repete falhas até 3 vezes, sem pedir Enter. Os tratamentos só iniciam após todas as extrações concluírem com sucesso, inclusive as novas tentativas.</p>
 
         <div class="update-panel">
           <div class="update-controls">
@@ -9532,8 +9533,13 @@ async function runModuleUpdate(){
 
   const ids = [];
   try {
+    const extracoes = [];
     for (const robo of robos) {
-      const job = await createRobotJob(robo, parametros);
+      const opcoes = robo.tratamento
+        ? {...parametros, dependencias: [...extracoes]}
+        : parametros;
+      const job = await createRobotJob(robo, opcoes);
+      if (!robo.tratamento) extracoes.push(Number(job.id));
       ids.push(job.id);
     }
     saveUpdateBatch(ids);
@@ -9583,7 +9589,7 @@ function renderUpdateProgress(jobs){
 
   const total = alvo.length;
   const concluidos = alvo.filter(j => j.status === 'concluido').length;
-  const erros = alvo.filter(j => j.status === 'erro').length;
+  const erros = alvo.filter(j => ['erro', 'interrompido'].includes(j.status)).length;
   const executando = alvo.filter(j => j.status === 'executando').length;
   const aguardando = alvo.filter(j => j.status === 'aguardando').length;
   const finalizados = concluidos + erros;
@@ -9591,8 +9597,8 @@ function renderUpdateProgress(jobs){
 
   document.getElementById('updateProgressBar').style.width = pct + '%';
   document.getElementById('updateProgressTitle').textContent =
-    executando ? `Executando ${executando} job(s)...`
-    : aguardando ? `${aguardando} job(s) aguardando o Agent...`
+    executando ? `${executando} trabalho(s) em andamento · ${aguardando} na fila`
+    : aguardando ? `${aguardando} trabalho(s) aguardando o Agent ou a conclusão das extrações`
     : erros ? `Finalizado com ${erros} erro(s)`
     : '✅ Concluído com sucesso!';
 
@@ -9619,7 +9625,9 @@ async function loadUpdateStatus(){
     updateLastJobs = jobs;
 
     banner.classList.remove('offline');
-    banner.textContent = '● Render conectado — jobs centralizados no Neon';
+    const ativos = jobs.filter(j => j.status === 'executando').length;
+    const naFila = jobs.filter(j => j.status === 'aguardando').length;
+    banner.textContent = `● Conectado · ${ativos} trabalho(s) em andamento · ${naFila} aguardando`;
 
     const modulo = document.getElementById('updateModule').value;
     const rels = robotsForModule(modulo);
@@ -9629,7 +9637,7 @@ async function loadUpdateStatus(){
       const job = latest.get(Number(robo.id));
       const status = job?.status || 'nunca executado';
       const ocupado = ['aguardando','executando'].includes(String(status));
-      const erro = job?.erro ? `<span class="update-table-file" style="color:var(--red)" title="${String(job.erro).replace(/"/g,'&quot;')}">${String(job.erro).slice(0,110)}</span>` : '';
+      const erro = job?.erro ? `<details style="color:var(--red);margin-top:6px"><summary style="cursor:pointer">Ver erro completo</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:280px;overflow:auto;font:inherit">${escTicket(job.erro)}</pre></details>` : '';
 
       return `<tr>
         <td>

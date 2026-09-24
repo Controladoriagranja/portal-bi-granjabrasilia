@@ -45,7 +45,7 @@ EXEC_THREAD = None
 
 EXTENSOES_DADOS = {".xlsx", ".xls", ".csv", ".parquet", ".html"}
 
-APP_VERSION = "2026.09.21-senha-propria-v1"
+APP_VERSION = "2026.09.24-fila-dependencias-v1"
 APP_FILE = Path(__file__).resolve()
 
 # =============================================================================
@@ -3885,14 +3885,78 @@ def api_agent_claim_job():
         ).strip()[:255] or None
 
         with engine.begin() as conn:
+            # Serializa a reserva entre todos os Agents, inclusive em computadores distintos.
+            conn.execute(text("SELECT pg_advisory_xact_lock(742013, 1)"))
             _interromper_jobs_sem_heartbeat(conn)
             row = conn.execute(text("""
-                WITH proximo AS (
-                    SELECT j.id
+                WITH candidatos AS (
+                    SELECT j.id, j.robo_id, COALESCE(j.parametros, '{}'::jsonb) AS parametros, r.codigo
                     FROM public.jobs j
                     JOIN public.robos r ON r.id = j.robo_id
-                    WHERE j.status = 'aguardando'
-                      AND r.ativo = TRUE
+                    WHERE j.status = 'aguardando' AND r.ativo = TRUE
+                ),
+                ativos AS (
+                    SELECT j.robo_id, r.codigo
+                    FROM public.jobs j
+                    JOIN public.robos r ON r.id = j.robo_id
+                    WHERE j.status = 'executando'
+                ),
+                dependencias AS (
+                    SELECT c.id AS tratamento_id, d.id, d.robo_id, d.parametros, d.status
+                    FROM candidatos c
+                    CROSS JOIN LATERAL (
+                        SELECT value AS id_texto
+                        FROM jsonb_array_elements_text(
+                            CASE WHEN jsonb_typeof(c.parametros->'dependencias') = 'array'
+                                 THEN c.parametros->'dependencias' ELSE '[]'::jsonb END
+                        )
+                        UNION ALL
+                        SELECT anterior.id::text
+                        FROM public.jobs anterior
+                        WHERE NOT (c.parametros ? 'dependencias')
+                          AND anterior.id IN (
+                              SELECT MAX(hist.id)
+                              FROM public.jobs hist
+                              JOIN public.robos rh ON rh.id = hist.robo_id
+                              WHERE hist.id < c.id
+                                AND LEFT(rh.codigo, 7) <> 'tratar_'
+                                AND CASE
+                                    WHEN rh.codigo IN ('clientes_cadastrados', 'cadastro_de_vendedores') THEN 'comercial'
+                                    WHEN LEFT(rh.codigo, 18) = 'indice_zootecnico_' THEN 'zootecnico'
+                                    ELSE split_part(rh.codigo, '_', 1)
+                                END = substring(c.codigo FROM 8)
+                              GROUP BY hist.robo_id
+                          )
+                    ) ids
+                    LEFT JOIN public.jobs d ON d.id::text = ids.id_texto
+                    WHERE LEFT(c.codigo, 7) = 'tratar_'
+                ),
+                proximo AS (
+                    SELECT j.id
+                    FROM public.jobs j
+                    JOIN candidatos c ON c.id = j.id
+                    WHERE (SELECT COUNT(*) FROM ativos) < 3
+                      AND NOT EXISTS (SELECT 1 FROM ativos WHERE LEFT(codigo, 7) = 'tratar_')
+                      AND NOT EXISTS (SELECT 1 FROM ativos WHERE robo_id = c.robo_id)
+                      AND (
+                          LEFT(c.codigo, 7) <> 'tratar_'
+                          OR (
+                              NOT EXISTS (SELECT 1 FROM ativos)
+                              AND NOT EXISTS (
+                                  SELECT 1 FROM dependencias d
+                                  WHERE d.tratamento_id = c.id
+                                    AND d.status IS DISTINCT FROM 'concluido'
+                                    AND NOT EXISTS (
+                                        SELECT 1 FROM public.jobs reparo
+                                        WHERE reparo.robo_id = d.robo_id
+                                          AND reparo.id > d.id
+                                          AND reparo.status = 'concluido'
+                                          AND COALESCE(reparo.parametros, '{}'::jsonb) - 'dependencias'
+                                              = COALESCE(d.parametros, '{}'::jsonb) - 'dependencias'
+                                    )
+                              )
+                          )
+                      )
                     ORDER BY j.id ASC
                     FOR UPDATE OF j SKIP LOCKED
                     LIMIT 1
