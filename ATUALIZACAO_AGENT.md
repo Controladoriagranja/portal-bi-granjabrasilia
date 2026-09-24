@@ -1,9 +1,8 @@
-# Agent 3.1 e fila de atualizacoes
+# Agent 3.2 e fila de atualizacoes
 
 O portal cria todos os trabalhos de extracao e registra os IDs como
-dependencias dos tratamentos. A API libera ate tres trabalhos ao mesmo tempo,
-considerando todos os Agents. Tratamentos so iniciam quando todas as extracoes
-necessarias concluem com sucesso. Erros nao liberam tratamentos.
+dependencias dos tratamentos. A API libera ate tres extracoes ao mesmo tempo,
+considerando todos os Agents. Tratamentos so iniciam quando as extracoes do proprio modulo concluem com sucesso. Erros nao liberam tratamentos.
 Uma nova extracao bem-sucedida com os mesmos parametros pode reparar uma
 dependencia anterior; trabalhos de recuperacao nao ficam presos atras dela.
 
@@ -21,9 +20,9 @@ pronto para a rede. O portal permite expandir a mensagem completa de erro.
 - Aguarde as execucoes atuais terminarem e encerre os Agents antigos.
 - Inicie uma instancia com:
   py -u X:\BI_Granja\PortalBI\api\portal_bi_agent.py
-- Confira Versao 3.1 e Extracoes paralelas: 3.
+- Confira Versao 3.2 e Extracoes paralelas: 3.
 - A publicacao do site usa index.html; a API do Render usa api/app.py.
-  A versao esperada de /api/health e 2026.09.24-fila-dependencias-v1.
+  A versao esperada de /api/health e 2026.09.24-fila-modulos-v2.
 
 Os robos de banco preservam os modulos banco_*.py e configuracoes da instalacao.
 As novas tentativas nao alteram os filtros; podem atualizar arquivos ja gerados.
