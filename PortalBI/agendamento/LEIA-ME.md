@@ -16,9 +16,9 @@ C:\Users\asalvino\AppData\Local\BI_Granja\executar_diario.ps1
 
 Ele usa caminhos UNC para nao depender da unidade X:, inicia o Agent se nao
 houver um rodando neste computador e cria o lote de todos os robos ativos.
-O lote atual tem 31 extratores e 5 tratamentos, com as dependencias dos 31
-extratores registradas em cada tratamento. As regras da fila mantem ate tres
-execucoes simultaneas e exigem sucesso das dependencias.
+O lote atual tem 31 extratores e 5 tratamentos, com as dependencias dos
+extratores do proprio modulo em cada tratamento. A fila mantem ate tres
+extracoes simultaneas e permite tratar modulos ja concluidos enquanto outros extraem.
 
 A criacao e atomica, sem atribuir os trabalhos a um usuario humano, e idempotente
 por data: repetir a tarefa no mesmo dia nao cria outro lote.

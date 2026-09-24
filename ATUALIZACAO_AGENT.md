@@ -37,3 +37,8 @@ As novas tentativas nao alteram os filtros; podem atualizar arquivos ja gerados.
 O ultimo teste usa conexao PostgreSQL configurada localmente, com dados
 ficticios em SELECT; nao altera tabelas. O teste de navegador usa Chrome oculto
 e nao cria trabalhos reais.
+
+
+Atualizacao 3.2: a API e o Agent liberam tratamentos por modulo. Cada tratamento
+aguarda apenas suas extracoes, incluindo recuperacoes; outros modulos continuam.
+A regra tambem filtra dependencias globais dos lotes criados anteriormente.

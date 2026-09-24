@@ -94,7 +94,7 @@ class ContasTests(unittest.TestCase):
 
 
 class FilaTests(unittest.TestCase):
-    def test_paralelismo_e_barreira_do_tratamento(self):
+    def test_tratamento_liberado_nao_espera_outros_modulos(self):
         arquivo = RAIZ.parent / "PortalBI" / "api" / "portal_bi_agent.py"
         arvore = ast.parse(arquivo.read_text(encoding="utf-8-sig"))
         funcao = next(n for n in arvore.body if isinstance(n, ast.FunctionDef) and n.name == "executar_fila_paralela")
@@ -102,18 +102,22 @@ class FilaTests(unittest.TestCase):
         guarda = threading.Lock()
         jobs = iter([
             {"id": i, "robo_codigo": nome}
-            for i, nome in enumerate(["a", "b", "c", "tratar_comercial", "d"], 1)
+            for i, nome in enumerate(["a", "b", "c", "tratar_comercial", "tratar_logistica"], 1)
         ])
         def claim():
             try:
                 return next(jobs)
             except StopIteration:
                 raise KeyboardInterrupt
+        liberado = threading.Event()
         def executar(job):
             nome = job["robo_codigo"]
             with guarda:
                 eventos.append(("inicio", nome))
-            time.sleep(0.04)
+            if nome.startswith("tratar_"):
+                liberado.set()
+            else:
+                self.assertTrue(liberado.wait(3))
             with guarda:
                 eventos.append(("fim", nome))
         def heartbeat(job_id, parar):
@@ -127,13 +131,12 @@ class FilaTests(unittest.TestCase):
         exec(compile(ast.Module(body=[funcao], type_ignores=[]), str(arquivo), "exec"), namespace)
         namespace["executar_fila_paralela"](3)
         for nome in ["a", "b", "c"]:
-            self.assertLess(eventos.index(("fim", nome)), eventos.index(("inicio", "tratar_comercial")))
-        self.assertLess(eventos.index(("fim", "tratar_comercial")), eventos.index(("inicio", "d")))
+            self.assertLess(eventos.index(("inicio", "tratar_comercial")), eventos.index(("fim", nome)))
         rodando = pico = 0
         for evento, _ in eventos:
             rodando += 1 if evento == "inicio" else -1
             pico = max(pico, rodando)
-        self.assertEqual(pico, 3)
+        self.assertGreaterEqual(pico, 4)
         self.assertEqual(rodando, 0)
 
 

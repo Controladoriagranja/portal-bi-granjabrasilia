@@ -57,14 +57,14 @@ try:
  """)
  assert result.get("details") and not result.get("injected") and "download incompleto" in result.get("text",""),result
  print("OK: erro completo expansivel e texto escapado")
- # Testa que os tratamentos recebem os IDs de TODAS as extracoes anteriores.
+ # Testa que os tratamentos recebem os IDs apenas das extracoes do proprio modulo.
  run = main[main.index("async function runModuleUpdate()"):main.index("function renderUpdateTerminal(")]
  result = driver.execute_async_script("""
  const done=arguments[arguments.length-1];
  const modulo=document.getElementById('updateModule'); modulo.value='pcp';
  let select=document.createElement('select'); select.id='updateTreatmentMode';
  select.innerHTML='<option value="incremental">Incremental</option>'; document.body.appendChild(select);
- window.robotsForModule=()=>[{id:1},{id:2},{id:3,tratamento:true}];
+ window.robotsForModule=()=>[{id:1,modulo:"pcp"},{id:2,modulo:"comercial"},{id:3,modulo:"pcp",tratamento:true}];
  window.updatePayload=()=>({modo:'auto'});
  window.getUpdateModuleLabel=()=> 'PCP';
  window.periodDescriptionUpdate=()=> 'Automatico';
@@ -75,7 +75,7 @@ try:
  """+run+"""
  runModuleUpdate().then(()=>done(chamadas)).catch(e=>done({error:String(e)}));
  """)
- assert isinstance(result,list) and result[2]["params"]["dependencias"] == [101,102],result
+ assert isinstance(result,list) and result[2]["params"]["dependencias"] == [101],result
  print("OK: tratamento enviado com as dependencias do lote")
 finally:
  driver.quit()

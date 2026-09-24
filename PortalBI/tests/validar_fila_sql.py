@@ -43,6 +43,12 @@ def job(i, robo, status, params=None):
  return {"id": i, "robo_id": robo, "status": status, "parametros": {} if params is None else params}
 
 casos = [
+ ("tratamento com tres extracoes de outro modulo", [job(1,1,"executando"),job(2,2,"executando"),job(3,3,"executando"),job(4,6,"aguardando",{"dependencias":[]})], 4),
+ ("dependencias antigas de outro modulo ignoradas", [job(1,5,"erro"),job(2,1,"concluido"),job(3,4,"aguardando",{"dependencias":[1,2]})], 3),
+ ("outro tratamento nao bloqueia extracao", [job(1,6,"executando"),job(2,1,"aguardando")], 2),
+ ("tratamentos distintos em paralelo", [job(1,6,"executando"),job(2,4,"aguardando",{"dependencias":[]})], 2),
+ ("mesmo modulo ativo bloqueia mesmo sem dependencia", [job(1,1,"executando"),job(2,4,"aguardando",{"dependencias":[]})], None),
+ ("tratamento nao consome conta", [job(1,6,"executando"),job(2,1,"executando"),job(3,2,"executando"),job(4,3,"aguardando")], 4),
  ("fila inicia extracao", [job(1,1,"aguardando")], 1),
  ("limite global tres", [job(1,1,"executando"),job(2,2,"executando"),job(3,3,"executando"),job(4,5,"aguardando")], None),
  ("nao duplica robo", [job(1,1,"executando"),job(2,1,"aguardando")], None),

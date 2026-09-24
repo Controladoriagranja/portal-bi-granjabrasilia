@@ -3645,7 +3645,7 @@
       <!-- VIEW: CENTRAL DE ATUALIZAÇÕES (admin) -->
       <div class="view" id="view-updates">
         <div id="updateApiBanner" class="api-banner offline">● Verificando conexão com o Render...</div>
-        <p style="color:var(--text-muted);font-size:12px;margin:8px 0">Até 3 extrações simultâneas. O Agent atualizado repete falhas até 3 vezes, sem pedir Enter. Os tratamentos só iniciam após todas as extrações concluírem com sucesso, inclusive as novas tentativas.</p>
+        <p style="color:var(--text-muted);font-size:12px;margin:8px 0">Até 3 extrações simultâneas. O Agent atualizado repete falhas até 3 vezes, sem pedir Enter. Cada tratamento inicia após as extrações do seu módulo concluírem com sucesso, inclusive as novas tentativas. Outros módulos podem continuar atualizando.</p>
 
         <div class="update-panel">
           <div class="update-controls">
@@ -9533,13 +9533,16 @@ async function runModuleUpdate(){
 
   const ids = [];
   try {
-    const extracoes = [];
+    const extracoes = new Map();
     for (const robo of robos) {
       const opcoes = robo.tratamento
-        ? {...parametros, dependencias: [...extracoes]}
+        ? {...parametros, dependencias: [...(extracoes.get(robo.modulo) || [])]}
         : parametros;
       const job = await createRobotJob(robo, opcoes);
-      if (!robo.tratamento) extracoes.push(Number(job.id));
+      if (!robo.tratamento) {
+        if (!extracoes.has(robo.modulo)) extracoes.set(robo.modulo, []);
+        extracoes.get(robo.modulo).push(Number(job.id));
+      }
       ids.push(job.id);
     }
     saveUpdateBatch(ids);

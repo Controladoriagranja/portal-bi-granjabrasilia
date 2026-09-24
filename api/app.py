@@ -45,7 +45,7 @@ EXEC_THREAD = None
 
 EXTENSOES_DADOS = {".xlsx", ".xls", ".csv", ".parquet", ".html"}
 
-APP_VERSION = "2026.09.24-fila-dependencias-v1"
+APP_VERSION = "2026.09.24-fila-modulos-v2"
 APP_FILE = Path(__file__).resolve()
 
 # =============================================================================
@@ -3890,13 +3890,13 @@ def api_agent_claim_job():
             _interromper_jobs_sem_heartbeat(conn)
             row = conn.execute(text("""
                 WITH candidatos AS (
-                    SELECT j.id, j.robo_id, COALESCE(j.parametros, '{}'::jsonb) AS parametros, r.codigo
+                    SELECT j.id, j.robo_id, COALESCE(j.parametros, '{}'::jsonb) AS parametros, r.codigo, CASE WHEN LEFT(r.codigo, 7) = 'tratar_' THEN substring(r.codigo FROM 8) WHEN r.codigo IN ('clientes_cadastrados', 'cadastro_de_vendedores') THEN 'comercial' WHEN r.codigo LIKE 'indice_zootecnico_%' THEN 'zootecnico' ELSE split_part(r.codigo, '_', 1) END AS modulo
                     FROM public.jobs j
                     JOIN public.robos r ON r.id = j.robo_id
                     WHERE j.status = 'aguardando' AND r.ativo = TRUE
                 ),
                 ativos AS (
-                    SELECT j.robo_id, r.codigo
+                    SELECT j.robo_id, r.codigo, CASE WHEN LEFT(r.codigo, 7) = 'tratar_' THEN substring(r.codigo FROM 8) WHEN r.codigo IN ('clientes_cadastrados', 'cadastro_de_vendedores') THEN 'comercial' WHEN r.codigo LIKE 'indice_zootecnico_%' THEN 'zootecnico' ELSE split_part(r.codigo, '_', 1) END AS modulo
                     FROM public.jobs j
                     JOIN public.robos r ON r.id = j.robo_id
                     WHERE j.status = 'executando'
@@ -3922,26 +3922,29 @@ def api_agent_claim_job():
                                 AND LEFT(rh.codigo, 7) <> 'tratar_'
                                 AND CASE
                                     WHEN rh.codigo IN ('clientes_cadastrados', 'cadastro_de_vendedores') THEN 'comercial'
-                                    WHEN LEFT(rh.codigo, 18) = 'indice_zootecnico_' THEN 'zootecnico'
+                                    WHEN rh.codigo LIKE 'indice_zootecnico_%' THEN 'zootecnico'
                                     ELSE split_part(rh.codigo, '_', 1)
                                 END = substring(c.codigo FROM 8)
                               GROUP BY hist.robo_id
                           )
                     ) ids
                     LEFT JOIN public.jobs d ON d.id::text = ids.id_texto
+                    LEFT JOIN public.robos rd ON rd.id = d.robo_id
                     WHERE LEFT(c.codigo, 7) = 'tratar_'
+                      AND (rd.id IS NULL OR (CASE WHEN LEFT(rd.codigo, 7) = 'tratar_' THEN substring(rd.codigo FROM 8) WHEN rd.codigo IN ('clientes_cadastrados', 'cadastro_de_vendedores') THEN 'comercial' WHEN rd.codigo LIKE 'indice_zootecnico_%' THEN 'zootecnico' ELSE split_part(rd.codigo, '_', 1) END) = c.modulo)
                 ),
                 proximo AS (
                     SELECT j.id
                     FROM public.jobs j
                     JOIN candidatos c ON c.id = j.id
-                    WHERE (SELECT COUNT(*) FROM ativos) < 3
-                      AND NOT EXISTS (SELECT 1 FROM ativos WHERE LEFT(codigo, 7) = 'tratar_')
+                    WHERE (LEFT(c.codigo, 7) = 'tratar_' OR
+                           (SELECT COUNT(*) FROM ativos WHERE LEFT(codigo, 7) <> 'tratar_') < 3)
+                      AND NOT EXISTS (SELECT 1 FROM ativos a WHERE a.modulo = c.modulo AND LEFT(a.codigo, 7) = 'tratar_')
                       AND NOT EXISTS (SELECT 1 FROM ativos WHERE robo_id = c.robo_id)
                       AND (
                           LEFT(c.codigo, 7) <> 'tratar_'
                           OR (
-                              NOT EXISTS (SELECT 1 FROM ativos)
+                              NOT EXISTS (SELECT 1 FROM ativos a WHERE a.modulo = c.modulo)
                               AND NOT EXISTS (
                                   SELECT 1 FROM dependencias d
                                   WHERE d.tratamento_id = c.id

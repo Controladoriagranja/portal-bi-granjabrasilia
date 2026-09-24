@@ -47,6 +47,17 @@ class AgendaTests(unittest.TestCase):
         p = json.loads(c.inseridos[-1]["parametros"])
         self.assertEqual(p["dependencias"],[101,102])
         self.assertEqual(p["data_agendamento"],"2026-09-25")
+    def test_dependencias_apenas_do_modulo(self):
+        c = Conexao()
+        plano = [{"id":1,"codigo":"pcp_a"},{"id":2,"codigo":"comercial_a"},
+                 {"id":3,"codigo":"tratar_pcp"},{"id":4,"codigo":"tratar_comercial"}]
+        with patch.object(agenda, "planejar_lote", return_value=plano):
+            agenda.criar_lote(c, "2026-09-25")
+        self.assertEqual(json.loads(c.inseridos[2]["parametros"])["dependencias"], [101])
+        self.assertEqual(json.loads(c.inseridos[3]["parametros"])["dependencias"], [102])
+        self.assertEqual(agenda.modulo_robo("indice_zootecnico_base_dinamica"), "zootecnico")
+        self.assertEqual(agenda.modulo_robo("clientes_cadastrados"), "comercial")
+
     def test_mesmo_dia_nao_duplica(self):
         c = Conexao([101,102,103])
         r = agenda.criar_lote(c,"2026-09-25")

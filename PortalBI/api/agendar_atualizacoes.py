@@ -25,6 +25,16 @@ def planejar_lote(catalogo):
     return sorted(ativos.values(), key=lambda r: (r["codigo"].startswith("tratar_"), r["id"]))
 
 
+def modulo_robo(codigo):
+    if codigo.startswith("tratar_"):
+        return codigo[7:]
+    if codigo in {"clientes_cadastrados", "cadastro_de_vendedores"}:
+        return "comercial"
+    if codigo.startswith("indice_zootecnico_"):
+        return "zootecnico"
+    return codigo.split("_", 1)[0]
+
+
 def criar_lote(conn, dia, verificar=False):
     catalogo = conn.execute(text("SELECT id, codigo, ativo FROM public.robos ORDER BY id")).mappings().all()
     plano = planejar_lote(catalogo)
@@ -44,11 +54,12 @@ def criar_lote(conn, dia, verificar=False):
         return {"criado": False, "dia": dia, "jobs": existentes}
     ids = []
     extracoes = []
+    por_modulo = {}
     for robo in plano:
         parametros = {"modo": "auto", "tratamento_modo": "atualizar_tratar",
                       "agendamento": AGENDA, "data_agendamento": dia}
         if robo["codigo"].startswith("tratar_"):
-            parametros["dependencias"] = list(extracoes)
+            parametros["dependencias"] = list(por_modulo.get(modulo_robo(robo["codigo"]), []))
         job_id = conn.execute(text("""
             INSERT INTO public.jobs (robo_id, solicitado_por, status, parametros)
             VALUES (:robo_id, NULL, 'aguardando', CAST(:parametros AS jsonb))
@@ -57,6 +68,7 @@ def criar_lote(conn, dia, verificar=False):
         ids.append(job_id)
         if not robo["codigo"].startswith("tratar_"):
             extracoes.append(job_id)
+            por_modulo.setdefault(modulo_robo(robo["codigo"]), []).append(job_id)
     return {"criado": True, "dia": dia, "jobs": ids, "extratores": len(extracoes),
             "tratamentos": len(ids) - len(extracoes)}
 

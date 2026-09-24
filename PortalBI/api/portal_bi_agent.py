@@ -43,7 +43,7 @@ API_BASE = os.getenv(
 ).rstrip("/")
 
 AGENT_KEY = str(os.getenv("PORTAL_BI_AGENT_KEY") or "").strip()
-AGENT_VERSION = "3.1 - paralelo, repeticao automatica e sem pausas"
+AGENT_VERSION = "3.2 - tratamentos independentes por modulo"
 MAX_TENTATIVAS_JOB = 3
 ESPERA_REPETICAO_JOB = 10
 POLL_SECONDS = 5
@@ -466,10 +466,11 @@ def executar_job(job):
 
 
 def executar_fila_paralela(max_workers):
-    """Busca em ordem; tratamentos aguardam todas as extracoes anteriores."""
+    """Executa jobs liberados pela API, com dependencias e exclusao por modulo."""
     from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    capacidade = max_workers + 5  # Tres contas e um tratamento por modulo; API arbitra as reservas.
+    with ThreadPoolExecutor(max_workers=capacidade) as executor:
         ativos = set()
         try:
             while True:
@@ -480,7 +481,7 @@ def executar_fila_paralela(max_workers):
                     except Exception as e:
                         print(f"[AGENT] Falha ao acompanhar job: {e}", flush=True)
                 ativos -= concluidos
-                if len(ativos) >= max_workers:
+                if len(ativos) >= capacidade:
                     wait(ativos, timeout=POLL_SECONDS, return_when=FIRST_COMPLETED)
                     continue
                 try:
@@ -492,24 +493,7 @@ def executar_fila_paralela(max_workers):
                 if not job:
                     time.sleep(POLL_SECONDS)
                     continue
-                codigo = str(job.get("robo_codigo") or "")
-                if codigo.startswith("tratar_"):
-                    # O job ja foi reservado: manter heartbeat tambem durante a espera.
-                    parar = threading.Event()
-                    heartbeat = threading.Thread(
-                        target=_loop_heartbeat, args=(int(job["id"]), parar), daemon=True,
-                    )
-                    heartbeat.start()
-                    try:
-                        for futuro in ativos:
-                            futuro.result()
-                        ativos.clear()
-                        executar_job(job)
-                    finally:
-                        parar.set()
-                        heartbeat.join(timeout=5)
-                else:
-                    ativos.add(executor.submit(executar_job, job))
+                ativos.add(executor.submit(executar_job, job))
         except KeyboardInterrupt:
             print("Encerrando apos finalizar os robos em andamento...", flush=True)
 
