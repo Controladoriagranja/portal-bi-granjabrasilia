@@ -30,6 +30,8 @@ WITH test_jobs AS (
 """
 consulta = text(prefixo + sql + " SELECT id FROM proximo")
 robos = [
+ {"id": 9, "codigo": "tratar_logistica", "ativo": True},
+ {"id": 10, "codigo": "tratar_suprimentos", "ativo": True},
  {"id": 1, "codigo": "pcp_desperdicio", "ativo": True},
  {"id": 2, "codigo": "pcp_devolucao", "ativo": True},
  {"id": 3, "codigo": "pcp_estoque_online", "ativo": True},
@@ -43,6 +45,7 @@ def job(i, robo, status, params=None):
  return {"id": i, "robo_id": robo, "status": status, "parametros": {} if params is None else params}
 
 casos = [
+ ("quinto tratamento pode iniciar junto dos outros quatro", [job(1,4,"executando"),job(2,6,"executando"),job(3,8,"executando"),job(4,9,"executando"),job(5,10,"aguardando",{"dependencias":[]})], 5),
  ("tratamento com tres extracoes de outro modulo", [job(1,1,"executando"),job(2,2,"executando"),job(3,3,"executando"),job(4,6,"aguardando",{"dependencias":[]})], 4),
  ("dependencias antigas de outro modulo ignoradas", [job(1,5,"erro"),job(2,1,"concluido"),job(3,4,"aguardando",{"dependencias":[1,2]})], 3),
  ("outro tratamento nao bloqueia extracao", [job(1,6,"executando"),job(2,1,"aguardando")], 2),
