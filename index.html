@@ -553,6 +553,32 @@
   }
   .modal-open-btn:hover { background: #1a7fe8; }
 
+  /* REPORT VIEWER FULLSCREEN — scoped to the report modal only */
+  #modalOverlay .report-fullscreen-btn {
+    margin-left: auto;
+    margin-right: 8px;
+    white-space: nowrap;
+    text-decoration: none;
+  }
+  #modalOverlay .report-fullscreen-btn .fullscreen-label-mobile { display: none; }
+  #reportViewerModal:fullscreen,
+  #reportViewerModal:-webkit-full-screen {
+    width: 100vw;
+    height: 100dvh;
+    max-width: none;
+    border-radius: 0;
+  }
+  #modalOverlay .modal.report-viewer-fullscreen-fallback {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100dvh;
+    max-width: none;
+    border-radius: 0;
+    z-index: 110;
+  }
+  body.report-viewer-fullscreen-lock { overflow: hidden; }
+
   /* ADMIN VIEWS */
   .table-wrapper {
     background: var(--surface);
@@ -869,6 +895,58 @@
     /* Modal full screen */
     .modal-overlay { padding: 0; }
     .modal { width: 100vw; height: 100vh; border-radius: 0; }
+
+    /* Report viewer only: compact one-line header on mobile */
+    #modalOverlay .modal {
+      width: 100vw;
+      max-width: none;
+      height: 100dvh;
+      border-radius: 0;
+    }
+    #modalOverlay .modal-header {
+      min-height: 44px;
+      height: 44px;
+      padding: 0 8px;
+      gap: 7px;
+      flex-wrap: nowrap;
+      flex-shrink: 0;
+    }
+    #modalOverlay .modal-header > span:first-child {
+      flex: 0 0 auto;
+      font-size: 15px;
+      line-height: 1;
+    }
+    #modalOverlay .modal-title {
+      flex: 1 1 auto;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: 13px;
+    }
+    #modalOverlay .report-fullscreen-btn {
+      flex: 0 0 auto;
+      min-height: 32px;
+      margin-left: 0;
+      margin-right: 0;
+      padding: 6px 8px;
+      font-size: 11px !important;
+      line-height: 1;
+    }
+    #modalOverlay .report-fullscreen-btn .fullscreen-label-desktop { display: none; }
+    #modalOverlay .report-fullscreen-btn .fullscreen-label-mobile { display: inline; }
+    #modalOverlay .modal-close {
+      flex: 0 0 auto;
+      margin-left: 0;
+      min-width: 34px;
+      min-height: 34px;
+      padding: 4px 7px;
+      font-size: 19px;
+    }
+    #modalOverlay .modal-body {
+      min-height: 0;
+      overflow: hidden;
+    }
 
     /* Tabs scrollable */
     .tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
@@ -4408,12 +4486,15 @@
 
 <!-- MODAL REPORT VIEWER -->
 <div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
-  <div class="modal">
+  <div class="modal" id="reportViewerModal">
     <div class="modal-header">
-      <span>📊</span>
+      <span aria-hidden="true">📊</span>
       <span class="modal-title" id="modalTitle">-</span>
-      <a id="modalOpenBtn" href="#" target="_blank" class="btn-sm" style="margin-left:auto;margin-right:8px;font-size:12px;text-decoration:none">↗ Abrir no Power BI</a>
-      <button class="modal-close" onclick="closeModal()">✕</button>
+      <button id="modalOpenBtn" type="button" class="btn-sm report-fullscreen-btn" onclick="toggleReportFullscreen()" aria-pressed="false" title="Abrir em Tela Cheia">
+        <span class="fullscreen-label-desktop">⛶ Abrir em Tela Cheia</span>
+        <span class="fullscreen-label-mobile">⛶ Tela Cheia</span>
+      </button>
+      <button class="modal-close" onclick="closeModal()" aria-label="Fechar relatório">✕</button>
     </div>
     <div class="modal-body" style="flex-direction:column;padding:0;position:relative;">
       <!-- Loading state -->
@@ -5450,6 +5531,114 @@ function powerBIUrlForPage(url, pageName) {
   }
 }
 
+function getReportViewerModal() {
+  return document.getElementById('reportViewerModal');
+}
+
+function getFullscreenElement() {
+  return document.fullscreenElement || document.webkitFullscreenElement || null;
+}
+
+function isReportViewerFullscreen() {
+  const modal = getReportViewerModal();
+  return !!modal && (
+    getFullscreenElement() === modal ||
+    modal.classList.contains('report-viewer-fullscreen-fallback')
+  );
+}
+
+function syncReportFullscreenState() {
+  const btn = document.getElementById('modalOpenBtn');
+  const modal = getReportViewerModal();
+  if (!btn || !modal) return;
+
+  const active = isReportViewerFullscreen();
+  btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+  btn.title = active ? 'Sair da Tela Cheia' : 'Abrir em Tela Cheia';
+
+  const desktopLabel = btn.querySelector('.fullscreen-label-desktop');
+  const mobileLabel = btn.querySelector('.fullscreen-label-mobile');
+  if (desktopLabel) desktopLabel.textContent = active ? '⛶ Sair da Tela Cheia' : '⛶ Abrir em Tela Cheia';
+  if (mobileLabel) mobileLabel.textContent = active ? '⛶ Sair' : '⛶ Tela Cheia';
+
+  if (!active) {
+    modal.classList.remove('report-viewer-fullscreen-fallback');
+    document.body.classList.remove('report-viewer-fullscreen-lock');
+  }
+}
+
+function enableReportFullscreenFallback() {
+  const modal = getReportViewerModal();
+  if (!modal) return;
+  modal.classList.add('report-viewer-fullscreen-fallback');
+  document.body.classList.add('report-viewer-fullscreen-lock');
+  syncReportFullscreenState();
+}
+
+async function toggleReportFullscreen() {
+  const modal = getReportViewerModal();
+  if (!modal) return;
+
+  if (modal.classList.contains('report-viewer-fullscreen-fallback')) {
+    modal.classList.remove('report-viewer-fullscreen-fallback');
+    document.body.classList.remove('report-viewer-fullscreen-lock');
+    syncReportFullscreenState();
+    return;
+  }
+
+  if (getFullscreenElement() === modal) {
+    try {
+      if (document.exitFullscreen) await document.exitFullscreen();
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+    } catch (err) {
+      console.warn('Não foi possível sair do fullscreen nativo:', err);
+    }
+    syncReportFullscreenState();
+    return;
+  }
+
+  try {
+    if (modal.requestFullscreen) {
+      await modal.requestFullscreen();
+      return;
+    }
+    if (modal.webkitRequestFullscreen) {
+      modal.webkitRequestFullscreen();
+      return;
+    }
+  } catch (err) {
+    console.warn('Fullscreen nativo indisponível; usando fallback visual:', err);
+  }
+
+  enableReportFullscreenFallback();
+}
+
+async function exitReportFullscreen() {
+  const modal = getReportViewerModal();
+  if (!modal) return;
+
+  modal.classList.remove('report-viewer-fullscreen-fallback');
+  document.body.classList.remove('report-viewer-fullscreen-lock');
+
+  if (getFullscreenElement() === modal) {
+    try {
+      if (document.exitFullscreen) await document.exitFullscreen();
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+    } catch (err) {
+      console.warn('Não foi possível encerrar o fullscreen:', err);
+    }
+  }
+
+  syncReportFullscreenState();
+}
+
+function handleReportFullscreenChange() {
+  syncReportFullscreenState();
+}
+
+document.addEventListener('fullscreenchange', handleReportFullscreenChange);
+document.addEventListener('webkitfullscreenchange', handleReportFullscreenChange);
+
 let currentReportUrl = '';
 let originalReportUrl = '';
 async function openReport(id, pageId = '') {
@@ -5475,14 +5664,19 @@ async function openReport(id, pageId = '') {
 
   document.getElementById('modalTitle').textContent = page ? `${r.title} — ${page.title}` : r.title;
   const openBtn = document.getElementById('modalOpenBtn');
-  openBtn.href = currentReportUrl;
-  openBtn.style.display = page ? 'none' : '';
+  openBtn.style.display = '';
+  openBtn.disabled = false;
+  syncReportFullscreenState();
   document.getElementById('errorOpenBtn').href = currentReportUrl;
   document.getElementById('iframeLoader').style.display = 'flex';
   document.getElementById('iframeError').style.display = 'none';
   iframe.src = '';
   iframe.style.display = 'none';
   embedContainer.style.display = 'none';
+  const reportModal = getReportViewerModal();
+  if (reportModal) reportModal.classList.remove('report-viewer-fullscreen-fallback');
+  document.body.classList.remove('report-viewer-fullscreen-lock');
+  syncReportFullscreenState();
   document.getElementById('modalOverlay').classList.add('open');
 
   // Todos os relatórios continuam abrindo diretamente no iframe público.
@@ -5522,6 +5716,7 @@ function retryIframe() {
 
 function closeModal(e) {
   if (!e || e.target === document.getElementById('modalOverlay') || e === undefined) {
+    exitReportFullscreen();
     document.getElementById('modalOverlay').classList.remove('open');
     const c = document.getElementById('powerbiEmbedContainer');
     if (c && window.powerbi) { try { powerbi.reset(c); } catch(e) {} }
