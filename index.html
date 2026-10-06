@@ -577,7 +577,34 @@
     border-radius: 0;
     z-index: 110;
   }
-  body.report-viewer-fullscreen-lock { overflow: hidden; }
+  body.report-viewer-fullscreen-lock,
+  body.report-viewer-open { overflow: hidden; }
+  #reportViewerModal { position: relative; overscroll-behavior: none; }
+  #reportViewerModal .modal-header { flex-shrink: 0; }
+  #reportViewerModal .modal-body { min-height: 0; overflow: hidden; }
+  #modalOverlay { overscroll-behavior: none; }
+  #modalOverlay .report-back-btn { margin-left: 0; white-space: nowrap; }
+  #modalOverlay .report-floating-back { display: none; }
+  #reportViewerModal.report-viewer-expanded .modal-header { display: none; }
+  #reportViewerModal.report-viewer-expanded .report-floating-back {
+    display: block;
+    position: absolute;
+    bottom: max(16px, env(safe-area-inset-bottom));
+    right: max(24px, env(safe-area-inset-right));
+    z-index: 5;
+    padding: 10px 14px;
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 3px 12px rgba(0,0,0,.18);
+  }
+  @media (max-width: 768px) {
+    #modalOverlay .modal-header > span:first-child { display: none; }
+    #modalOverlay .report-fullscreen-btn { display: none !important; }
+    #modalOverlay .report-back-btn { min-height: 36px; padding: 8px; font-size: 12px; }
+    #modalOverlay .modal-header { padding-top: env(safe-area-inset-top); height: auto; }
+  }
 
   /* ADMIN VIEWS */
   .table-wrapper {
@@ -905,8 +932,8 @@
     }
     #modalOverlay .modal-header {
       min-height: 44px;
-      height: 44px;
-      padding: 0 8px;
+      height: auto;
+      padding: env(safe-area-inset-top) 8px 0;
       gap: 7px;
       flex-wrap: nowrap;
       flex-shrink: 0;
@@ -4485,7 +4512,7 @@
   </nav>
 
 <!-- MODAL REPORT VIEWER -->
-<div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+<div class="modal-overlay" id="modalOverlay">
   <div class="modal" id="reportViewerModal">
     <div class="modal-header">
       <span aria-hidden="true">📊</span>
@@ -4494,8 +4521,9 @@
         <span class="fullscreen-label-desktop">⛶ Abrir em Tela Cheia</span>
         <span class="fullscreen-label-mobile">⛶ Tela Cheia</span>
       </button>
-      <button class="modal-close" onclick="closeModal()" aria-label="Fechar relatório">✕</button>
+      <button type="button" class="btn-sm report-back-btn" onclick="closeModal()">← Voltar ao portal</button>
     </div>
+    <button type="button" class="btn-sm report-floating-back" onclick="closeModal()">← Voltar ao portal</button>
     <div class="modal-body" style="flex-direction:column;padding:0;position:relative;">
       <!-- Loading state -->
       <div id="iframeLoader" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg);z-index:2;gap:12px">
@@ -5553,6 +5581,7 @@ function syncReportFullscreenState() {
   if (!btn || !modal) return;
 
   const active = isReportViewerFullscreen();
+  modal.classList.toggle('report-viewer-expanded', active);
   btn.setAttribute('aria-pressed', active ? 'true' : 'false');
   btn.title = active ? 'Sair da Tela Cheia' : 'Abrir em Tela Cheia';
 
@@ -5678,6 +5707,7 @@ async function openReport(id, pageId = '') {
   document.body.classList.remove('report-viewer-fullscreen-lock');
   syncReportFullscreenState();
   document.getElementById('modalOverlay').classList.add('open');
+  document.body.classList.add('report-viewer-open');
 
   // Todos os relatórios continuam abrindo diretamente no iframe público.
   // Na página Supervisor, a URL já contém o filtro do usuário logado.
@@ -5718,6 +5748,7 @@ function closeModal(e) {
   if (!e || e.target === document.getElementById('modalOverlay') || e === undefined) {
     exitReportFullscreen();
     document.getElementById('modalOverlay').classList.remove('open');
+    document.body.classList.remove('report-viewer-open');
     const c = document.getElementById('powerbiEmbedContainer');
     if (c && window.powerbi) { try { powerbi.reset(c); } catch(e) {} }
   }
