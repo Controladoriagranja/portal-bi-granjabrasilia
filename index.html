@@ -586,18 +586,30 @@
   #modalOverlay .report-back-btn { margin-left: 0; white-space: nowrap; }
   #modalOverlay .report-floating-back { display: none; }
   #reportViewerModal.report-viewer-expanded .modal-header { display: none; }
+  #reportViewerModal.report-viewer-expanded {
+    /* Reserve space outside the iframe so its own scroll never covers the return control. */
+    padding-top: calc(36px + env(safe-area-inset-top));
+    background: var(--bg);
+  }
   #reportViewerModal.report-viewer-expanded .report-floating-back {
     display: block;
     position: absolute;
-    bottom: max(16px, env(safe-area-inset-bottom));
-    right: max(24px, env(safe-area-inset-right));
+    top: calc(2px + env(safe-area-inset-top));
+    left: max(8px, env(safe-area-inset-left));
     z-index: 5;
-    padding: 10px 14px;
-    background: var(--surface);
+    height: 32px;
+    padding: 6px 8px;
+    font-size: 11px;
+    background: transparent;
+    color: var(--text-muted);
+    border: 0;
+    border-radius: 4px;
+    box-shadow: none;
+  }
+  #reportViewerModal.report-viewer-expanded .report-floating-back:hover,
+  #reportViewerModal.report-viewer-expanded .report-floating-back:focus-visible {
+    background: var(--surface2);
     color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    box-shadow: 0 3px 12px rgba(0,0,0,.18);
   }
   @media (max-width: 768px) {
     #modalOverlay .modal-header > span:first-child { display: none; }
