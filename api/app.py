@@ -45,7 +45,7 @@ EXEC_THREAD = None
 
 EXTENSOES_DADOS = {".xlsx", ".xls", ".csv", ".parquet", ".html"}
 
-APP_VERSION = "2026.09.24-fila-modulos-v2"
+APP_VERSION = "2026.10.07-chamados-delta-v1"
 APP_FILE = Path(__file__).resolve()
 
 # =============================================================================
@@ -4141,11 +4141,11 @@ def api_agent_finish_job(job_id):
 
 @app.route("/api/chamados/usuarios", methods=["GET"])
 def api_chamados_usuarios():
-    usuario = _usuario_autenticado()
-    if not usuario:
-        return _resposta_nao_autorizado()
-
     try:
+        usuario = _usuario_autenticado()
+        if not usuario:
+            return _resposta_nao_autorizado()
+
         with engine.connect() as conn:
             rows = conn.execute(text("""
                 SELECT id, nome, email, perfil, role
@@ -4167,6 +4167,7 @@ def api_chamados_usuarios():
         })
     except Exception as e:
         log(f"Falha ao listar usuários para Chamados: {e}", "ERRO")
+        app.logger.exception("Falha ao listar usuários para Chamados")
         return jsonify({"ok": False, "erro": "Falha ao listar usuários."}), 500
 
 
@@ -4187,15 +4188,18 @@ def api_chamados_health():
             "hora": chamados_now_iso(),
         })
     except Exception as e:
-        return jsonify({"ok": False, "erro": str(e)}), 500
+        log(f"Falha no health dos Chamados: {e}", "ERRO")
+        app.logger.exception("Falha no health dos Chamados")
+        return jsonify({"ok": False, "erro": "Falha ao consultar o serviço de chamados."}), 500
 
 
 @app.route("/api/chamados", methods=["GET", "PUT"])
 def api_chamados():
-    usuario = _usuario_autenticado()
-    if not usuario:
-        return _resposta_nao_autorizado()
     try:
+        usuario = _usuario_autenticado()
+        if not usuario:
+            return _resposta_nao_autorizado()
+
         if request.method == "GET":
             return jsonify(ler_chamados_store())
 
@@ -4204,6 +4208,7 @@ def api_chamados():
 
         log(
             f"Base de chamados sincronizada no Neon. "
+            f"Recebidos: {len(body.get('tickets', [])) if isinstance(body.get('tickets'), list) else 0} | "
             f"Total: {len(salvo.get('tickets', []))}",
             "INFO",
         )
@@ -4212,15 +4217,17 @@ def api_chamados():
         return jsonify({"erro": str(e)}), 400
     except Exception as e:
         log(f"Falha ao sincronizar chamados no Neon: {e}", "ERRO")
+        app.logger.exception("Falha ao sincronizar chamados no Neon")
         return jsonify({"erro": "Falha ao sincronizar chamados no Neon."}), 500
 
 
 @app.route("/api/chamados/merge", methods=["POST"])
 def api_chamados_merge():
-    usuario = _usuario_autenticado()
-    if not usuario:
-        return _resposta_nao_autorizado()
     try:
+        usuario = _usuario_autenticado()
+        if not usuario:
+            return _resposta_nao_autorizado()
+
         body = request.get_json(silent=True) or {}
         salvo = salvar_chamados_store(body, somente_gestores_se_vazio=True, usuario_sessao=usuario)
 
@@ -4232,22 +4239,24 @@ def api_chamados_merge():
         return jsonify(salvo)
     except Exception as e:
         log(f"Falha ao mesclar chamados no Neon: {e}", "ERRO")
+        app.logger.exception("Falha ao mesclar chamados no Neon")
         return jsonify({"erro": "Falha ao mesclar chamados no Neon."}), 500
 
 
 @app.route("/api/chamados/<ticket_id>", methods=["DELETE"])
 def api_chamados_delete(ticket_id):
-    usuario = _usuario_autenticado()
-    if not usuario:
-        return _resposta_nao_autorizado()
-    if not _usuario_e_admin(usuario):
-        return jsonify({"erro": "Apenas administradores podem excluir chamados."}), 403
     try:
-        chamado_id = int(ticket_id)
-    except Exception:
-        return jsonify({"erro": "ID de chamado inválido"}), 400
+        usuario = _usuario_autenticado()
+        if not usuario:
+            return _resposta_nao_autorizado()
+        if not _usuario_e_admin(usuario):
+            return jsonify({"erro": "Apenas administradores podem excluir chamados."}), 403
 
-    try:
+        try:
+            chamado_id = int(ticket_id)
+        except (TypeError, ValueError):
+            return jsonify({"erro": "ID de chamado inválido"}), 400
+
         with CHAMADOS_LOCK:
             with engine.begin() as conn:
                 apagado = conn.execute(text("""
@@ -4265,6 +4274,7 @@ def api_chamados_delete(ticket_id):
         return jsonify(salvo)
     except Exception as e:
         log(f"Falha ao excluir chamado {ticket_id}: {e}", "ERRO")
+        app.logger.exception("Falha ao excluir chamado do Neon")
         return jsonify({"erro": "Falha ao excluir chamado no Neon."}), 500
 
 

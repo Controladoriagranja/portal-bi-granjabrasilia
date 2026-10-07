@@ -6319,7 +6319,7 @@ const TICKET_STORE_KEY = 'granjabi_ticket_module_v1';
   A fonte oficial dos chamados é a própria API do Portal BI (mesmo host e mesma porta).
 */
 const TICKET_API = 'https://portal-bi-granjabrasilia.onrender.com';
-const TICKET_SYNC_INTERVAL_MS = 5000;
+const TICKET_SYNC_INTERVAL_MS = 10000;
 
 const TICKET_MAX_FILE_BYTES = 10 * 1024 * 1024;
 const TICKET_MAX_FILES_PER_SEND = 5;
@@ -6441,6 +6441,7 @@ let ticketHasConnectedOnce = false;
 let ticketPendingSaves = 0;
 let ticketSaveQueue = Promise.resolve();
 let ticketLastRemoteSignature = '';
+let ticketLastSyncedStore = null;
 
 function defaultTicketStore() {
   return {
@@ -6497,6 +6498,50 @@ function ticketStoreSignature(store) {
   } catch(e) {
     return '';
   }
+}
+
+function cloneTicketStore(store) {
+  try {
+    return normalizeTicketStore(JSON.parse(JSON.stringify(store || defaultTicketStore())));
+  } catch(e) {
+    return defaultTicketStore();
+  }
+}
+
+function markTicketStoreSynced(store) {
+  ticketLastSyncedStore = cloneTicketStore(store);
+  ticketLastRemoteSignature = ticketStoreSignature(ticketLastSyncedStore);
+}
+
+function ticketJsonSignature(value) {
+  try {
+    return JSON.stringify(value ?? null);
+  } catch(e) {
+    return '';
+  }
+}
+
+/*
+  O backend aceita uma lista parcial em "tickets" e devolve a base completa.
+  Portanto, a cada alteração enviamos somente chamados realmente modificados,
+  evitando reprocessar toda a tabela do Neon em cada clique.
+*/
+function buildTicketSavePayload(snapshot) {
+  const base = ticketLastSyncedStore || defaultTicketStore();
+  const previous = new Map(
+    (base.tickets || []).map(ticket => [String(ticket?.id ?? ''), ticketJsonSignature(ticket)])
+  );
+
+  const changedTickets = (snapshot.tickets || []).filter(ticket => {
+    const key = String(ticket?.id ?? '');
+    return !key || previous.get(key) !== ticketJsonSignature(ticket);
+  });
+
+  const payload = { tickets: changedTickets };
+  if (ticketJsonSignature(snapshot.managers || []) !== ticketJsonSignature(base.managers || [])) {
+    payload.managers = snapshot.managers || [];
+  }
+  return payload;
 }
 
 async function ticketApiRequest(path, options={}) {
@@ -6599,10 +6644,10 @@ async function pullTicketStoreFromServer({silent=true}={}) {
 
     if (signature !== ticketLastRemoteSignature) {
       ticketStore = remote;
-      ticketLastRemoteSignature = signature;
       cacheTicketStore();
       renderTicketsAfterRemoteSync();
     }
+    markTicketStoreSynced(remote);
 
     ticketApiOnline = true;
     ticketHasConnectedOnce = true;
@@ -6636,7 +6681,7 @@ async function migrateLocalTicketsToServer() {
     }));
 
     ticketStore = merged;
-    ticketLastRemoteSignature = ticketStoreSignature(merged);
+    markTicketStoreSynced(merged);
     cacheTicketStore();
     renderTicketsAfterRemoteSync();
     return true;
@@ -6674,22 +6719,39 @@ async function initCentralTicketSync() {
 */
 function saveTicketStore() {
   cacheTicketStore();
-  const snapshot = JSON.parse(JSON.stringify(ticketStore));
+  const snapshot = cloneTicketStore(ticketStore);
   ticketPendingSaves += 1;
   ticketSaveInProgress = true;
 
   const task = ticketSaveQueue.catch(()=>null).then(async () => {
     try {
-      const remote = await ticketApiRequest('/api/chamados', {
+      // Calculado somente quando chega a vez desta tarefa na fila. Assim,
+      // alterações já confirmadas por uma tarefa anterior não são reenviadas.
+      const payload = buildTicketSavePayload(snapshot);
+      const hasTicketChanges = Array.isArray(payload.tickets) && payload.tickets.length > 0;
+      const hasManagerChanges = Object.prototype.hasOwnProperty.call(payload, 'managers');
+
+      if (!hasTicketChanges && !hasManagerChanges) {
+        return true;
+      }
+
+      const remote = normalizeTicketStore(await ticketApiRequest('/api/chamados', {
         method: 'PUT',
-        body: JSON.stringify(snapshot)
-      });
-      ticketStore = normalizeTicketStore(remote);
-      ticketLastRemoteSignature = ticketStoreSignature(ticketStore);
-      cacheTicketStore();
+        body: JSON.stringify(payload)
+      }));
+
+      markTicketStoreSynced(remote);
+
+      // Se já existe outra alteração esperando na fila, não sobrescrevemos a
+      // versão local mais nova com a resposta desta tarefa antiga.
+      if (ticketPendingSaves <= 1) {
+        ticketStore = remote;
+        cacheTicketStore();
+        renderTicketsAfterRemoteSync();
+      }
+
       ticketApiOnline = true;
       updateTicketSyncIndicator();
-      renderTicketsAfterRemoteSync();
       return true;
     } catch (err) {
       ticketApiOnline = false;
@@ -6717,7 +6779,7 @@ async function deleteTicketFromServer(id) {
       method: 'DELETE'
     }));
     ticketStore = remote;
-    ticketLastRemoteSignature = ticketStoreSignature(remote);
+    markTicketStoreSynced(remote);
     cacheTicketStore();
     renderTicketsAfterRemoteSync();
     return true;
