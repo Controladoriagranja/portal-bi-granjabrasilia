@@ -784,11 +784,18 @@
     transition: border-color .15s, background .15s;
   }
   .check-item:hover { border-color: var(--accent); }
+  .check-item { position: relative; }
   .check-item input { width: auto; }
+  .check-item .check-input {
+    position: absolute; width: 1px; height: 1px; padding: 0;
+    margin: -1px; overflow: hidden; clip-path: inset(50%);
+  }
+  .check-item:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
   .check-item.checked { border-color: var(--accent); background: var(--accent-glow); color: var(--accent2); }
 
   /* NOTIFICATION */
   .toast {
+    pointer-events: none;
     position: fixed;
     bottom: 24px; right: 24px;
     background: var(--surface);
@@ -5333,8 +5340,8 @@ function initPortal() {
   // Sector checkboxes
   const cg = document.getElementById('sectorCheckGroup');
   cg.innerHTML = SECTORS.map(s => `
-    <label class="check-item" onclick="toggleCheck(this)">
-      <input type="checkbox" value="${s}" style="display:none"> ${sectorLabel(s)}
+    <label class="check-item" onchange="toggleCheck(this)">
+      <input type="checkbox" value="${s}" class="check-input"> ${sectorLabel(s)}
     </label>`).join('');
 
   syncSectors();
@@ -6025,8 +6032,8 @@ function pagePermissionItems(selectedIds = [], sectors = []) {
   return `<div class="checkgroup" style="align-items:stretch">
     ${reports.map(r => {
       const checked = selected.has(Number(r.id));
-      return `<label class="check-item ${checked ? 'checked' : ''}" onclick="toggleCheck(this)" style="min-width:220px">
-        <input type="checkbox" value="${Number(r.id)}" style="display:none" ${checked ? 'checked' : ''}>
+      return `<label class="check-item ${checked ? 'checked' : ''}" onchange="toggleCheck(this)" style="min-width:220px">
+        <input type="checkbox" value="${Number(r.id)}" class="check-input" ${checked ? 'checked' : ''}>
         <span><strong>${r.title}</strong><small style="display:block;color:var(--text-muted);margin-top:3px">${sectorLabel(r.sector)}</small></span>
       </label>`;
     }).join('')}
@@ -6063,13 +6070,19 @@ function toggleNewUserReportMode() {
 }
 
 function toggleCheck(el) {
-  el.classList.toggle('checked');
-  const input = el.querySelector('input');
-  input.checked = el.classList.contains('checked');
+  const input = el.querySelector('input[type="checkbox"]');
+  if (!input) return;
+  el.classList.toggle('checked', input.checked);
 
-  // Ao marcar/desmarcar um setor, atualiza imediatamente as páginas disponíveis.
-  if (el.closest('#sectorCheckGroup')) rebuildNewUserPageChecks();
-  if (el.closest('#euSectorCheckGroup')) rebuildEditUserPageChecks();
+  // Preserve selected report pages while changing the allowed sectors.
+  if (el.closest('#sectorCheckGroup')) {
+    rebuildNewUserPageChecks(selectedSectorsFromGroup('newUserReportCheckGroup'));
+  }
+  if (el.closest('#euSectorCheckGroup')) {
+    rebuildEditUserPageChecks(selectedSectorsFromGroup('euReportCheckGroup'));
+    const warn = document.getElementById('euSectorWarn');
+    if (warn && selectedSectorsFromGroup('euSectorCheckGroup').length) warn.style.display = 'none';
+  }
 }
 
 async function addUser(button=null) {
@@ -9273,8 +9286,8 @@ function openEditUser(id) {
   const cg = document.getElementById('euSectorCheckGroup');
   cg.innerHTML = SECTORS.map(s => {
     const checked = u.sectors && u.sectors.includes(s);
-    return `<label class="check-item ${checked ? 'checked' : ''}" onclick="toggleCheck(this)">
-      <input type="checkbox" value="${s}" style="display:none" ${checked ? 'checked' : ''}> ${sectorLabel(s)}
+    return `<label class="check-item ${checked ? 'checked' : ''}" onchange="toggleCheck(this)">
+      <input type="checkbox" value="${s}" class="check-input" ${checked ? 'checked' : ''}> ${sectorLabel(s)}
     </label>`;
   }).join('');
 
@@ -9550,8 +9563,8 @@ function rebuildSectorCheckboxes() {
   const cg = document.getElementById('sectorCheckGroup');
   if (!cg) return;
   cg.innerHTML = SECTORS.map(s => `
-    <label class="check-item" onclick="toggleCheck(this)">
-      <input type="checkbox" value="${s}" style="display:none"> ${sectorLabel(s)}
+    <label class="check-item" onchange="toggleCheck(this)">
+      <input type="checkbox" value="${s}" class="check-input"> ${sectorLabel(s)}
     </label>`).join('');
 }
 
