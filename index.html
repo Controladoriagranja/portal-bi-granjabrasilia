@@ -4,6 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Granja Brasília — Portal de Relatórios</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="theme-color" content="#06243a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Portal BI">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" sizes="180x180" href="./assets/pwa/apple-touch-icon.png">
+<link rel="stylesheet" href="./assets/pwa/install.css">
+<script src="./assets/pwa/install.js" defer></script>
+
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="shortcut icon" type="image/png" href="favicon.png">
 <link rel="preconnect" href="https://portal-bi-granjabrasilia.onrender.com" crossorigin>
@@ -3651,6 +3661,8 @@
       ou entre em contato pelo <strong>ramal 5236</strong>.
     </div>
 
+    <button type="button" class="pwa-install-button pwa-install-login" data-pwa-install hidden>Instalar aplicativo</button>
+    <p id="pwaInstallStatus" class="pwa-install-status" role="status"></p>
     <div class="login-footer">© 2026 Granja Brasília · Portal Interno de BI</div>
   </div>
 </div>
@@ -3736,6 +3748,7 @@
         <div class="topbar-title" id="topbarTitle">Relatórios</div>
         <div class="topbar-sub" id="topbarSub">Todos os relatórios disponíveis para você</div>
       </div>
+      <button type="button" class="pwa-install-button" data-pwa-install hidden>Instalar aplicativo</button>
       <div class="topbar-actions" id="topbarActions"></div>
     </div>
 
@@ -10345,6 +10358,19 @@ async function loadUpdateStatus(){
     </div>
   </div>
 </div>
+
+
+<dialog id="pwaInstallHelp" aria-labelledby="pwaInstallHelpTitle">
+  <h2 id="pwaInstallHelpTitle">Instalar no iPhone ou iPad</h2>
+  <ol>
+    <li>Abra este portal no Safari.</li>
+    <li>Toque em <strong>Compartilhar</strong> (quadrado com seta para cima; em algumas versões, dentro do menu).</li>
+    <li>Escolha <strong>Adicionar à Tela de Início</strong>.</li>
+    <li>Se aparecer <strong>Abrir como App da Web</strong>, mantenha a opção ativada e toque em <strong>Adicionar</strong>.</li>
+  </ol>
+  <p>Depois, abra o Portal BI pelo ícone na tela de início.</p>
+  <button type="button" class="pwa-install-button" data-pwa-close>Entendi</button>
+</dialog>
 
 </body>
 </html>
