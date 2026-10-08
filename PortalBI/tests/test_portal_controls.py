@@ -6,6 +6,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support.ui import WebDriverWait
 
 ROOT = Path(__file__).resolve().parents[2]
 html = (ROOT / 'index.html').read_text(encoding='utf-8')
@@ -25,6 +26,12 @@ try:
   page=Path(folder)/'portal.html'
   page.write_text(html,encoding='utf-8')
   driver.get(page.as_uri())
+ driver.set_window_size(390,844)
+ for screen in ['login','pending']:
+  driver.execute_script('showScreen(arguments[0])',screen)
+  assert not driver.find_element(By.ID,'mobileNav').is_displayed(),screen
+ driver.set_window_size(1440,1000)
+ print('OK: nenhuma navegacao mobile no login ou acesso pendente')
  driver.execute_script('''
  SECTORS=['comercial','operacional'];
  db.users=[{id:1,name:'Admin Teste',email:'admin@example.test',role:'admin',status:'active',sectors:[...SECTORS]},
@@ -114,10 +121,28 @@ try:
  print('OK: abrir/cancelar relatorio, chamado, demanda interna e alternar Quadro/Gantt')
  driver.execute_script("showToast('Confirmacao visivel durante navegacao mobile','success')")
  driver.set_window_size(390,844)
- for button,view in [('mnReports','reports'),('mnPwd','changepass'),('mnAdmin','users')]:
+ for button,view in [('mnReports','reports'),('mnPwd','changepass'),('mnAdmin','users'),('mnUpdates','updates')]:
   driver.find_element(By.ID,button).click()
   assert driver.find_element(By.ID,'view-'+view).is_displayed(),view
- print('OK: navegacao mobile')
+ print('OK: navegacao mobile incluindo Central de Atualizacoes para admin')
+ driver.execute_cdp_cmd('Emulation.setDeviceMetricsOverride',{'width':320,'height':740,'deviceScaleFactor':1,'mobile':True})
+ for button in driver.find_elements(By.CSS_SELECTOR,'#mobileNav button'):
+  if button.is_displayed():
+   box=button.rect
+   assert box['x']>=0 and box['x']+box['width']<=320,box
+ for role in ['sector','director']:
+  driver.execute_script("currentUser={...db.users[1],role:arguments[0],ticketPanelAccess:true};initPortal();showScreen('portal');",role)
+  assert not driver.find_element(By.ID,'mnUpdates').is_displayed(),role
+  assert driver.execute_script("return getComputedStyle(document.getElementById('nav-updates')).display")=='none'
+  driver.execute_script("switchView('updates',null)")
+  assert driver.find_element(By.ID,'view-reports').is_displayed(),role
+ driver.execute_script("currentUser=db.users[0];initPortal();showScreen('portal');")
+ driver.find_element(By.ID,'mnLogout').click()
+ WebDriverWait(driver,5).until(lambda d:d.find_element(By.ID,'screen-login').is_displayed())
+ assert not driver.find_element(By.ID,'mobileNav').is_displayed()
+ driver.execute_script("switchView('updates',null)")
+ assert 'active' not in driver.find_element(By.ID,'view-updates').get_attribute('class')
+ print('OK: menu cabe em 320px; setor/diretor e usuario desconectado sem acesso a Atualizacoes')
  errors=driver.execute_script('return window.__errors')
  assert not errors, errors
  print('OK: nenhum erro JavaScript nas interacoes')

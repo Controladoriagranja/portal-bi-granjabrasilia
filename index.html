@@ -1053,7 +1053,8 @@
     flex-direction: column;
     align-items: center;
     gap: 3px;
-    padding: 6px 10px;
+    padding: 6px 4px;
+    flex: 1;
     border-radius: 8px;
     cursor: pointer;
     font-size: 10px;
@@ -1062,7 +1063,7 @@
     border: none;
     font-family: inherit;
     transition: color .15s, background .15s;
-    min-width: 52px;
+    min-width: 0;
   }
   .mob-nav-btn.active { color: var(--accent2); background: var(--accent-glow); }
   .mob-nav-btn svg { width: 22px; height: 22px; }
@@ -4522,8 +4523,6 @@
 
     </div><!-- /content -->
   </main>
-</div>
-
   <!-- MOBILE BOTTOM NAV -->
   <nav id="mobileNav">
     
@@ -4539,11 +4538,16 @@
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
       <span>Admin</span>
     </button>
+    <button type="button" class="mob-nav-btn" id="mnUpdates" style="display:none" onclick="switchView('updates', null); setMobNav('mnUpdates')" aria-label="Central de Atualizações">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M20 7v5h-5M4 17v-5h5M6.1 7a7 7 0 0111.6-1L20 9M4 15l2.3 3A7 7 0 0017.9 17"/></svg>
+      <span>Atualizações</span>
+    </button>
     <button class="mob-nav-btn" id="mnLogout" onclick="logout()">
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
       <span>Sair</span>
     </button>
   </nav>
+</div>
 
 <!-- MODAL REPORT VIEWER -->
 <div class="modal-overlay" id="modalOverlay">
@@ -9200,7 +9204,7 @@ const viewMeta = {
 function switchView(viewId, navEl) {
   // Proteger rotas administrativas.
   const adminOnlyViews = ['users','access','reportsmgr','sectors','updates'];
-  if (adminOnlyViews.includes(viewId) && currentUser && currentUser.role !== 'admin') {
+  if (adminOnlyViews.includes(viewId) && currentUser?.role !== 'admin') {
     showToast('Acesso restrito ao administrador.', 'error');
     return;
   }
@@ -9438,15 +9442,17 @@ document.addEventListener('keydown', e => {
 
 // ── Mobile nav ──
 function setMobNav(activeId) {
-  ['mnDash','mnReports','mnPwd','mnAdmin'].forEach(id => {
+  ['mnDash','mnReports','mnPwd','mnAdmin','mnUpdates'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.classList.toggle('active', el.id === activeId);
   });
 }
 
 function showMobileAdminBtn(show) {
-  const el = document.getElementById('mnAdmin');
-  if (el) el.style.display = show ? 'flex' : 'none';
+  ['mnAdmin', 'mnUpdates'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = show ? 'flex' : 'none';
+  });
 }
 
 // ═══════════════════════════════════════
@@ -10364,7 +10370,7 @@ async function loadUpdateStatus(){
   <h2 id="pwaInstallHelpTitle">Instalar no iPhone ou iPad</h2>
   <ol>
     <li>Abra este portal no Safari.</li>
-    <li>Toque em <strong>Compartilhar</strong> (quadrado com seta para cima; em algumas versões, dentro do menu).</li>
+    <li>Toque em <strong>Compartilhar</strong> <img class="pwa-safari-share" src="./assets/pwa/safari-share.svg" width="20" height="24" alt="Ícone de compartilhar do Safari: quadrado com seta para cima"> (quadrado com seta para cima; em algumas versões, dentro do menu).</li>
     <li>Escolha <strong>Adicionar à Tela de Início</strong>.</li>
     <li>Se aparecer <strong>Abrir como App da Web</strong>, mantenha a opção ativada e toque em <strong>Adicionar</strong>.</li>
   </ol>

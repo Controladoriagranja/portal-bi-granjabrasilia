@@ -32,3 +32,4 @@
 @media (max-width: 600px) {
   .topbar > .pwa-install-button { margin-left: auto; padding: 7px; font-size: 11px; }
 }
+.pwa-safari-share { display: inline-block; vertical-align: middle; margin: 0 4px; background: transparent; }

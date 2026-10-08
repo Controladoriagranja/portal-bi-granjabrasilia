@@ -95,6 +95,8 @@ try:
  driver.find_element(By.CSS_SELECTOR,'.pwa-install-login').click()
  assert driver.find_element(By.ID,'pwaInstallHelp').is_displayed()
  assert 'Adicionar à Tela de Início' in driver.find_element(By.ID,'pwaInstallHelp').text
+ assert driver.execute_script("const image=document.querySelector('.pwa-safari-share');return image.complete && image.naturalWidth>0 && getComputedStyle(image).backgroundColor==='rgba(0, 0, 0, 0)'")
+
  driver.find_element(By.CSS_SELECTOR,'[data-pwa-close]').click()
  assert not driver.find_element(By.ID,'pwaInstallHelp').is_displayed()
  # Check the portal header in mobile dimensions independently of authentication.
