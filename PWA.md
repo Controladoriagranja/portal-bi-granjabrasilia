@@ -25,19 +25,22 @@ aplicando fundo branco. As cores são branco e azul institucional `#06243a`.
   Após uma recusa, aguarda uma nova oferta do navegador; não insiste automaticamente.
 - iOS/iPadOS: o botão abre instruções para Safari > Compartilhar > Adicionar à Tela
   de Início. Nenhuma instrução abre automaticamente.
-- A opção fica oculta em standalone, quando `navigator.standalone` é verdadeiro,
-  após `appinstalled` ou quando este navegador já registrou uma instalação.
-- O indicador `portal-bi-pwa-installed` no localStorage contém apenas `1`. Não guarda
-  login, credenciais ou dados empresariais. A desinstalação não emite um evento
-  padronizado para a página: caso o usuário desinstale e queira ver novamente o botão,
-  remova somente essa chave pelo DevTools. A instalação em outro navegador/dispositivo
-  não pode ser detectada de modo confiável.
+- Safari no Mac (Safari 17+): o botão abre instruções para Arquivo > Adicionar ao Dock,
+  disponível no macOS Sonoma 14 ou posterior.
+- Chrome/Edge no PC usam o mesmo fluxo nativo de `beforeinstallprompt` do Android.
+- A opção fica oculta quando o portal está aberto como aplicativo (standalone).
+  No navegador, segue a oferta de instalação do Chrome/Edge ou mostra as instruções
+  do Safari. Não mantém bloqueio permanente após uma instalação anterior.
+- O indicador antigo `portal-bi-pwa-installed` é removido automaticamente, sem
+  alterar login, credenciais ou dados empresariais. A reinstalação em Chrome/Edge
+  depende de o navegador disparar uma nova oferta de instalação.
 - O portal continua exigindo conexão. Não foi criado nem registrado service worker,
   nem implementado cache offline ou interceptação das chamadas de API.
 
 Referências de comportamento:
 https://web.dev/articles/install-criteria
 https://support.apple.com/en-lamr/guide/iphone/iphea86e5236/ios
+https://support.apple.com/en-gb/104996
 
 ## Verificação rápida
 

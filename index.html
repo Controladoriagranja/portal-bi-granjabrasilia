@@ -10378,6 +10378,7 @@ async function loadUpdateStatus(){
 
 <dialog id="pwaInstallHelp" aria-labelledby="pwaInstallHelpTitle">
   <h2 id="pwaInstallHelpTitle">Instalar no iPhone ou iPad</h2>
+  <div id="pwaInstallIOS">
   <ol>
     <li>Abra este portal no Safari.</li>
     <li>Toque em <strong>Compartilhar</strong> <img class="pwa-safari-share" src="./assets/pwa/safari-share.svg" width="20" height="24" alt="Ícone de compartilhar do Safari: quadrado com seta para cima"> (quadrado com seta para cima; em algumas versões, dentro do menu).</li>
@@ -10385,6 +10386,14 @@ async function loadUpdateStatus(){
     <li>Se aparecer <strong>Abrir como App da Web</strong>, mantenha a opção ativada e toque em <strong>Adicionar</strong>.</li>
   </ol>
   <p>Depois, abra o Portal BI pelo ícone na tela de início.</p>
+  </div>
+  <div id="pwaInstallMac" hidden>
+    <ol>
+      <li>Com este portal aberto no Safari, escolha <strong>Arquivo → Adicionar ao Dock</strong>.</li>
+      <li>Confirme o nome <strong>Portal BI</strong> e clique em <strong>Adicionar</strong>.</li>
+    </ol>
+    <p>Depois, abra o Portal BI pelo ícone no Dock. Requer macOS Sonoma 14 ou posterior.</p>
+  </div>
   <button type="button" class="pwa-install-button" data-pwa-close>Entendi</button>
 </dialog>
 

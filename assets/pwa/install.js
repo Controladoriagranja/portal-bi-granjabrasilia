@@ -5,25 +5,34 @@
   const help = document.getElementById('pwaInstallHelp');
   const status = document.getElementById('pwaInstallStatus');
   const standalone = window.matchMedia('(display-mode: standalone)');
-  const installedKey = 'portal-bi-pwa-installed';
+  // Retire the legacy flag; installation availability belongs to the browser.
+  try { localStorage.removeItem('portal-bi-pwa-installed'); } catch (_) {}
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   let deferredPrompt = null;
-  let installed = false;
+  const safariVersion = navigator.userAgent.match(/Version\/(\d+)/);
+  const isMacSafari = !isIOS && /Macintosh/.test(navigator.userAgent) &&
+    /Safari\//.test(navigator.userAgent) && !/Chrome|Chromium|Edg|OPR/.test(navigator.userAgent) &&
+    Number(safariVersion?.[1]) >= 17;
+  if (isMacSafari && help) {
+    document.getElementById('pwaInstallHelpTitle').textContent = 'Instalar no Mac';
+    document.getElementById('pwaInstallIOS').hidden = true;
+    document.getElementById('pwaInstallMac').hidden = false;
+  }
   let busy = false;
   let lastButton = null;
-  try { installed = localStorage.getItem(installedKey) === '1'; } catch (_) {}
+
 
   function isStandalone() { return standalone.matches || navigator.standalone === true; }
   function markInstalled() {
-    installed = true;
+
     deferredPrompt = null;
-    try { localStorage.setItem(installedKey, '1'); } catch (_) {}
+
     if (help?.open) help.close();
     refresh();
   }
   function refresh() {
-    const available = !installed && !isStandalone() && (isIOS || deferredPrompt !== null);
+    const available = !isStandalone() && (isIOS || isMacSafari || deferredPrompt !== null);
     buttons.forEach(button => {
       button.hidden = !available;
       button.disabled = busy;
@@ -31,7 +40,7 @@
   }
   window.addEventListener('beforeinstallprompt', event => {
     event.preventDefault();
-    if (installed || isStandalone()) return;
+    if (isStandalone()) return;
     deferredPrompt = event;
     refresh();
   });
@@ -42,8 +51,8 @@
   window.addEventListener('pageshow', refresh);
 
   buttons.forEach(button => button.addEventListener('click', async () => {
-    if (busy || installed || isStandalone()) return;
-    if (isIOS) {
+    if (busy || isStandalone()) return;
+    if (isIOS || isMacSafari) {
       lastButton = button;
       if (help && !help.open) help.showModal();
       return;

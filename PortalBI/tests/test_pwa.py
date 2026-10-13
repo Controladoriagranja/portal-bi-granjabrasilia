@@ -65,6 +65,10 @@ try:
  assert not actual.get('errors'),actual
  assert json.loads(actual['data'].lstrip('\ufeff'))['short_name']=='Portal BI'
  print('OK: Chrome carregou e interpretou o manifesto sem erros')
+ # An old installation flag must no longer block reinstalling.
+ driver.execute_script("localStorage.setItem('portal-bi-pwa-installed','1')")
+ driver.refresh()
+ assert driver.execute_script("return localStorage.getItem('portal-bi-pwa-installed')") is None
  # Synthetic browser event verifies our click flow; it does not install an OS app.
  driver.execute_script('''
  window.__promptCount=0;
@@ -83,11 +87,21 @@ try:
  dispatchEvent(event);
  ''')
  driver.find_element(By.CSS_SELECTOR,'.pwa-install-login').click()
- wait.until(lambda d:d.execute_script("return localStorage.getItem('portal-bi-pwa-installed')==='1'"))
- driver.refresh()
+ wait.until(lambda d:d.execute_script('return __promptCount===2'))
+ assert driver.execute_script("return localStorage.getItem('portal-bi-pwa-installed')") is None
+ driver.execute_script("dispatchEvent(new Event('appinstalled'))")
  assert not driver.find_element(By.CSS_SELECTOR,'.pwa-install-login').is_displayed()
- print('OK: prompt apenas por clique, recusa, aceite e ocultacao apos instalacao')
- driver.execute_script('localStorage.clear()')
+ driver.execute_script("dispatchEvent(__installEvent)")
+ assert driver.find_element(By.CSS_SELECTOR,'.pwa-install-login').is_displayed()
+ print('OK: PC/Android, recusa/aceite, flag antigo removido e nova oferta apos instalacao')
+ driver.execute_cdp_cmd('Network.setUserAgentOverride',{'userAgent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/17.0 Safari/605.1.15'})
+ driver.refresh()
+ driver.find_element(By.CSS_SELECTOR,'.pwa-install-login').click()
+ assert driver.find_element(By.ID,'pwaInstallHelp').is_displayed()
+ assert 'Adicionar ao Dock' in driver.find_element(By.ID,'pwaInstallHelp').text
+ assert not driver.find_element(By.ID,'pwaInstallIOS').is_displayed()
+ driver.find_element(By.CSS_SELECTOR,'[data-pwa-close]').click()
+ print('OK: Safari Mac simulado com instrucoes de Adicionar ao Dock')
  driver.execute_cdp_cmd('Emulation.setDeviceMetricsOverride',{'width':390,'height':844,'deviceScaleFactor':1,'mobile':True})
  driver.execute_cdp_cmd('Network.setUserAgentOverride',{'userAgent':'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1'})
  driver.refresh()
@@ -110,9 +124,14 @@ try:
  driver.find_element(By.CSS_SELECTOR,'[data-pwa-close]').click()
  print('OK: iOS simulado, instrucoes por toque e botao mobile no cabecalho')
  # Standalone mode detection, including iOS navigator.standalone.
- driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument',{'source':"Object.defineProperty(navigator,'standalone',{get:()=>true});"})
+ standalone_script=driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument',{'source':"Object.defineProperty(navigator,'standalone',{get:()=>true});"})
  driver.refresh()
  assert all(not b.is_displayed() for b in driver.find_elements(By.CSS_SELECTOR,'[data-pwa-install]'))
+ driver.execute_cdp_cmd('Page.removeScriptToEvaluateOnNewDocument',standalone_script)
+ driver.refresh()
+ assert driver.find_element(By.CSS_SELECTOR,'.pwa-install-login').is_displayed()
+ print('OK: retorno do app para Safari permite instalar novamente sem bloqueio permanente')
+
  assert driver.execute_script('return navigator.serviceWorker.getRegistrations().then(x=>x.length)') == 0
  assert driver.execute_script('return caches.keys().then(x=>x.length)') == 0
  logs=[x for x in driver.get_log('browser') if x['level']=='SEVERE']
