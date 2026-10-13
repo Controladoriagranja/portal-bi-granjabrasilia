@@ -57,6 +57,19 @@ try:
   driver.find_element(By.ID,'nav-'+view).click()
   assert driver.find_element(By.ID,'view-'+view).is_displayed(),view
  print('OK: navegacao por todas as nove telas')
+ for selector in ['.login-logo', '.sidebar-logo']:
+  link=driver.find_element(By.CSS_SELECTOR,selector)
+  assert link.tag_name=='a' and link.get_dom_attribute('href')=='./'
+ driver.find_element(By.ID,'nav-users').click()
+ driver.find_element(By.CSS_SELECTOR,'.sidebar-logo').click()
+ assert driver.find_element(By.ID,'view-reports').is_displayed()
+ assert 'active' in driver.find_element(By.ID,'mnReports').get_attribute('class')
+ driver.find_element(By.ID,'nav-users').click()
+ for options in [{'ctrlKey':True},{'metaKey':True},{'shiftKey':True},{'button':1},{'button':2}]:
+  prevented=driver.execute_script("const event=new MouseEvent('click',{cancelable:true,...arguments[0]});navigatePortalHome(event);return event.defaultPrevented;",options)
+  assert not prevented
+  assert driver.find_element(By.ID,'view-users').is_displayed()
+ print('OK: logos com href nativo, clique retorna aos Relatorios e nova aba preservada')
  driver.find_element(By.ID,'nav-users').click()
  driver.execute_script('openEditUser(2)')
  def label(group,value):
