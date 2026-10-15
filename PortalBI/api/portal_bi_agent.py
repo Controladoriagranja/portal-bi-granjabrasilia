@@ -43,10 +43,12 @@ API_BASE = os.getenv(
 ).rstrip("/")
 
 AGENT_KEY = str(os.getenv("PORTAL_BI_AGENT_KEY") or "").strip()
-AGENT_VERSION = "3.2 - tratamentos independentes por modulo"
+AGENT_VERSION = "3.3 - sinal imediato e baixo consumo Neon"
 MAX_TENTATIVAS_JOB = 3
 ESPERA_REPETICAO_JOB = 10
-POLL_SECONDS = 5
+POLL_SECONDS = 5          # Intervalo leve no Render, sem acesso ao banco
+IDLE_RESYNC_SECONDS = 3600  # Protecao contra perda de sinal ou restart do Render
+ACTIVE_RESYNC_SECONDS = 120 # Em execucao, reconcilia dependencias mais rapidamente
 REQUEST_TIMEOUT = 60
 HEARTBEAT_SECONDS = 60
 AGENT_ID = str(os.getenv("PORTAL_BI_AGENT_ID") or socket.gethostname()).strip()[:255]
@@ -112,6 +114,17 @@ def claim_job():
     )
     r.raise_for_status()
     return r.json().get("job")
+
+def consultar_sinal():
+    """Polling HTTP leve no Render; nao abre conexao com o Neon."""
+    r = requests.get(
+        f"{API_BASE}/api/agent/jobs/signal",
+        headers=headers(),
+        timeout=15,
+    )
+    r.raise_for_status()
+    return r.json().get("signal", "")
+
 
 def finish_job(job_id, status, erro=None):
     payload = {"status": status, "agent_id": AGENT_ID}
@@ -466,12 +479,20 @@ def executar_job(job):
 
 
 def executar_fila_paralela(max_workers):
-    """Executa jobs liberados pela API, com dependencias e exclusao por modulo."""
+    """Reserva sob demanda: sinal rapido no Render; Neon somente quando necessario.
+
+    O sinal em /tmp do Render e uma otimizacao, nao uma fila: se for perdido, a
+    verificacao periodica ou a reinicializacao do Agent recupera jobs pendentes.
+    """
     from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 
-    capacidade = max_workers + 5  # Tres contas e um tratamento por modulo; API arbitra as reservas.
+    capacidade = max_workers + 5  # Limites reais permanecem na API/Neon.
     with ThreadPoolExecutor(max_workers=capacidade) as executor:
         ativos = set()
+        ultimo_sinal = None
+        proximo_claim = True  # Busca o backlog existente imediatamente no startup.
+        ultimo_claim = 0.0
+        ultimo_aviso_sinal = 0.0
         try:
             while True:
                 concluidos = {f for f in ativos if f.done()}
@@ -481,19 +502,54 @@ def executar_fila_paralela(max_workers):
                     except Exception as e:
                         print(f"[AGENT] Falha ao acompanhar job: {e}", flush=True)
                 ativos -= concluidos
+                if concluidos:
+                    proximo_claim = True  # Liberou vaga ou dependencia local.
+
                 if len(ativos) >= capacidade:
                     wait(ativos, timeout=POLL_SECONDS, return_when=FIRST_COMPLETED)
                     continue
+
+                # Consulta barata: nao toca no Neon e pode ver jobs criados por
+                # outro processo Gunicorn na mesma instancia Render.
                 try:
-                    job = claim_job()
+                    sinal = consultar_sinal()
+                    if ultimo_sinal is None:
+                        ultimo_sinal = sinal
+                    elif sinal != ultimo_sinal:
+                        ultimo_sinal = sinal
+                        proximo_claim = True
                 except requests.RequestException as e:
-                    print(f"[CONEXAO] {e}. Nova tentativa em {POLL_SECONDS}s.", flush=True)
-                    time.sleep(POLL_SECONDS)
-                    continue
-                if not job:
-                    time.sleep(POLL_SECONDS)
-                    continue
-                ativos.add(executor.submit(executar_job, job))
+                    agora = time.monotonic()
+                    if agora - ultimo_aviso_sinal > 60:
+                        print(f"[AGENT] Sinal indisponivel ({e}); verifica fila no fallback.", flush=True)
+                        ultimo_aviso_sinal = agora
+                    # Se a rota nova ainda nao foi publicada, reconcilia mais
+                    # cedo para nao deixar a fila parada indefinidamente.
+                    if getattr(getattr(e, 'response', None), 'status_code', None) == 404:
+                        if time.monotonic() - ultimo_claim >= 60:
+                            proximo_claim = True
+
+                # Sem jobs ativos, o banco pode suspender por 5 minutos;
+                # fallback raro e necessario em caso de reinicio do Render.
+                periodo_resync = ACTIVE_RESYNC_SECONDS if ativos else IDLE_RESYNC_SECONDS
+                if time.monotonic() - ultimo_claim >= periodo_resync:
+                    proximo_claim = True
+
+                if proximo_claim:
+                    try:
+                        job = claim_job()
+                        ultimo_claim = time.monotonic()
+                    except requests.RequestException as e:
+                        print(f"[CONEXAO] {e}. Nova tentativa em {POLL_SECONDS}s.", flush=True)
+                        time.sleep(POLL_SECONDS)
+                        continue
+                    if job:
+                        ativos.add(executor.submit(executar_job, job))
+                        # Continua drenando vagas sem aguardar novo sinal.
+                        proximo_claim = True
+                        continue
+                    proximo_claim = False
+                time.sleep(POLL_SECONDS)
         except KeyboardInterrupt:
             print("Encerrando apos finalizar os robos em andamento...", flush=True)
 
@@ -513,6 +569,8 @@ def main():
     print(f"Robôs autorizados: {len(ROBOS)}")
     print(f"Agent ID: {AGENT_ID}")
     print(f"Heartbeat: a cada {HEARTBEAT_SECONDS}s durante a execução")
+    print(f"Sinal leve Render: a cada {POLL_SECONDS}s, sem consultar o Neon")
+    print(f"Reconciliacao Neon ocioso: a cada {IDLE_RESYNC_SECONDS // 60}min")
     print("=" * 64)
     print("Aguardando jobs... Ctrl+C para encerrar.", flush=True)
 

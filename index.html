@@ -3794,11 +3794,9 @@
             <div class="update-field">
               <label>Módulo</label>
               <select id="updateModule" onchange="loadUpdateStatus()">
-                <option value="pcp">PCP</option>
                 <option value="logistica">Logística</option>
                 <option value="comercial">Comercial</option>
                 <option value="suprimentos">Suprimentos</option>
-                <option value="zootecnico">Índice Zootécnico</option>
                 <option value="todos">Todos</option>
               </select>
             </div>
@@ -5190,8 +5188,10 @@ async function portalApiRequest(path, options = {}) {
   try {
     const {response, data} = await fetchJsonWithTimeout(
       PORTAL_API_BASE + path,
-      {...options, headers},
-      65000
+      path === '/api/jobs' && (!options.method || options.method === 'GET')
+        ? {...options, headers, cache:'no-store'}
+        : {...options, headers},
+      path === '/api/jobs' && (!options.method || options.method === 'GET') ? 30000 : 65000
     );
 
     if (response.status === 401) {
@@ -5312,6 +5312,7 @@ async function logout() {
 }
 
 function showScreen(id) {
+  if (id !== 'portal') stopUpdateMonitor();
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-'+id).classList.add('active');
 }
@@ -9234,6 +9235,7 @@ function switchView(viewId, navEl) {
     document.getElementById('topbarTitle').textContent = m.title;
     document.getElementById('topbarSub').textContent = m.sub;
   }
+  if (viewId !== 'updates') stopUpdateMonitor();
   if (viewId === 'changepass') prepareChangePasswordView();
   if (viewId === 'sectors') renderSectorsList();
   if (viewId === 'updates') startUpdateMonitor();
@@ -9604,15 +9606,13 @@ function rebuildSectorCheckboxes() {
 // Ele cria/consulta jobs no Render usando a sessão já autenticada.
 // O BI Agent, dentro da rede da Granja, pega os jobs e executa os scripts locais.
 
+// PCP e Zootécnico não são mais disparados pela Central de Atualizações.
+// Os BIs e robôs permanecem intactos fora desta interface.
 const UPDATE_ROBOTS = [
   {id:58, modulo:'comercial', nome:'Faturamento Comercial CFOP', codigo:'comercial_faturamento_cfop', tratamento:false},
   {id:44, modulo:'comercial', nome:'Cadastro de Vendedores', codigo:'cadastro_de_vendedores', tratamento:false},
   {id:50, modulo:'comercial', nome:'Clientes Cadastrados', codigo:'clientes_cadastrados', tratamento:false},
   {id:40, modulo:'comercial', nome:'Tratamento Comercial / Power BI', codigo:'tratar_comercial', tratamento:true},
-  {id:1, modulo:'zootecnico', nome:'Base Dinâmica', codigo:'indice_zootecnico_base_dinamica', tratamento:false},
-  {id:2, modulo:'zootecnico', nome:'Mortalidade/Peso - Lotes Abertos', codigo:'indice_zootecnico_mortalidade_peso_lotes_abertos', tratamento:false},
-  {id:3, modulo:'zootecnico', nome:'Mortalidade/Peso - Lotes Fechados', codigo:'indice_zootecnico_mortalidade_peso_lotes_fechados', tratamento:false},
-  {id:4, modulo:'zootecnico', nome:'Tratamento Índice Zootécnico / Power BI', codigo:'tratar_zootecnico', tratamento:true},
   {id:51, modulo:'logistica', nome:'Cadastro de Vendedores', codigo:'logistica_cadastro_vendedores', tratamento:false},
   {id:68, modulo:'logistica', nome:'Contas a Pagar', codigo:'logistica_contas_a_pagar', tratamento:false},
   {id:47, modulo:'logistica', nome:'Controle Frete', codigo:'logistica_controle_frete', tratamento:false},
@@ -9623,16 +9623,6 @@ const UPDATE_ROBOTS = [
   {id:49, modulo:'logistica', nome:'Ocorrência Viagem Custo', codigo:'logistica_ocorrencia_viagens_custo', tratamento:false},
   {id:65, modulo:'logistica', nome:'Relatório Veículos', codigo:'logistica_relatorio_veiculos', tratamento:false},
   {id:67, modulo:'logistica', nome:'Tratamento Logística / Power BI', codigo:'tratar_logistica', tratamento:true},
-  {id:64, modulo:'pcp', nome:'Desperdício', codigo:'pcp_desperdicio', tratamento:false},
-  {id:48, modulo:'pcp', nome:'Devolução', codigo:'pcp_devolucao', tratamento:false},
-  {id:53, modulo:'pcp', nome:'Diário Indústria', codigo:'pcp_diario_industria', tratamento:false},
-  {id:55, modulo:'pcp', nome:'Diário Indústria Ave Nova Turnos', codigo:'pcp_diario_industria_avenova_turnos', tratamento:false},
-  {id:61, modulo:'pcp', nome:'Estoque Online', codigo:'pcp_estoque_online', tratamento:false},
-  {id:70, modulo:'pcp', nome:'Estoque por Transação', codigo:'pcp_estoque_por_transacao', tratamento:false},
-  {id:43, modulo:'pcp', nome:'Movimento Geral Pesagem', codigo:'pcp_movimento_geral_pesagem', tratamento:false},
-  {id:63, modulo:'pcp', nome:'Plano Produção', codigo:'pcp_plano_producao', tratamento:false},
-  {id:42, modulo:'pcp', nome:'Relatório Geral Condenações', codigo:'pcp_relatorio_geral_condenacoes', tratamento:false},
-  {id:69, modulo:'pcp', nome:'Tratamento PCP / Power BI', codigo:'tratar_pcp', tratamento:true},
   {id:45, modulo:'suprimentos', nome:'Contas Pagas', codigo:'suprimentos_contas_pagas', tratamento:false},
   {id:62, modulo:'suprimentos', nome:'Notas Fiscais Item', codigo:'suprimentos_notas_fiscais_item', tratamento:false},
   {id:60, modulo:'suprimentos', nome:'Ordens de Compras Emitidas', codigo:'suprimentos_ordens_compras_emitidas', tratamento:false},
@@ -9645,6 +9635,35 @@ const UPDATE_ROBOTS = [
 
 let updateTimer = null;
 let updateLastJobs = [];
+let updateRequestInFlight = false;
+let updateMonitorGeneration = 0;
+let updateMonitorActive = false;
+let updateMonitorWarmUntil = 0;
+
+function stopUpdateMonitor(){
+  updateMonitorActive = false;
+  if (updateTimer !== null) clearTimeout(updateTimer);
+  updateTimer = null;
+  updateMonitorGeneration++;
+  updateMonitorWarmUntil = 0;
+}
+
+async function runUpdateMonitor(){
+  if (!updateMonitorActive) return;
+  const generation = updateMonitorGeneration;
+  await loadUpdateStatus();
+  if (!updateMonitorActive || generation !== updateMonitorGeneration) return;
+  const hasActiveJobs = updateLastJobs.some(j => ['aguardando','executando'].includes(j.status));
+  // Sem jobs ativos, intervalo >5min permite Scale to Zero do Neon.
+  updateTimer = setTimeout(runUpdateMonitor, (hasActiveJobs || Date.now() < updateMonitorWarmUntil) ? 15000 : 900000);
+}
+
+function refreshUpdateMonitorSoon(){
+  if (!updateMonitorActive) return;
+  updateMonitorWarmUntil = Date.now() + 120000;
+  if (updateTimer !== null) clearTimeout(updateTimer);
+  updateTimer = setTimeout(runUpdateMonitor, 1000);
+}
 
 function toggleTreatmentMode(){
   const field = document.getElementById('updateTreatmentField');
@@ -9811,11 +9830,11 @@ async function createRobotJob(robo, parametros){
 }
 
 function startUpdateMonitor(){
+  stopUpdateMonitor();
+  updateMonitorActive = true;
   toggleTreatmentMode();
   toggleManualPeriod();
-  loadUpdateStatus();
-  clearInterval(updateTimer);
-  updateTimer = setInterval(loadUpdateStatus, 2500);
+  runUpdateMonitor();
 }
 
 async function runSingleUpdate(id){
@@ -9827,6 +9846,7 @@ async function runSingleUpdate(id){
   try {
     const parametros = updatePayload();
     const job = await createRobotJob(robo, parametros);
+    refreshUpdateMonitorSoon();
     saveUpdateBatch([job.id]);
     showToast(`Job #${job.id} criado.`, 'success');
     document.getElementById('updateProgressPanel').style.display='block';
@@ -9889,6 +9909,7 @@ async function runModuleUpdate(){
       }
       ids.push(job.id);
     }
+    refreshUpdateMonitorSoon();
     saveUpdateBatch(ids);
     showToast(`${ids.length} job(s) criado(s) para ${label}.`, 'success');
     document.getElementById('updateProgressPanel').style.display='block';
@@ -9964,10 +9985,13 @@ function renderUpdateProgress(jobs){
 async function loadUpdateStatus(){
   const banner = document.getElementById('updateApiBanner');
   const tbody = document.getElementById('updateReportsBody');
-  if (!banner || !tbody) return;
+  if (!banner || !tbody || updateRequestInFlight) return;
+  const generation = updateMonitorGeneration;
+  updateRequestInFlight = true;
 
   try {
     const data = await apiUpdate('/api/jobs');
+    if (generation !== updateMonitorGeneration) return;
     const jobs = Array.isArray(data.jobs) ? data.jobs : [];
     updateLastJobs = jobs;
 
@@ -10009,9 +10033,12 @@ async function loadUpdateStatus(){
     renderUpdateTerminal(jobs);
 
   } catch(e) {
+    if (generation !== updateMonitorGeneration) return;
     banner.classList.add('offline');
     banner.textContent = '● API desconectada — ' + e.message;
     tbody.innerHTML = `<tr><td colspan="6" style="padding:18px;color:var(--red)">Não foi possível consultar os jobs: ${e.message}</td></tr>`;
+  } finally {
+    updateRequestInFlight = false;
   }
 }
 

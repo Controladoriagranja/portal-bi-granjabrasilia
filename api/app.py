@@ -4,6 +4,8 @@ import gzip
 import hmac
 import os
 import queue
+import tempfile
+import uuid
 import re
 import shutil
 import subprocess
@@ -3573,6 +3575,36 @@ def api_portal_data():
 
 HEARTBEAT_STALE_MINUTES = 3
 
+# Sinal de fila em arquivo efemero: compartilha a notificacao entre workers do
+# Gunicorn na MESMA instancia Render. Nao consulta o Neon. O banco e a fonte da
+# verdade; o Agent verifica periodicamente para tolerar perda/reinicio do sinal.
+_JOB_SIGNAL_PATH = Path(tempfile.gettempdir()) / "granjabi-agent-job-signal-v1"
+
+
+def _job_signal():
+    try:
+        return _JOB_SIGNAL_PATH.read_text(encoding="ascii").strip()
+    except FileNotFoundError:
+        return ""
+    except OSError as exc:
+        log(f"Sinal de jobs indisponivel: {exc}", "AVISO")
+        return ""
+
+
+def _notify_agents():
+    """Avisa o Agent apos COMMIT. Falha do sinal nunca desfaz job no Neon."""
+    tmp = _JOB_SIGNAL_PATH.with_name(_JOB_SIGNAL_PATH.name + "." + uuid.uuid4().hex)
+    try:
+        tmp.write_text(uuid.uuid4().hex, encoding="ascii")
+        os.replace(tmp, _JOB_SIGNAL_PATH)
+    except OSError as exc:
+        log(f"Falha no sinal de jobs (fallback periodico do Agent): {exc}", "AVISO")
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
 def _interromper_jobs_sem_heartbeat(conn):
     """Marca jobs executando sem heartbeat há mais de 3 minutos como interrompidos."""
     rows = conn.execute(text("""
@@ -3705,6 +3737,7 @@ def api_criar_job():
                 "parametros": parametros_json,
             }).mappings().one()
 
+        _notify_agents()  # Job gravado e commitado: desperta o Agent em segundos.
         log(
             f"Job #{job['id']} criado por {usuario.get('email')} | "
             f"robô: {robo.get('codigo')}",
@@ -3744,8 +3777,7 @@ def api_listar_jobs():
         if bloqueio:
             return bloqueio
 
-        with engine.begin() as conn:
-            _interromper_jobs_sem_heartbeat(conn)
+        with engine.connect() as conn:
             rows = conn.execute(text("""
                 SELECT
                     j.id,
@@ -3795,8 +3827,7 @@ def api_consultar_job(job_id):
         if bloqueio:
             return bloqueio
 
-        with engine.begin() as conn:
-            _interromper_jobs_sem_heartbeat(conn)
+        with engine.connect() as conn:
             row = conn.execute(text("""
                 SELECT
                     j.id,
@@ -3868,6 +3899,16 @@ def _resposta_agent_nao_autorizado():
         "ok": False,
         "erro": "Agent não autorizado."
     }), 401
+
+
+@app.route("/api/agent/jobs/signal", methods=["GET"])
+def api_agent_jobs_signal():
+    """Leitura leve sem PostgreSQL. Requer mesma chave privada do Agent."""
+    if not _agent_autorizado():
+        return _resposta_agent_nao_autorizado()
+    response = jsonify({"ok": True, "signal": _job_signal()})
+    response.headers["Cache-Control"] = "no-store, max-age=0"
+    return response
 
 
 @app.route("/api/agent/jobs/claim", methods=["POST"])
@@ -4124,6 +4165,7 @@ def api_agent_finish_job(job_id):
                 "erro": "Job não encontrado ou não está em execução."
             }), 409
 
+        _notify_agents()  # Dependencias liberadas e/ou capacidade disponivel.
         log(f"BI Agent finalizou Job #{job_id} com status {status}.", "INFO")
         return jsonify({"ok": True, "job": _job_publico(row)})
 
