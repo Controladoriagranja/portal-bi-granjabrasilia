@@ -4804,6 +4804,7 @@ db.users.forEach(u => {
 syncSectors();
 
 let currentUser = null;
+let portalSessionGeneration = 0;
 
 // ── Auto-login se sessão salva ──
 function applyLoadedData(loaded) {
@@ -4833,6 +4834,9 @@ function setPortalToken(token) {
 }
 
 function clearPortalToken() {
+  portalSessionGeneration++;
+  stopCentralTicketSync();
+  stopUpdateMonitor();
   neonSessionToken = null;
   try { sessionStorage.removeItem('granjabi_auth_token'); } catch(e) {}
 }
@@ -5180,6 +5184,7 @@ async function portalApiRequest(path, options = {}) {
   if (!neonSessionToken) neonSessionToken = getPortalToken();
   if (!neonSessionToken) throw new Error("Sessão inválida. Entre novamente.");
 
+  const session = portalSessionGeneration;
   const headers = new Headers(options.headers || {});
   headers.set("Accept", "application/json");
   headers.set("Authorization", `Bearer ${neonSessionToken}`);
@@ -5194,9 +5199,12 @@ async function portalApiRequest(path, options = {}) {
       path === '/api/jobs' && (!options.method || options.method === 'GET') ? 30000 : 65000
     );
 
+    if (session !== portalSessionGeneration) throw new Error('Sessão anterior encerrada.');
     if (response.status === 401) {
+      currentUser = null;
       clearPortalToken();
       clearSession();
+      showScreen('login');
       throw new Error("Sessão expirada. Entre novamente.");
     }
     if (!response.ok) {
@@ -5292,14 +5300,6 @@ async function handleLogin(button=null) {
 
 async function logout() {
   const token = neonSessionToken || getPortalToken();
-  try {
-    if (token) await fetch(PORTAL_API_BASE + "/api/auth/logout", {
-      method:"POST",
-      headers:{"Accept":"application/json","Authorization":`Bearer ${token}`}
-    });
-  } catch (erro) {
-    console.warn('Não foi possível comunicar o logout à API:', erro);
-  }
   currentUser = null;
   clearPortalToken();
   clearSession();
@@ -5309,10 +5309,18 @@ async function logout() {
   setLoginServerStatus('Preparando servidor...', 'loading');
   portalWarmupPromise = null;
   warmupPortalApi();
+  try {
+    if (token) await fetch(PORTAL_API_BASE + "/api/auth/logout", {
+      method:"POST",
+      headers:{"Accept":"application/json","Authorization":`Bearer ${token}`}
+    });
+  } catch (erro) {
+    console.warn('Não foi possível comunicar o logout à API:', erro);
+  }
 }
 
 function showScreen(id) {
-  if (id !== 'portal') stopUpdateMonitor();
+  if (id !== 'portal') { stopUpdateMonitor(); stopCentralTicketSync(); }
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-'+id).classList.add('active');
 }
@@ -6366,13 +6374,16 @@ function authenticatedTicketRequester(){
 }
 
 
-async function loadPortalTicketUsers(){
+async function loadPortalTicketUsers({signal}={}){
+  const token = getPortalToken();
   try{
-    const data = await ticketApiRequest('/api/chamados/usuarios');
+    const data = await ticketApiRequest('/api/chamados/usuarios', {signal});
+    if (signal?.aborted || token !== getPortalToken()) return;
     portalTicketUsers = Array.isArray(data?.usuarios) ? data.usuarios : [];
     renderPortalTicketUserSelects();
+    return true;
   }catch(e){
-    console.warn('Não foi possível carregar usuários dos Chamados:', e);
+    if (e?.name !== 'AbortError') console.warn('Não foi possível carregar usuários dos Chamados:', e);
   }
 }
 
@@ -6466,6 +6477,12 @@ let activeApprovalTicketId = null;
 let activeApprovalPhase = 'initial';
 let ticketApprovalFiles = [];
 let ticketSyncTimer = null;
+let ticketSyncActive = false;
+let ticketSyncGeneration = 0;
+let ticketSyncRunPromise = null;
+let ticketSyncReadController = null;
+let ticketMutationGeneration = 0;
+let ticketDeleteInProgress = false;
 let ticketApiOnline = false;
 let ticketSaveInProgress = false;
 let ticketPullInProgress = false;
@@ -6474,6 +6491,7 @@ let ticketHasConnectedOnce = false;
 let ticketPendingSaves = 0;
 let ticketSaveQueue = Promise.resolve();
 let ticketLastRemoteSignature = '';
+// A cached snapshot is only a delta baseline, never an automatic upload.
 let ticketLastSyncedStore = null;
 
 function defaultTicketStore() {
@@ -6514,6 +6532,7 @@ function loadTicketCache() {
 }
 
 let ticketStore = loadTicketCache();
+ticketLastSyncedStore = cloneTicketStore(ticketStore);
 
 function cacheTicketStore() {
   try {
@@ -6578,7 +6597,13 @@ function buildTicketSavePayload(snapshot) {
 }
 
 async function ticketApiRequest(path, options={}) {
+  const session = portalSessionGeneration;
+  const token = getPortalToken();
+  if (!currentUser || !token) throw new Error('Sessão inválida. Entre novamente.');
   const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (options.signal?.aborted) abort();
+  else options.signal?.addEventListener('abort', abort, {once:true});
   // Render Free pode levar 50s+ para acordar após inatividade.
   const timeout = setTimeout(() => controller.abort(), 90000);
 
@@ -6588,7 +6613,7 @@ async function ticketApiRequest(path, options={}) {
       signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
-        ...(getPortalToken() ? {'Authorization': `Bearer ${getPortalToken()}`} : {}),
+        'Authorization': `Bearer ${token}`,
         ...(options.headers || {})
       }
     });
@@ -6596,6 +6621,15 @@ async function ticketApiRequest(path, options={}) {
     let data = {};
     try { data = await res.json(); } catch(e) {}
 
+    if (session !== portalSessionGeneration || token !== getPortalToken() || controller.signal.aborted) {
+      throw new DOMException('Leitura de sessão anterior descartada.', 'AbortError');
+    }
+    if (res.status === 401) {
+      currentUser = null;
+      clearPortalToken();
+      clearSession();
+      showScreen('login');
+    }
     if (!res.ok) {
       throw new Error(data.erro || `Erro HTTP ${res.status}`);
     }
@@ -6607,6 +6641,7 @@ async function ticketApiRequest(path, options={}) {
     return data;
   } finally {
     clearTimeout(timeout);
+    options.signal?.removeEventListener('abort', abort);
   }
 }
 
@@ -6665,14 +6700,17 @@ function renderTicketsAfterRemoteSync() {
   }
 }
 
-async function pullTicketStoreFromServer({silent=true}={}) {
-  if (ticketSaveInProgress || ticketPullInProgress) return false;
+async function pullTicketStoreFromServer({silent=true, signal}={}) {
+  if (!currentUser || !getPortalToken() || signal?.aborted || ticketSaveInProgress || ticketDeleteInProgress || ticketPullInProgress) return false;
+  const token = getPortalToken();
+  const mutation = ticketMutationGeneration;
 
   ticketPullInProgress = true;
   updateTicketSyncIndicator();
 
   try {
-    const remote = normalizeTicketStore(await ticketApiRequest('/api/chamados'));
+    const remote = normalizeTicketStore(await ticketApiRequest('/api/chamados', {signal}));
+    if (signal?.aborted || token !== getPortalToken() || mutation !== ticketMutationGeneration || ticketSaveInProgress || ticketDeleteInProgress) return false;
     const signature = ticketStoreSignature(remote);
 
     if (signature !== ticketLastRemoteSignature) {
@@ -6687,6 +6725,7 @@ async function pullTicketStoreFromServer({silent=true}={}) {
     ticketConsecutiveFailures = 0;
     return true;
   } catch(e) {
+    if (e?.name === 'AbortError' || token !== getPortalToken()) return false;
     ticketConsecutiveFailures += 1;
     if (ticketConsecutiveFailures >= 2) {
       ticketApiOnline = false;
@@ -6725,23 +6764,65 @@ async function migrateLocalTicketsToServer() {
   }
 }
 
-async function initCentralTicketSync() {
-  ticketApiOnline = false;
-  ticketPullInProgress = true;
-  updateTicketSyncIndicator();
-
-  await loadPortalTicketUsers();
-
-  // Neon é a fonte oficial. NÃO reenviamos cache local no login, pois um
-  // navegador antigo poderia ressuscitar chamados já excluídos.
-  ticketPullInProgress = false;
-  await pullTicketStoreFromServer({silent:false});
-
-  clearInterval(ticketSyncTimer);
-  ticketSyncTimer = setInterval(() => {
-    pullTicketStoreFromServer({silent:true});
-  }, TICKET_SYNC_INTERVAL_MS);
+function canSyncTickets() {
+  if (!currentUser || !getPortalToken() || document.visibilityState !== 'visible' ||
+      !document.getElementById('screen-portal')?.classList.contains('active')) return false;
+  return document.getElementById('view-tickets')?.classList.contains('active') ||
+    (document.getElementById('view-ticketadmin')?.classList.contains('active') &&
+      (currentUser.role === 'admin' || currentUser.ticketPanelAccess === true));
 }
+
+function stopCentralTicketSync() {
+  ticketSyncActive = false;
+  ticketSyncGeneration++;
+  if (ticketSyncTimer !== null) clearTimeout(ticketSyncTimer);
+  ticketSyncTimer = null;
+  ticketSyncReadController?.abort();
+}
+
+function initCentralTicketSync() {
+  if (!canSyncTickets()) { stopCentralTicketSync(); return Promise.resolve(false); }
+  if (ticketSyncActive) return ticketSyncRunPromise || Promise.resolve(true);
+  ticketSyncActive = true;
+  return runCentralTicketSync(++ticketSyncGeneration, true);
+}
+
+async function runCentralTicketSync(generation, loadUsers=false) {
+  const valid = () => ticketSyncActive && generation === ticketSyncGeneration && canSyncTickets();
+  // Wait for an aborted previous entry to release its read lock before returning.
+  if (ticketSyncRunPromise) await ticketSyncRunPromise;
+  if (!valid()) {
+    if (generation === ticketSyncGeneration) stopCentralTicketSync();
+    return false;
+  }
+  ticketSyncTimer = null;
+  const controller = new AbortController();
+  ticketSyncReadController = controller;
+  const work = (async () => {
+    if (loadUsers) loadUsers = !(await loadPortalTicketUsers({signal:controller.signal}));
+    if (!valid() || controller.signal.aborted) return false;
+    // Neon is authoritative. Never merge a local cache when entering a screen.
+    return pullTicketStoreFromServer({silent:true, signal:controller.signal});
+  })();
+  ticketSyncRunPromise = work;
+  try { return await work; }
+  finally {
+    if (ticketSyncRunPromise === work) ticketSyncRunPromise = null;
+    if (ticketSyncReadController === controller) ticketSyncReadController = null;
+    if (valid()) ticketSyncTimer = setTimeout(() => runCentralTicketSync(generation, loadUsers), TICKET_SYNC_INTERVAL_MS);
+  }
+}
+
+document.addEventListener('visibilitychange', () => {
+  initCentralTicketSync();
+  if (document.visibilityState !== 'visible') stopUpdateMonitor();
+  else if (canMonitorUpdates()) startUpdateMonitor();
+});
+window.addEventListener('pagehide', () => { stopCentralTicketSync(); stopUpdateMonitor(); });
+window.addEventListener('pageshow', () => {
+  initCentralTicketSync();
+  if (canMonitorUpdates()) startUpdateMonitor();
+});
 
 /*
   Mantemos o nome saveTicketStore() para não quebrar as funções já existentes.
@@ -6751,16 +6832,26 @@ async function initCentralTicketSync() {
   3. recebe a revisão oficial do servidor.
 */
 function saveTicketStore() {
+  const session = portalSessionGeneration;
+  ticketMutationGeneration++;
+  ticketSyncReadController?.abort();
   cacheTicketStore();
   const snapshot = cloneTicketStore(ticketStore);
+  // Freeze the user's intent. A response to an earlier queued save may contain
+  // remote deletions/edits; unrelated stale entries in this snapshot must not return.
+  const intent = buildTicketSavePayload(snapshot);
+  const changedIds = new Set(intent.tickets.map(t => String(t.id)));
   ticketPendingSaves += 1;
   ticketSaveInProgress = true;
 
   const task = ticketSaveQueue.catch(()=>null).then(async () => {
     try {
+      if (session !== portalSessionGeneration) return false;
       // Calculado somente quando chega a vez desta tarefa na fila. Assim,
       // alterações já confirmadas por uma tarefa anterior não são reenviadas.
       const payload = buildTicketSavePayload(snapshot);
+      payload.tickets = payload.tickets.filter(t => changedIds.has(String(t.id)));
+      if (!Object.prototype.hasOwnProperty.call(intent, 'managers')) delete payload.managers;
       const hasTicketChanges = Array.isArray(payload.tickets) && payload.tickets.length > 0;
       const hasManagerChanges = Object.prototype.hasOwnProperty.call(payload, 'managers');
 
@@ -6787,6 +6878,7 @@ function saveTicketStore() {
       updateTicketSyncIndicator();
       return true;
     } catch (err) {
+      if (session !== portalSessionGeneration) return false;
       ticketApiOnline = false;
       updateTicketSyncIndicator();
       console.warn('Não foi possível salvar a alteração no Neon:', err);
@@ -6806,8 +6898,13 @@ function saveTicketStore() {
 }
 
 async function deleteTicketFromServer(id) {
+  const session = portalSessionGeneration;
+  ticketMutationGeneration++;
+  ticketSyncReadController?.abort();
+  ticketDeleteInProgress = true;
   try {
     await ticketSaveQueue.catch(()=>null);
+    if (session !== portalSessionGeneration) return false;
     const remote = normalizeTicketStore(await ticketApiRequest(`/api/chamados/${encodeURIComponent(id)}`, {
       method: 'DELETE'
     }));
@@ -6818,6 +6915,8 @@ async function deleteTicketFromServer(id) {
     return true;
   } catch(e) {
     return false;
+  } finally {
+    ticketDeleteInProgress = false;
   }
 }
 
@@ -9244,6 +9343,7 @@ function switchView(viewId, navEl) {
 
   // O status de sincronização pertence ao topo e só aparece no Painel de Chamados.
   updateTicketSyncIndicator();
+  initCentralTicketSync();
 }
 
 function switchUserTab(tab, el) {
@@ -9640,6 +9740,12 @@ let updateMonitorGeneration = 0;
 let updateMonitorActive = false;
 let updateMonitorWarmUntil = 0;
 
+function canMonitorUpdates(){
+  return currentUser?.role === 'admin' && !!getPortalToken() && document.visibilityState === 'visible' &&
+    document.getElementById('screen-portal')?.classList.contains('active') &&
+    document.getElementById('view-updates')?.classList.contains('active');
+}
+
 function stopUpdateMonitor(){
   updateMonitorActive = false;
   if (updateTimer !== null) clearTimeout(updateTimer);
@@ -9649,17 +9755,25 @@ function stopUpdateMonitor(){
 }
 
 async function runUpdateMonitor(){
-  if (!updateMonitorActive) return;
+  if (!updateMonitorActive || !canMonitorUpdates()) return;
   const generation = updateMonitorGeneration;
+  updateTimer = null;
+  // A hidden/previous generation may still be finishing its HTTP request.
+  // Wait locally, then fetch fresh status instead of sleeping on stale idle data.
+  if (updateRequestInFlight) {
+    updateTimer = setTimeout(runUpdateMonitor, 1000);
+    return;
+  }
   await loadUpdateStatus();
-  if (!updateMonitorActive || generation !== updateMonitorGeneration) return;
+  if (!updateMonitorActive || !canMonitorUpdates() || generation !== updateMonitorGeneration) return;
   const hasActiveJobs = updateLastJobs.some(j => ['aguardando','executando'].includes(j.status));
   // Sem jobs ativos, intervalo >5min permite Scale to Zero do Neon.
+  if (updateTimer !== null) clearTimeout(updateTimer);
   updateTimer = setTimeout(runUpdateMonitor, (hasActiveJobs || Date.now() < updateMonitorWarmUntil) ? 15000 : 900000);
 }
 
 function refreshUpdateMonitorSoon(){
-  if (!updateMonitorActive) return;
+  if (!updateMonitorActive || !canMonitorUpdates()) return;
   updateMonitorWarmUntil = Date.now() + 120000;
   if (updateTimer !== null) clearTimeout(updateTimer);
   updateTimer = setTimeout(runUpdateMonitor, 1000);
@@ -9831,6 +9945,7 @@ async function createRobotJob(robo, parametros){
 
 function startUpdateMonitor(){
   stopUpdateMonitor();
+  if (!canMonitorUpdates()) return;
   updateMonitorActive = true;
   toggleTreatmentMode();
   toggleManualPeriod();
