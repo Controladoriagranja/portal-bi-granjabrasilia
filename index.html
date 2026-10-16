@@ -4198,7 +4198,10 @@
             <div class="section-title" style="font-size:18px">Dados & Power BI — Chamados</div>
             <div style="font-size:12px;color:var(--text-muted);margin-top:4px">Solicite ajustes, criações e acompanhe o andamento.</div>
           </div>
-          <button class="btn-sm accent" onclick="openNewTicket()">＋ Abrir Chamado</button>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <button class="btn-sm" onclick="refreshTicketsManually()" title="Buscar alteracoes feitas por outros usuarios">↻ Atualizar</button>
+            <button class="btn-sm accent" onclick="openNewTicket()">＋ Abrir Chamado</button>
+          </div>
         </div>
 
         <div class="ticket-kpis">
@@ -4351,6 +4354,7 @@
             </div>
           </div>
           <div class="ticket-admin-header-actions">
+            <button class="btn-sm" onclick="refreshTicketsManually()" title="Buscar alteracoes feitas por outros usuarios">↻ Atualizar</button>
             <button class="btn-sm" onclick="openInternalDemandModal()">＋ Nova Demanda Interna</button>
             <button class="btn-sm accent" onclick="switchView('tickets',document.getElementById('nav-tickets'));openNewTicket()">＋ Abrir Chamado</button>
           </div>
@@ -6360,7 +6364,9 @@ const TICKET_STORE_KEY = 'granjabi_ticket_module_v1';
   A fonte oficial dos chamados é a própria API do Portal BI (mesmo host e mesma porta).
 */
 const TICKET_API = 'https://portal-bi-granjabrasilia.onrender.com';
-const TICKET_SYNC_INTERVAL_MS = 10000;
+// Sem polling recorrente. Chamados sincronizam ao abrir/retornar a tela,
+// apos salvar e quando o usuario solicita manualmente.
+const TICKET_SYNC_INTERVAL_MS = 0;
 
 const TICKET_MAX_FILE_BYTES = 10 * 1024 * 1024;
 const TICKET_MAX_FILES_PER_SEND = 5;
@@ -6629,6 +6635,7 @@ async function ticketApiRequest(path, options={}) {
       clearPortalToken();
       clearSession();
       showScreen('login');
+      throw new Error('Sessao expirada. Entre novamente.');
     }
     if (!res.ok) {
       throw new Error(data.erro || `Erro HTTP ${res.status}`);
@@ -6663,7 +6670,7 @@ function updateTicketSyncIndicator() {
   el.style.display = ticketPanelActive ? 'inline-flex' : 'none';
 
   if (ticketApiOnline) {
-    el.textContent = '● Sincronizado';
+    el.textContent = '● Atualizado';
     el.className = 'ticket-sync-pill online';
   } else if (ticketPullInProgress || !ticketHasConnectedOnce) {
     el.textContent = '● Conectando...';
@@ -6780,6 +6787,12 @@ function stopCentralTicketSync() {
   ticketSyncReadController?.abort();
 }
 
+function refreshTicketsManually() {
+  if (!canSyncTickets()) return;
+  stopCentralTicketSync();
+  initCentralTicketSync().catch(err => console.warn('Falha na atualizacao de chamados:', err));
+}
+
 function initCentralTicketSync() {
   if (!canSyncTickets()) { stopCentralTicketSync(); return Promise.resolve(false); }
   if (ticketSyncActive) return ticketSyncRunPromise || Promise.resolve(true);
@@ -6809,7 +6822,9 @@ async function runCentralTicketSync(generation, loadUsers=false) {
   finally {
     if (ticketSyncRunPromise === work) ticketSyncRunPromise = null;
     if (ticketSyncReadController === controller) ticketSyncReadController = null;
-    if (valid()) ticketSyncTimer = setTimeout(() => runCentralTicketSync(generation, loadUsers), TICKET_SYNC_INTERVAL_MS);
+    if (valid() && TICKET_SYNC_INTERVAL_MS > 0) {
+      ticketSyncTimer = setTimeout(() => runCentralTicketSync(generation, loadUsers), TICKET_SYNC_INTERVAL_MS);
+    }
   }
 }
 
@@ -9735,6 +9750,7 @@ const UPDATE_ROBOTS = [
 
 let updateTimer = null;
 let updateLastJobs = [];
+let updateAgentEnabled = true; // O backend informa o estado real em GET /api/jobs.
 let updateRequestInFlight = false;
 let updateMonitorGeneration = 0;
 let updateMonitorActive = false;
@@ -9765,6 +9781,10 @@ async function runUpdateMonitor(){
     return;
   }
   await loadUpdateStatus();
+  if (!updateAgentEnabled) {
+    stopUpdateMonitor(); // Nao ficar lendo jobs enquanto o agent esta pausado.
+    return;
+  }
   if (!updateMonitorActive || !canMonitorUpdates() || generation !== updateMonitorGeneration) return;
   const hasActiveJobs = updateLastJobs.some(j => ['aguardando','executando'].includes(j.status));
   // Sem jobs ativos, intervalo >5min permite Scale to Zero do Neon.
@@ -9933,6 +9953,7 @@ function loadUpdateBatch(){
 }
 
 async function createRobotJob(robo, parametros){
+  if (!updateAgentEnabled) throw new Error('Atualizacoes pelo portal temporariamente pausadas.');
   const data = await apiUpdate('/api/jobs', {
     method:'POST',
     body:JSON.stringify({
@@ -10109,11 +10130,14 @@ async function loadUpdateStatus(){
     if (generation !== updateMonitorGeneration) return;
     const jobs = Array.isArray(data.jobs) ? data.jobs : [];
     updateLastJobs = jobs;
+    updateAgentEnabled = data.agent_enabled !== false;
 
     banner.classList.remove('offline');
     const ativos = jobs.filter(j => j.status === 'executando').length;
     const naFila = jobs.filter(j => j.status === 'aguardando').length;
-    banner.textContent = `● Conectado · ${ativos} trabalho(s) em andamento · ${naFila} aguardando`;
+    banner.textContent = updateAgentEnabled
+      ? `● Conectado · ${ativos} trabalho(s) em andamento · ${naFila} aguardando`
+      : '● Atualizacoes pelo portal pausadas — execucao pelos robos locais';
 
     const modulo = document.getElementById('updateModule').value;
     const rels = robotsForModule(modulo);
@@ -10136,7 +10160,7 @@ async function loadUpdateStatus(){
         <td>${job ? formatDurationUpdate(job) : '—'}</td>
         <td>${job ? periodDescriptionFromJob(job) : '—'}</td>
         <td>
-          <button class="update-action" ${ocupado ? 'disabled style="opacity:.45;cursor:not-allowed"' : ''}
+          <button class="update-action" ${ocupado || !updateAgentEnabled ? 'disabled style="opacity:.45;cursor:not-allowed"' : ''}
             onclick="runSingleUpdate(${robo.id})">
             ${robo.tratamento ? 'Tratar' : 'Atualizar'}
           </button>

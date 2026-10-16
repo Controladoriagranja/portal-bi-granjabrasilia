@@ -3575,6 +3575,25 @@ def api_portal_data():
 
 HEARTBEAT_STALE_MINUTES = 3
 
+# Contencao emergencial Neon: nenhuma reserva ou criacao de job enquanto
+# PORTAL_BI_AGENT_ENABLED nao for explicitamente habilitado no Render.
+# Nao desliga heartbeat/finish de jobs ja em execucao (evita perder resultados).
+def _agent_jobs_habilitados():
+    return str(os.getenv("PORTAL_BI_AGENT_ENABLED", "false")).strip().lower() in {
+        "1", "true", "yes", "on"
+    }
+
+
+def _resposta_jobs_pausados():
+    response = jsonify({
+        "ok": False,
+        "agent_enabled": False,
+        "erro": "Atualizacoes pelo portal pausadas. Use os robos locais/agendados.",
+    })
+    response.headers["Cache-Control"] = "no-store"
+    return response, 503
+
+
 # Sinal de fila em arquivo efemero: compartilha a notificacao entre workers do
 # Gunicorn na MESMA instancia Render. Nao consulta o Neon. O banco e a fonte da
 # verdade; o Agent verifica periodicamente para tolerar perda/reinicio do sinal.
@@ -3659,6 +3678,8 @@ def _resposta_jobs_admin(usuario):
 @app.route("/api/jobs", methods=["POST"])
 def api_criar_job():
     """Cria uma solicitação de execução. Não executa o robô no Render."""
+    if not _agent_jobs_habilitados():
+        return _resposta_jobs_pausados()  # Sem conexao ao Neon.
     try:
         usuario = _usuario_autenticado()
         bloqueio = _resposta_jobs_admin(usuario)
@@ -3771,6 +3792,11 @@ def api_criar_job():
 @app.route("/api/jobs", methods=["GET"])
 def api_listar_jobs():
     """Lista os jobs mais recentes para a Central de Atualizações."""
+    if not _agent_jobs_habilitados():
+        # Mantem compatibilidade com o frontend sem abrir o banco.
+        response = jsonify({"ok": True, "jobs": [], "agent_enabled": False})
+        response.headers["Cache-Control"] = "no-store"
+        return response
     try:
         usuario = _usuario_autenticado()
         bloqueio = _resposta_jobs_admin(usuario)
@@ -3802,6 +3828,7 @@ def api_listar_jobs():
         return jsonify({
             "ok": True,
             "jobs": [_job_publico(row) for row in rows],
+            "agent_enabled": _agent_jobs_habilitados(),
         })
 
     except RuntimeError as e:
@@ -3821,6 +3848,8 @@ def api_listar_jobs():
 @app.route("/api/jobs/<int:job_id>", methods=["GET"])
 def api_consultar_job(job_id):
     """Consulta um job específico."""
+    if not _agent_jobs_habilitados():
+        return _resposta_jobs_pausados()
     try:
         usuario = _usuario_autenticado()
         bloqueio = _resposta_jobs_admin(usuario)
@@ -3904,6 +3933,8 @@ def _resposta_agent_nao_autorizado():
 @app.route("/api/agent/jobs/signal", methods=["GET"])
 def api_agent_jobs_signal():
     """Leitura leve sem PostgreSQL. Requer mesma chave privada do Agent."""
+    if not _agent_jobs_habilitados():
+        return _resposta_jobs_pausados()
     if not _agent_autorizado():
         return _resposta_agent_nao_autorizado()
     response = jsonify({"ok": True, "signal": _job_signal()})
@@ -3914,6 +3945,8 @@ def api_agent_jobs_signal():
 @app.route("/api/agent/jobs/claim", methods=["POST"])
 def api_agent_claim_job():
     """Reserva atomicamente o próximo job aguardando e inicia o heartbeat."""
+    if not _agent_jobs_habilitados():
+        return _resposta_jobs_pausados()  # Antes de qualquer transacao SQL.
     try:
         if not _agent_autorizado():
             return _resposta_agent_nao_autorizado()
