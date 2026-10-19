@@ -17,7 +17,7 @@ def normalize_commercial_access(value):
 
 
 def effective_commercial_access(user):
-    """Diretor sempre tem visão geral; demais perfis dependem da permissão explícita."""
-    if str(user.get('role') or '').strip().lower()=='director' or str(user.get('perfil') or '').strip().lower() in {'diretor','director'}:
+    """Admin e Diretor sempre têm visão geral; demais perfis dependem da permissão explícita."""
+    if str(user.get('role') or '').strip().lower() in {'admin','director'} or str(user.get('perfil') or '').strip().lower() in {'admin','diretor','director'}:
         return {'mode':'general'}
     return user.get('commercial_access') or {'mode':'none'}

@@ -48,7 +48,7 @@ EXEC_THREAD = None
 
 EXTENSOES_DADOS = {".xlsx", ".xls", ".csv", ".parquet", ".html"}
 
-APP_VERSION = "2026.10.19-acesso-comercial-v1"
+APP_VERSION = "2026.10.19-acesso-comercial-admin-v2"
 APP_FILE = Path(__file__).resolve()
 
 # =============================================================================
@@ -2533,7 +2533,7 @@ def salvar_portal_data_neon(payload):
                 "allow_updates": bool(u.get("allowUpdates", False)),
                 "ticket_panel_access": bool(u.get("ticketPanelAccess", False)),
                 "supervisor_code": str(u.get("supervisorCode")) if u.get("supervisorCode") is not None else None,
-                "commercial_access": json.dumps({"mode":"general"}) if u.get("role")=="director" else (json.dumps(normalize_commercial_access(u["commercialAccess"])) if "commercialAccess" in u else None),
+                "commercial_access": json.dumps({"mode":"general"}) if str(u.get("role") or "").strip().lower() in {"admin","director"} else (json.dumps(normalize_commercial_access(u["commercialAccess"])) if "commercialAccess" in u else None),
             }
 
             if usuario_id is not None:
@@ -3064,7 +3064,7 @@ def api_admin_usuario_patch(usuario_id):
         return jsonify({"ok": False, "erro": "Payload inválido."}), 400
 
     try:
-        commercial_access = {'mode':'general'} if body.get('role')=='director' else (normalize_commercial_access(body['commercialAccess']) if 'commercialAccess' in body else None)
+        commercial_access = {'mode':'general'} if str(body.get('role') or '').strip().lower() in {'admin','director'} else (normalize_commercial_access(body['commercialAccess']) if 'commercialAccess' in body else None)
     except ValueError as error:
         return jsonify({"ok":False,"erro":str(error)}),400
 
@@ -3275,7 +3275,7 @@ def api_admin_usuario_create():
 
     body = request.get_json(silent=True) or {}
     try:
-        commercial_access = {'mode':'general'} if body.get('role')=='director' else normalize_commercial_access(body.get('commercialAccess', {'mode':'none'}))
+        commercial_access = {'mode':'general'} if str(body.get('role') or '').strip().lower() in {'admin','director'} else normalize_commercial_access(body.get('commercialAccess', {'mode':'none'}))
     except ValueError as error:
         return jsonify({"ok":False,"erro":str(error)}),400
     nome = str(body.get("name") or "").strip()
