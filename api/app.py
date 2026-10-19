@@ -1,3 +1,4 @@
+from commercial_access import normalize_commercial_access
 import json
 import base64
 import gzip
@@ -47,7 +48,7 @@ EXEC_THREAD = None
 
 EXTENSOES_DADOS = {".xlsx", ".xls", ".csv", ".parquet", ".html"}
 
-APP_VERSION = "2026.10.07-chamados-delta-v1"
+APP_VERSION = "2026.10.19-acesso-comercial-v1"
 APP_FILE = Path(__file__).resolve()
 
 # =============================================================================
@@ -2323,7 +2324,8 @@ def carregar_portal_data_neon():
                 u.report_access_mode,
                 u.allow_updates,
                 u.ticket_panel_access,
-                u.supervisor_code
+                u.supervisor_code,
+                u.commercial_access
             FROM usuarios u
             ORDER BY u.id
         """)).mappings().all()
@@ -2371,6 +2373,7 @@ def carregar_portal_data_neon():
                 "allowUpdates": bool(r["allow_updates"]),
                 "ticketPanelAccess": bool(r["ticket_panel_access"]),
                 "supervisorCode": r["supervisor_code"],
+                "commercialAccess": r["commercial_access"] or {"mode":"none"},
             })
 
         reports = []
@@ -2530,6 +2533,7 @@ def salvar_portal_data_neon(payload):
                 "allow_updates": bool(u.get("allowUpdates", False)),
                 "ticket_panel_access": bool(u.get("ticketPanelAccess", False)),
                 "supervisor_code": str(u.get("supervisorCode")) if u.get("supervisorCode") is not None else None,
+                "commercial_access": json.dumps(normalize_commercial_access(u["commercialAccess"])) if "commercialAccess" in u else None,
             }
 
             if usuario_id is not None:
@@ -2546,6 +2550,7 @@ def salvar_portal_data_neon(payload):
                         allow_updates = :allow_updates,
                         ticket_panel_access = :ticket_panel_access,
                         supervisor_code = :supervisor_code,
+                        commercial_access = COALESCE(CAST(:commercial_access AS jsonb), commercial_access),
                         atualizado_em = NOW()
                     WHERE id = :id
                 """), {**params_usuario, "id": usuario_id})
@@ -2554,11 +2559,11 @@ def salvar_portal_data_neon(payload):
                     INSERT INTO public.usuarios (
                         legacy_id, nome, email, perfil, ativo, role,
                         report_access_mode, allow_updates, ticket_panel_access,
-                        supervisor_code, atualizado_em
+                        supervisor_code, commercial_access, atualizado_em
                     ) VALUES (
                         :legacy_id, :nome, :email, :perfil, :ativo, :role,
                         :report_access_mode, :allow_updates, :ticket_panel_access,
-                        :supervisor_code, NOW()
+                        :supervisor_code, COALESCE(CAST(:commercial_access AS jsonb), '{"mode":"none"}'::jsonb), NOW()
                     )
                     RETURNING id
                 """), params_usuario).scalar_one())
@@ -2810,7 +2815,8 @@ def _usuario_por_token(token):
                 u.email,
                 u.perfil,
                 u.role,
-                u.ativo
+                u.ativo,
+                u.commercial_access
             FROM public.usuarios u
             WHERE u.id = :usuario_id
               AND u.ativo = TRUE
@@ -2844,6 +2850,7 @@ def _usuario_publico(usuario):
         "role": usuario.get("role"),
         "ativo": bool(usuario.get("ativo")),
         "isAdmin": _usuario_e_admin(usuario),
+        "commercialAccess": usuario.get("commercial_access") or {"mode":"none"},
     }
 
 
@@ -2875,7 +2882,8 @@ def api_auth_login():
                     u.email,
                     u.perfil,
                     u.role,
-                    u.ativo
+                    u.ativo,
+                    u.commercial_access
                 FROM public.usuarios u
                 WHERE lower(u.email) = :email
                   AND u.ativo = TRUE
@@ -3055,6 +3063,11 @@ def api_admin_usuario_patch(usuario_id):
     if not isinstance(body, dict):
         return jsonify({"ok": False, "erro": "Payload inválido."}), 400
 
+    try:
+        commercial_access = normalize_commercial_access(body['commercialAccess']) if 'commercialAccess' in body else None
+    except ValueError as error:
+        return jsonify({"ok":False,"erro":str(error)}),400
+
     nome = str(body.get("name") or "").strip()
     email = str(body.get("email") or "").strip().lower()
     role = str(body.get("role") or "sector").strip().lower()
@@ -3101,6 +3114,7 @@ def api_admin_usuario_patch(usuario_id):
 
             params = {
                 "id": usuario_id,
+                "commercial_access": json.dumps(commercial_access) if commercial_access is not None else None,
                 "nome": nome,
                 "email": email,
                 "perfil": _perfil_portal_por_role(role),
@@ -3119,6 +3133,7 @@ def api_admin_usuario_patch(usuario_id):
                     role = :role,
                     report_access_mode = :report_access_mode,
                     ticket_panel_access = :ticket_panel_access,
+                    commercial_access = COALESCE(CAST(:commercial_access AS jsonb), commercial_access),
                     atualizado_em = NOW()
                 WHERE id = :id
             """), params)
@@ -3259,6 +3274,10 @@ def api_admin_usuario_create():
         return erro
 
     body = request.get_json(silent=True) or {}
+    try:
+        commercial_access = normalize_commercial_access(body.get('commercialAccess', {'mode':'none'}))
+    except ValueError as error:
+        return jsonify({"ok":False,"erro":str(error)}),400
     nome = str(body.get("name") or "").strip()
     email = str(body.get("email") or "").strip().lower()
     try:
@@ -3291,13 +3310,14 @@ def api_admin_usuario_create():
             usuario_id = int(conn.execute(text("""
                 INSERT INTO public.usuarios (
                     nome, email, perfil, ativo, role, report_access_mode,
-                    allow_updates, ticket_panel_access, senha_hash, atualizado_em
+                    allow_updates, ticket_panel_access, commercial_access, senha_hash, atualizado_em
                 ) VALUES (
                     :nome, :email, :perfil, :ativo, :role, :report_access_mode,
-                    FALSE, :ticket_panel_access, crypt(:senha, gen_salt('bf', 12)), NOW()
+                    FALSE, :ticket_panel_access, CAST(:commercial_access AS jsonb), crypt(:senha, gen_salt('bf', 12)), NOW()
                 )
                 RETURNING id
             """), {
+                "commercial_access": json.dumps(commercial_access),
                 "nome": nome,
                 "email": email,
                 "perfil": _perfil_portal_por_role(role),

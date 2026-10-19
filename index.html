@@ -3949,6 +3949,21 @@
               </div>
 
 
+<div class="form-group" style="border-top:1px solid var(--border);padding-top:14px">
+  <label for="euCommercialMode">Acesso aos dados do Comercial</label>
+  <select id="euCommercialMode" onchange="toggleCommercialAccess('eu')">
+    <option value="none">Sem acesso ao Comercial</option>
+    <option value="general">Geral — todos os dados</option>
+    <option value="supervisor">Supervisor — somente sua equipe</option>
+    <option value="seller">Vendedor — somente seus dados</option>
+  </select>
+  <div id="euCommercialLink" style="display:none;margin-top:10px">
+    <label for="euCommercialCode" id="euCommercialLabel">Vínculo comercial</label>
+    <select id="euCommercialCode"><option value="">Selecione...</option></select>
+    <div id="euCommercialError" role="status" style="font-size:12px;color:var(--orange);margin-top:6px"></div>
+  </div>
+  <div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.5">Define os dados disponíveis nas quatro telas do Comercial. O acesso geral não aplica restrição de equipe. Os relatórios permitidos continuam definidos acima.</div>
+</div>
               <div class="form-group" style="margin-top:4px">
                 <label>Permissões do portal</label>
                 <label style="display:flex;align-items:flex-start;gap:10px;padding:12px 13px;border:1px solid var(--border);border-radius:9px;background:var(--bg);cursor:pointer">
@@ -4042,6 +4057,21 @@
             <div class="checkgroup" id="newUserReportCheckGroup"></div>
             <div id="newUserReportWarn" style="font-size:12px;color:var(--orange);margin-top:6px;display:none">⚠️ Selecione pelo menos um relatório.</div>
           </div>
+<div class="form-group" style="border-top:1px solid var(--border);padding-top:14px">
+  <label for="newUserCommercialMode">Acesso aos dados do Comercial</label>
+  <select id="newUserCommercialMode" onchange="toggleCommercialAccess('newUser')">
+    <option value="none">Sem acesso ao Comercial</option>
+    <option value="general">Geral — todos os dados</option>
+    <option value="supervisor">Supervisor — somente sua equipe</option>
+    <option value="seller">Vendedor — somente seus dados</option>
+  </select>
+  <div id="newUserCommercialLink" style="display:none;margin-top:10px">
+    <label for="newUserCommercialCode" id="newUserCommercialLabel">Vínculo comercial</label>
+    <select id="newUserCommercialCode"><option value="">Selecione...</option></select>
+    <div id="newUserCommercialError" role="status" style="font-size:12px;color:var(--orange);margin-top:6px"></div>
+  </div>
+  <div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.5">Define os dados disponíveis nas quatro telas do Comercial. O acesso geral não aplica restrição de equipe. Os relatórios permitidos continuam definidos acima.</div>
+</div>
           <button class="btn-sm accent" id="addUserBtn" onclick="addUser(this)" style="margin-top:4px">✔ Liberar Acesso</button>
         </div>
       </div>
@@ -5961,6 +5991,65 @@ function renderAllUsersTable() {
   </tr>`).join('')}</tbody></table>`;
 }
 
+
+let commercialAccessOptions=null;
+let commercialAccessOptionsPromise=null;
+async function loadCommercialAccessOptions(){
+  if(commercialAccessOptions)return commercialAccessOptions;
+  if(!commercialAccessOptionsPromise)commercialAccessOptionsPromise=(async()=>{
+    const token=getPortalToken();
+    const response=await fetch('https://api-bi-granja.controladoriagb05.workers.dev/api/comercial-html/acesso/opcoes',{
+      headers:{Authorization:'Bearer '+token,Accept:'application/json'},cache:'no-store',credentials:'omit'
+    });
+    if(!response.ok)throw new Error('Não foi possível carregar os vínculos comerciais. Tente novamente.');
+    const data=await response.json();
+    if(data.ok!==true||!Array.isArray(data.vendedores)||!Array.isArray(data.supervisores))throw new Error('Cadastro comercial indisponível.');
+    commercialAccessOptions=data;return data;
+  })().finally(()=>{commercialAccessOptionsPromise=null;});
+  return commercialAccessOptionsPromise;
+}
+async function toggleCommercialAccess(prefix,selected=''){
+  const mode=document.getElementById(prefix+'CommercialMode').value;
+  const link=document.getElementById(prefix+'CommercialLink');
+  const select=document.getElementById(prefix+'CommercialCode');
+  const error=document.getElementById(prefix+'CommercialError');
+  const linked=['seller','supervisor'].includes(mode);
+  link.style.display=linked?'block':'none';error.textContent='';
+  select.replaceChildren(new Option(linked?'Carregando...':'Selecione...',''));select.disabled=linked;
+  if(!linked)return;
+  document.getElementById(prefix+'CommercialLabel').textContent=mode==='seller'?'Vendedor vinculado':'Supervisor vinculado';
+  try{
+    const data=await loadCommercialAccessOptions();
+    if(document.getElementById(prefix+'CommercialMode').value!==mode)return;
+    select.replaceChildren(new Option('Selecione...',''));
+    for(const row of data[mode==='seller'?'vendedores':'supervisores']){
+      const code=String(row.codigo);
+      select.add(new Option(mode==='seller'?code+' - '+row.nome:row.nome,code));
+    }
+    if(selected&&!Array.from(select.options).some(x=>x.value===selected))select.add(new Option(selected+' — vínculo salvo, ausente no cadastro atual',selected));
+    select.value=selected;select.disabled=false;
+  }catch(e){
+    if(document.getElementById(prefix+'CommercialMode').value!==mode)return;
+    select.replaceChildren(new Option('Cadastro indisponível',''));error.textContent=e.message;
+    if(selected){select.add(new Option(selected+' — vínculo salvo',selected));select.value=selected;select.disabled=false;}
+    const retry=document.createElement('button');retry.type='button';retry.className='btn-sm';retry.textContent='Tentar novamente';retry.onclick=()=>toggleCommercialAccess(prefix,selected);error.append(' ',retry);
+  }
+}
+function setCommercialAccessForm(prefix,access){
+  document.getElementById(prefix+'CommercialMode').value=access.mode||'none';
+  toggleCommercialAccess(prefix,String(access.code||''));
+}
+function readCommercialAccessForm(prefix){
+  const mode=document.getElementById(prefix+'CommercialMode').value;
+  const result={mode};
+  if(['seller','supervisor'].includes(mode)){
+    const code=document.getElementById(prefix+'CommercialCode').value;
+    if(!/^[1-9][0-9]{0,11}$/.test(code))throw new Error('Selecione o supervisor ou vendedor vinculado ao acesso comercial.');
+    result.code=code;
+  }
+  return result;
+}
+
 function adminUserPayload(u, overrides={}) {
   return {
     name: overrides.name ?? u.name,
@@ -5971,6 +6060,7 @@ function adminUserPayload(u, overrides={}) {
     reportAccessMode: overrides.reportAccessMode ?? (u.reportAccessMode || 'sector'),
     reportIds: overrides.reportIds ?? (u.reportIds || []),
     ticketPanelAccess: overrides.ticketPanelAccess ?? (u.ticketPanelAccess === true),
+    commercialAccess: overrides.commercialAccess ?? u.commercialAccess ?? {mode:'none'},
     password: overrides.password ?? ''
   };
 }
@@ -6151,11 +6241,12 @@ async function addUser(button=null) {
 
   setButtonBusy(button || document.getElementById('addUserBtn'), true, 'Criando...');
   try {
+    const commercialAccess=readCommercialAccessForm('newUser');
     const resposta = await portalApiRequest('/api/admin/usuarios', {
       method:'POST',
       body:JSON.stringify({
         name, email, role, status:'active', sectors,
-        reportAccessMode, reportIds, ticketPanelAccess:false,
+        reportAccessMode, reportIds, ticketPanelAccess:false, commercialAccess,
         password:initialPwd
       })
     });
@@ -6165,6 +6256,7 @@ async function addUser(button=null) {
     document.getElementById('newUserEmail').value = '';
     document.getElementById('newUserPwd').value = '';
     document.getElementById('newUserRole').value = '';
+    setCommercialAccessForm('newUser',{mode:'none'});
     document.getElementById('newUserReportMode').value = 'sector';
     document.getElementById('sectorField').style.display = 'none';
     document.getElementById('reportAccessModeField').style.display = 'none';
@@ -9415,6 +9507,7 @@ function openEditUser(id) {
   document.getElementById('euName').value = u.name;
   document.getElementById('euEmail').value = u.email;
   document.getElementById('euRole').value = u.role;
+  setCommercialAccessForm('eu',u.commercialAccess || {mode:'none'});
   document.getElementById('euNewPwd').value = '';
   document.getElementById('euAvatar').textContent = u.name[0].toUpperCase();
   document.getElementById('euNameDisplay').textContent = u.name;
@@ -9523,8 +9616,9 @@ async function saveEditUser(button=null) {
 
   setButtonBusy(button || document.getElementById('saveEditUserBtn'), true, 'Salvando...');
   try {
+    const commercialAccess=readCommercialAccessForm('eu');
     await patchAdminUser(u, {
-      name, email, role, status, sectors, reportAccessMode,
+      commercialAccess, name, email, role, status, sectors, reportAccessMode,
       reportIds, ticketPanelAccess, password:newPwd || ''
     });
 
