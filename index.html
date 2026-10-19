@@ -3959,7 +3959,9 @@
   </select>
   <div id="euCommercialLink" style="display:none;margin-top:10px">
     <label for="euCommercialCode" id="euCommercialLabel">Vínculo do usuário</label>
+    <input type="search" id="euCommercialSearch" placeholder="Pesquisar por nome ou código" aria-label="Pesquisar vendedor ou supervisor por nome ou código" aria-controls="euCommercialCode" autocomplete="off" oninput="filterAccessLinks('eu')" style="margin-bottom:8px" disabled>
     <select id="euCommercialCode"><option value="">Selecione...</option></select>
+    <small id="euCommercialMatches" role="status" aria-live="polite" style="display:block;margin-top:6px;color:var(--text-muted)"></small>
     <div id="euCommercialError" role="status" style="font-size:12px;color:var(--orange);margin-top:6px"></div>
   </div>
   <div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.5">Define o alcance dos dados nos relatórios liberados para o usuário. Admin e Diretor sempre têm acesso geral, sem restrição de equipe. Os relatórios permitidos continuam definidos acima.</div>
@@ -4067,7 +4069,9 @@
   </select>
   <div id="newUserCommercialLink" style="display:none;margin-top:10px">
     <label for="newUserCommercialCode" id="newUserCommercialLabel">Vínculo do usuário</label>
+    <input type="search" id="newUserCommercialSearch" placeholder="Pesquisar por nome ou código" aria-label="Pesquisar vendedor ou supervisor por nome ou código" aria-controls="newUserCommercialCode" autocomplete="off" oninput="filterAccessLinks('newUser')" style="margin-bottom:8px" disabled>
     <select id="newUserCommercialCode"><option value="">Selecione...</option></select>
+    <small id="newUserCommercialMatches" role="status" aria-live="polite" style="display:block;margin-top:6px;color:var(--text-muted)"></small>
     <div id="newUserCommercialError" role="status" style="font-size:12px;color:var(--orange);margin-top:6px"></div>
   </div>
   <div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.5">Define o alcance dos dados nos relatórios liberados para o usuário. Admin e Diretor sempre têm acesso geral, sem restrição de equipe. Os relatórios permitidos continuam definidos acima.</div>
@@ -6008,26 +6012,43 @@ async function loadCommercialAccessOptions(){
   })().finally(()=>{commercialAccessOptionsPromise=null;});
   return commercialAccessOptionsPromise;
 }
+const accessLinkRows={};
+function normalizeAccessSearch(value){return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR');}
+function filterAccessLinks(prefix,selection){
+  const search=document.getElementById(prefix+'CommercialSearch');
+  const select=document.getElementById(prefix+'CommercialCode');
+  const rows=accessLinkRows[prefix]||[];
+  const selected=selection===undefined?select.value:selection;
+  const terms=normalizeAccessSearch(search.value).trim().split(/\s+/).filter(Boolean);
+  const filtered=rows.filter(row=>terms.every(term=>normalizeAccessSearch(row.label).includes(term)));
+  select.replaceChildren(new Option(filtered.length?'Selecione...':'Nenhum resultado encontrado',''));
+  for(const row of filtered)select.add(new Option(row.label,row.code));
+  const pinned=selected&&rows.find(row=>row.code===selected)&&!filtered.some(row=>row.code===selected);
+  if(pinned){const row=rows.find(row=>row.code===selected);select.add(new Option('Selecionado: '+row.label,row.code));}
+  select.value=selected||'';
+  select.size=terms.length&&filtered.length?Math.min(6,filtered.length+1):1;
+  document.getElementById(prefix+'CommercialMatches').textContent=(filtered.length===1?'1 resultado':filtered.length+' resultados')+(pinned?' · Vínculo selecionado mantido.':'');
+}
 async function toggleCommercialAccess(prefix,selected=''){
   const mode=document.getElementById(prefix+'CommercialMode').value;
   const link=document.getElementById(prefix+'CommercialLink');
   const select=document.getElementById(prefix+'CommercialCode');
   const error=document.getElementById(prefix+'CommercialError');
+  const search=document.getElementById(prefix+'CommercialSearch');
+  search.value='';search.disabled=true;accessLinkRows[prefix]=[];select.size=1;
+  document.getElementById(prefix+'CommercialMatches').textContent='';
   const linked=['seller','supervisor'].includes(mode);
   link.style.display=linked?'block':'none';error.textContent='';
   select.replaceChildren(new Option(linked?'Carregando...':'Selecione...',''));select.disabled=linked;
   if(!linked)return;
   document.getElementById(prefix+'CommercialLabel').textContent=mode==='seller'?'Vendedor vinculado':'Supervisor vinculado';
+  search.setAttribute('aria-label',mode==='seller'?'Pesquisar vendedor por nome ou código':'Pesquisar supervisor por nome ou código');
   try{
     const data=await loadCommercialAccessOptions();
     if(document.getElementById(prefix+'CommercialMode').value!==mode)return;
-    select.replaceChildren(new Option('Selecione...',''));
-    for(const row of data[mode==='seller'?'vendedores':'supervisores']){
-      const code=String(row.codigo);
-      select.add(new Option(mode==='seller'?code+' - '+row.nome:row.nome,code));
-    }
-    if(selected&&!Array.from(select.options).some(x=>x.value===selected))select.add(new Option(selected+' — vínculo salvo, ausente no cadastro atual',selected));
-    select.value=selected;select.disabled=false;
+    accessLinkRows[prefix]=data[mode==='seller'?'vendedores':'supervisores'].map(row=>({code:String(row.codigo),label:mode==='seller'?row.codigo+' - '+row.nome:row.nome}));
+    if(selected&&!accessLinkRows[prefix].some(row=>row.code===selected))accessLinkRows[prefix].push({code:selected,label:selected+' — vínculo salvo, ausente no cadastro atual'});
+    filterAccessLinks(prefix,selected);select.disabled=false;search.disabled=false;
   }catch(e){
     if(document.getElementById(prefix+'CommercialMode').value!==mode)return;
     select.replaceChildren(new Option('Cadastro indisponível',''));error.textContent=e.message;
