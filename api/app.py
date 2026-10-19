@@ -48,7 +48,7 @@ EXEC_THREAD = None
 
 EXTENSOES_DADOS = {".xlsx", ".xls", ".csv", ".parquet", ".html"}
 
-APP_VERSION = "2026.10.19-acesso-comercial-admin-v2"
+APP_VERSION = "2026.10.19-acesso-dados-portal-v3"
 APP_FILE = Path(__file__).resolve()
 
 # =============================================================================
@@ -2373,6 +2373,7 @@ def carregar_portal_data_neon():
                 "allowUpdates": bool(r["allow_updates"]),
                 "ticketPanelAccess": bool(r["ticket_panel_access"]),
                 "supervisorCode": r["supervisor_code"],
+                "dataAccess": effective_commercial_access(r),
                 "commercialAccess": effective_commercial_access(r),
             })
 
@@ -2521,6 +2522,9 @@ def salvar_portal_data_neon(payload):
                 usuario_id = conn.execute(text("""
                     SELECT id FROM public.usuarios WHERE LOWER(email) = :email LIMIT 1
                 """), {"email": email}).scalar()
+
+            if 'dataAccess' in u:
+                u = {**u, 'commercialAccess': u['dataAccess']}
 
             params_usuario = {
                 "legacy_id": legacy_id,
@@ -2850,6 +2854,7 @@ def _usuario_publico(usuario):
         "role": usuario.get("role"),
         "ativo": bool(usuario.get("ativo")),
         "isAdmin": _usuario_e_admin(usuario),
+        "dataAccess": effective_commercial_access(usuario),
         "commercialAccess": effective_commercial_access(usuario),
     }
 
@@ -3060,6 +3065,9 @@ def api_admin_usuario_patch(usuario_id):
         return jsonify({"ok": False, "erro": "Apenas administradores podem editar usuários."}), 403
 
     body = request.get_json(silent=True) or {}
+    if isinstance(body, dict) and 'dataAccess' in body:
+        body = {**body, 'commercialAccess': body['dataAccess']}
+
     if not isinstance(body, dict):
         return jsonify({"ok": False, "erro": "Payload inválido."}), 400
 
@@ -3274,6 +3282,9 @@ def api_admin_usuario_create():
         return erro
 
     body = request.get_json(silent=True) or {}
+    if isinstance(body, dict) and 'dataAccess' in body:
+        body = {**body, 'commercialAccess': body['dataAccess']}
+
     try:
         commercial_access = {'mode':'general'} if str(body.get('role') or '').strip().lower() in {'admin','director'} else normalize_commercial_access(body.get('commercialAccess', {'mode':'none'}))
     except ValueError as error:

@@ -3950,19 +3950,19 @@
 
 
 <div class="form-group" style="border-top:1px solid var(--border);padding-top:14px">
-  <label for="euCommercialMode">Acesso aos dados do Comercial</label>
+  <label for="euCommercialMode">Acesso aos dados dos relatórios</label>
   <select id="euCommercialMode" onchange="toggleCommercialAccess('eu')">
-    <option value="none">Sem acesso ao Comercial</option>
+    <option value="none">Sem acesso aos dados</option>
     <option value="general">Geral — todos os dados</option>
     <option value="supervisor">Supervisor — somente sua equipe</option>
     <option value="seller">Vendedor — somente seus dados</option>
   </select>
   <div id="euCommercialLink" style="display:none;margin-top:10px">
-    <label for="euCommercialCode" id="euCommercialLabel">Vínculo comercial</label>
+    <label for="euCommercialCode" id="euCommercialLabel">Vínculo do usuário</label>
     <select id="euCommercialCode"><option value="">Selecione...</option></select>
     <div id="euCommercialError" role="status" style="font-size:12px;color:var(--orange);margin-top:6px"></div>
   </div>
-  <div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.5">Define os dados disponíveis nas quatro telas do Comercial. Admin e Diretor sempre têm acesso geral, sem restrição de equipe. Os relatórios permitidos continuam definidos acima.</div>
+  <div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.5">Define o alcance dos dados nos relatórios liberados para o usuário. Admin e Diretor sempre têm acesso geral, sem restrição de equipe. Os relatórios permitidos continuam definidos acima.</div>
 </div>
               <div class="form-group" style="margin-top:4px">
                 <label>Permissões do portal</label>
@@ -4058,19 +4058,19 @@
             <div id="newUserReportWarn" style="font-size:12px;color:var(--orange);margin-top:6px;display:none">⚠️ Selecione pelo menos um relatório.</div>
           </div>
 <div class="form-group" style="border-top:1px solid var(--border);padding-top:14px">
-  <label for="newUserCommercialMode">Acesso aos dados do Comercial</label>
+  <label for="newUserCommercialMode">Acesso aos dados dos relatórios</label>
   <select id="newUserCommercialMode" onchange="toggleCommercialAccess('newUser')">
-    <option value="none">Sem acesso ao Comercial</option>
+    <option value="none">Sem acesso aos dados</option>
     <option value="general">Geral — todos os dados</option>
     <option value="supervisor">Supervisor — somente sua equipe</option>
     <option value="seller">Vendedor — somente seus dados</option>
   </select>
   <div id="newUserCommercialLink" style="display:none;margin-top:10px">
-    <label for="newUserCommercialCode" id="newUserCommercialLabel">Vínculo comercial</label>
+    <label for="newUserCommercialCode" id="newUserCommercialLabel">Vínculo do usuário</label>
     <select id="newUserCommercialCode"><option value="">Selecione...</option></select>
     <div id="newUserCommercialError" role="status" style="font-size:12px;color:var(--orange);margin-top:6px"></div>
   </div>
-  <div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.5">Define os dados disponíveis nas quatro telas do Comercial. Admin e Diretor sempre têm acesso geral, sem restrição de equipe. Os relatórios permitidos continuam definidos acima.</div>
+  <div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.5">Define o alcance dos dados nos relatórios liberados para o usuário. Admin e Diretor sempre têm acesso geral, sem restrição de equipe. Os relatórios permitidos continuam definidos acima.</div>
 </div>
           <button class="btn-sm accent" id="addUserBtn" onclick="addUser(this)" style="margin-top:4px">✔ Liberar Acesso</button>
         </div>
@@ -6051,7 +6051,7 @@ function readCommercialAccessForm(prefix){
   const result={mode};
   if(['seller','supervisor'].includes(mode)){
     const code=document.getElementById(prefix+'CommercialCode').value;
-    if(!/^[1-9][0-9]{0,11}$/.test(code))throw new Error('Selecione o supervisor ou vendedor vinculado ao acesso comercial.');
+    if(!/^[1-9][0-9]{0,11}$/.test(code))throw new Error('Selecione o supervisor ou vendedor vinculado ao acesso aos dados.');
     result.code=code;
   }
   return result;
@@ -6067,7 +6067,8 @@ function adminUserPayload(u, overrides={}) {
     reportAccessMode: overrides.reportAccessMode ?? (u.reportAccessMode || 'sector'),
     reportIds: overrides.reportIds ?? (u.reportIds || []),
     ticketPanelAccess: overrides.ticketPanelAccess ?? (u.ticketPanelAccess === true),
-    commercialAccess: overrides.commercialAccess ?? u.commercialAccess ?? {mode:'none'},
+    dataAccess: overrides.dataAccess ?? overrides.commercialAccess ?? u.dataAccess ?? u.commercialAccess ?? {mode:'none'},
+    commercialAccess: overrides.dataAccess ?? overrides.commercialAccess ?? u.dataAccess ?? u.commercialAccess ?? {mode:'none'},
     password: overrides.password ?? ''
   };
 }
@@ -6254,7 +6255,7 @@ async function addUser(button=null) {
       method:'POST',
       body:JSON.stringify({
         name, email, role, status:'active', sectors,
-        reportAccessMode, reportIds, ticketPanelAccess:false, commercialAccess,
+        reportAccessMode, reportIds, ticketPanelAccess:false, dataAccess:commercialAccess, commercialAccess,
         password:initialPwd
       })
     });
@@ -9515,7 +9516,7 @@ function openEditUser(id) {
   document.getElementById('euName').value = u.name;
   document.getElementById('euEmail').value = u.email;
   document.getElementById('euRole').value = u.role;
-  setCommercialAccessForm('eu',u.commercialAccess || {mode:'none'});
+  setCommercialAccessForm('eu',u.dataAccess || u.commercialAccess || {mode:'none'});
   document.getElementById('euNewPwd').value = '';
   document.getElementById('euAvatar').textContent = u.name[0].toUpperCase();
   document.getElementById('euNameDisplay').textContent = u.name;
