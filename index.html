@@ -3795,9 +3795,8 @@
               <label>Módulo</label>
               <select id="updateModule" onchange="loadUpdateStatus()">
                 <option value="logistica">Logística</option>
-                <option value="comercial">Comercial</option>
                 <option value="suprimentos">Suprimentos</option>
-                <option value="todos">Todos</option>
+                <option value="todos">Logística e Suprimentos</option>
               </select>
             </div>
 
@@ -9721,13 +9720,9 @@ function rebuildSectorCheckboxes() {
 // Ele cria/consulta jobs no Render usando a sessão já autenticada.
 // O BI Agent, dentro da rede da Granja, pega os jobs e executa os scripts locais.
 
-// PCP e Zootécnico não são mais disparados pela Central de Atualizações.
+// Apenas Logística e Suprimentos são disparados pela Central de Atualizações.
 // Os BIs e robôs permanecem intactos fora desta interface.
 const UPDATE_ROBOTS = [
-  {id:58, modulo:'comercial', nome:'Faturamento Comercial CFOP', codigo:'comercial_faturamento_cfop', tratamento:false},
-  {id:44, modulo:'comercial', nome:'Cadastro de Vendedores', codigo:'cadastro_de_vendedores', tratamento:false},
-  {id:50, modulo:'comercial', nome:'Clientes Cadastrados', codigo:'clientes_cadastrados', tratamento:false},
-  {id:40, modulo:'comercial', nome:'Tratamento Comercial / Power BI', codigo:'tratar_comercial', tratamento:true},
   {id:51, modulo:'logistica', nome:'Cadastro de Vendedores', codigo:'logistica_cadastro_vendedores', tratamento:false},
   {id:68, modulo:'logistica', nome:'Contas a Pagar', codigo:'logistica_contas_a_pagar', tratamento:false},
   {id:47, modulo:'logistica', nome:'Controle Frete', codigo:'logistica_controle_frete', tratamento:false},

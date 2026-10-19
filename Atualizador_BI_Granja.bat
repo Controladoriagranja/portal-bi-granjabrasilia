@@ -6,9 +6,12 @@ rem Opcional: definir BI_GRANJA_PYTHON com o caminho completo do python.exe
 rem do ambiente de producao. Sem override, usa py -3 e depois python.exe do PATH.
 rem Log UTF-8 criado apenas ao executar, ao lado deste BAT em disco LOCAL.
 rem Codigos: 0=sucesso; 1=falhas/ignorados; 2=pre-requisito ou erro fatal.
+rem Use /silencioso para ocultar a janela; os logs locais sao preservados.
 set "BI_GRANJA_BAT=%~f0"
+set "BI_GRANJA_WINDOW="
+if /i "%~1"=="/silencioso" set "BI_GRANJA_WINDOW=-WindowStyle Hidden"
 chcp 65001 >nul
-powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$text=[IO.File]::ReadAllText($env:BI_GRANJA_BAT); $marker=':__BI_POWERSHELL__'; & ([scriptblock]::Create($text.Substring($text.LastIndexOf($marker)+$marker.Length)))"
+powershell.exe %BI_GRANJA_WINDOW% -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$text=[IO.File]::ReadAllText($env:BI_GRANJA_BAT); $marker=':__BI_POWERSHELL__'; & ([scriptblock]::Create($text.Substring($text.LastIndexOf($marker)+$marker.Length)))"
 exit /b %errorlevel%
 :__BI_POWERSHELL__
 $ErrorActionPreference = 'Stop'
@@ -19,7 +22,7 @@ $script:logFailed = $false
 $queueMutex = $null
 $ownsQueue = $false
 $results = New-Object 'System.Collections.Generic.List[object]'
-$failedModules = @{Comercial=$false; Logistica=$false; Suprimentos=$false}
+$failedModules = @{Logistica=$false; Suprimentos=$false}
 $startedAt = Get-Date
 $clock = [Diagnostics.Stopwatch]::StartNew()
 $fatalFailure = $false
@@ -214,9 +217,6 @@ try {
     if ($preflightExit -ne 0) { throw 'Requer Python 3.10+ com dependencias no mesmo ambiente usado em producao. Nada foi instalado.' }
 
     $extractors=@(
-        (Job 'Comercial' 'Faturamento CFOP' 'Agrosys_Extractor\Comercial\comercial_faturamento_cfop.py' @('--modo','auto','--sem-pausa'))
-        (Job 'Comercial' 'Cadastro de Vendedores' 'Agrosys_Extractor\Comercial\cadastro_de_vendedores.py')
-        (Job 'Comercial' 'Clientes Cadastrados' 'Agrosys_Extractor\Comercial\clientes_cadastrados.py' @('--sem-pausa'))
         (Job 'Logistica' 'Cadastro de Vendedores' 'Agrosys_Extractor\Logistica\logistica_cadastro_vendedores.py')
         (Job 'Logistica' 'Contas a Pagar' 'Agrosys_Extractor\Logistica\logistica_contas_a_pagar.py')
         (Job 'Logistica' 'Controle de Frete' 'Agrosys_Extractor\Logistica\logistica_controle_frete.py' @('--modo','auto'))
@@ -235,7 +235,6 @@ try {
         (Job 'Suprimentos' 'Titulos Agrupados' 'Agrosys_Extractor\Suprimentos\suprimentos_titulos_agrupados.py' @('--modo','auto'))
     )
     $treatments=@(
-        (Job 'Comercial' 'Tratamento' 'Python\Comercial\Tratar_Comercial.py' @('--sem-pausa'))
         (Job 'Logistica' 'Tratamento' 'Python\Logistica\Tratar_Logistica.py' @('--sem-pausa'))
         (Job 'Suprimentos' 'Tratamento' 'Python\Suprimentos\Tratar_Suprimentos.py' @('--sem-pausa'))
     )
@@ -243,13 +242,13 @@ try {
     Log ('ETAPA 1/2 - EXTRACOES ({0})' -f $extractors.Count)
     for ($i=0;$i -lt $extractors.Count;$i++) { Run-Job $extractors[$i] ($i+1) $extractors.Count }
     Log ''
-    Log 'ETAPA 2/2 - TRATAMENTOS (3)'
-    Log 'Modos originais: Comercial/Logistica incrementais; Suprimentos consolida a base.'
+    Log ('ETAPA 2/2 - TRATAMENTOS ({0})' -f $treatments.Count)
+    Log 'Modos originais: Logistica incremental; Suprimentos consolida a base.'
     for ($i=0;$i -lt $treatments.Count;$i++) {
         $item=$treatments[$i]
         if ($failedModules[$item.Module]) {
             $label=$item.Module + ' - Tratamento'
-            Log ('[{0:00}/03] {1} | IGNORADO: houve falha nas extracoes deste setor.' -f ($i+1),$label)
+            Log ('[{0:00}/{1:00}] {2} | IGNORADO: houve falha nas extracoes deste setor.' -f ($i+1),$treatments.Count,$label)
             [void]$results.Add([pscustomobject]@{Name=$label;Status='IGNORADO';NativeExit=$null;Reason='Falha de extracao no mesmo setor';Time='00:00:00'})
         } else { Run-Job $item ($i+1) $treatments.Count }
     }

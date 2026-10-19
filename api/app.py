@@ -3575,11 +3575,33 @@ def api_portal_data():
 
 HEARTBEAT_STALE_MINUTES = 3
 
-# Contencao emergencial Neon: nenhuma reserva ou criacao de job enquanto
-# PORTAL_BI_AGENT_ENABLED nao for explicitamente habilitado no Render.
+# Allowlist por codigo (nao por IDs especificos de uma instalacao).
+UPDATE_ROBOT_CODES = (
+    'logistica_cadastro_vendedores',
+    'logistica_contas_a_pagar',
+    'logistica_controle_frete',
+    'logistica_controle_pallets',
+    'logistica_devolucoes',
+    'logistica_faturamento_cfop',
+    'logistica_frete',
+    'logistica_ocorrencia_viagens_custo',
+    'logistica_relatorio_veiculos',
+    'tratar_logistica',
+    'suprimentos_contas_pagas',
+    'suprimentos_notas_fiscais_item',
+    'suprimentos_ordens_compras_emitidas',
+    'suprimentos_relacao_oc_nf',
+    'suprimentos_relatorio_usuarios',
+    'suprimentos_solicitacoes_requisitante',
+    'suprimentos_titulos_agrupados',
+    'tratar_suprimentos',
+)
+
+# Atualizacoes restritas a Logistica e Suprimentos. A chave de emergencia
+# PORTAL_BI_AGENT_ENABLED=false continua pausando criacao e reserva sem SQL.
 # Nao desliga heartbeat/finish de jobs ja em execucao (evita perder resultados).
 def _agent_jobs_habilitados():
-    return str(os.getenv("PORTAL_BI_AGENT_ENABLED", "false")).strip().lower() in {
+    return str(os.getenv("PORTAL_BI_AGENT_ENABLED", "true")).strip().lower() in {
         "1", "true", "yes", "on"
     }
 
@@ -3722,6 +3744,9 @@ def api_criar_job():
                     "ok": False,
                     "erro": "Robô não encontrado."
                 }), 404
+
+            if robo.get("codigo") not in UPDATE_ROBOT_CODES:
+                return jsonify({"ok": False, "erro": "Atualizacoes permitidas apenas para Logistica e Suprimentos."}), 403
 
             if not bool(robo.get("ativo")):
                 return jsonify({
@@ -3968,6 +3993,7 @@ def api_agent_claim_job():
                     FROM public.jobs j
                     JOIN public.robos r ON r.id = j.robo_id
                     WHERE j.status = 'aguardando' AND r.ativo = TRUE
+                      AND r.codigo = ANY(CAST(:codigos_permitidos AS text[]))
                 ),
                 ativos AS (
                     SELECT j.robo_id, r.codigo, CASE WHEN LEFT(r.codigo, 7) = 'tratar_' THEN substring(r.codigo FROM 8) WHEN r.codigo IN ('clientes_cadastrados', 'cadastro_de_vendedores') THEN 'comercial' WHEN r.codigo LIKE 'indice_zootecnico_%' THEN 'zootecnico' ELSE split_part(r.codigo, '_', 1) END AS modulo
@@ -4062,7 +4088,7 @@ def api_agent_claim_job():
                     j.agent_id,
                     r.codigo AS robo_codigo,
                     r.nome AS robo_nome
-            """), {"agent_id": agent_id}).mappings().first()
+            """), {"agent_id": agent_id, "codigos_permitidos": list(UPDATE_ROBOT_CODES)}).mappings().first()
 
         if not row:
             return jsonify({"ok": True, "job": None})
