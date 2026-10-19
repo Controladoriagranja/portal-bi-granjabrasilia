@@ -1,4 +1,4 @@
-from commercial_access import normalize_commercial_access
+from commercial_access import normalize_commercial_access, effective_commercial_access
 import json
 import base64
 import gzip
@@ -2373,7 +2373,7 @@ def carregar_portal_data_neon():
                 "allowUpdates": bool(r["allow_updates"]),
                 "ticketPanelAccess": bool(r["ticket_panel_access"]),
                 "supervisorCode": r["supervisor_code"],
-                "commercialAccess": r["commercial_access"] or {"mode":"none"},
+                "commercialAccess": effective_commercial_access(r),
             })
 
         reports = []
@@ -2533,7 +2533,7 @@ def salvar_portal_data_neon(payload):
                 "allow_updates": bool(u.get("allowUpdates", False)),
                 "ticket_panel_access": bool(u.get("ticketPanelAccess", False)),
                 "supervisor_code": str(u.get("supervisorCode")) if u.get("supervisorCode") is not None else None,
-                "commercial_access": json.dumps(normalize_commercial_access(u["commercialAccess"])) if "commercialAccess" in u else None,
+                "commercial_access": json.dumps({"mode":"general"}) if u.get("role")=="director" else (json.dumps(normalize_commercial_access(u["commercialAccess"])) if "commercialAccess" in u else None),
             }
 
             if usuario_id is not None:
@@ -2850,7 +2850,7 @@ def _usuario_publico(usuario):
         "role": usuario.get("role"),
         "ativo": bool(usuario.get("ativo")),
         "isAdmin": _usuario_e_admin(usuario),
-        "commercialAccess": usuario.get("commercial_access") or {"mode":"none"},
+        "commercialAccess": effective_commercial_access(usuario),
     }
 
 
@@ -3064,7 +3064,7 @@ def api_admin_usuario_patch(usuario_id):
         return jsonify({"ok": False, "erro": "Payload inválido."}), 400
 
     try:
-        commercial_access = normalize_commercial_access(body['commercialAccess']) if 'commercialAccess' in body else None
+        commercial_access = {'mode':'general'} if body.get('role')=='director' else (normalize_commercial_access(body['commercialAccess']) if 'commercialAccess' in body else None)
     except ValueError as error:
         return jsonify({"ok":False,"erro":str(error)}),400
 
@@ -3275,7 +3275,7 @@ def api_admin_usuario_create():
 
     body = request.get_json(silent=True) or {}
     try:
-        commercial_access = normalize_commercial_access(body.get('commercialAccess', {'mode':'none'}))
+        commercial_access = {'mode':'general'} if body.get('role')=='director' else normalize_commercial_access(body.get('commercialAccess', {'mode':'none'}))
     except ValueError as error:
         return jsonify({"ok":False,"erro":str(error)}),400
     nome = str(body.get("name") or "").strip()

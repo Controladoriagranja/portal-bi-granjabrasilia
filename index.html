@@ -3962,7 +3962,7 @@
     <select id="euCommercialCode"><option value="">Selecione...</option></select>
     <div id="euCommercialError" role="status" style="font-size:12px;color:var(--orange);margin-top:6px"></div>
   </div>
-  <div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.5">Define os dados disponíveis nas quatro telas do Comercial. O acesso geral não aplica restrição de equipe. Os relatórios permitidos continuam definidos acima.</div>
+  <div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.5">Define os dados disponíveis nas quatro telas do Comercial. Diretor sempre tem acesso geral, sem restrição de equipe. Os relatórios permitidos continuam definidos acima.</div>
 </div>
               <div class="form-group" style="margin-top:4px">
                 <label>Permissões do portal</label>
@@ -4070,7 +4070,7 @@
     <select id="newUserCommercialCode"><option value="">Selecione...</option></select>
     <div id="newUserCommercialError" role="status" style="font-size:12px;color:var(--orange);margin-top:6px"></div>
   </div>
-  <div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.5">Define os dados disponíveis nas quatro telas do Comercial. O acesso geral não aplica restrição de equipe. Os relatórios permitidos continuam definidos acima.</div>
+  <div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.5">Define os dados disponíveis nas quatro telas do Comercial. Diretor sempre tem acesso geral, sem restrição de equipe. Os relatórios permitidos continuam definidos acima.</div>
 </div>
           <button class="btn-sm accent" id="addUserBtn" onclick="addUser(this)" style="margin-top:4px">✔ Liberar Acesso</button>
         </div>
@@ -6036,10 +6036,17 @@ async function toggleCommercialAccess(prefix,selected=''){
   }
 }
 function setCommercialAccessForm(prefix,access){
-  document.getElementById(prefix+'CommercialMode').value=access.mode||'none';
-  toggleCommercialAccess(prefix,String(access.code||''));
+  const select=document.getElementById(prefix+'CommercialMode');select.disabled=false;delete select.dataset.director;select.value=access.mode||'none';
+  toggleCommercialAccess(prefix,String(access.code||''));applyDirectorCommercialAccess(prefix);
+}
+function applyDirectorCommercialAccess(prefix){
+  const select=document.getElementById(prefix+'CommercialMode');
+  const director=document.getElementById(prefix==='eu'?'euRole':'newUserRole')?.value==='director';
+  if(director){select.disabled=true;select.dataset.director='true';select.value='general';toggleCommercialAccess(prefix);}
+  else if(select.dataset.director){select.disabled=false;delete select.dataset.director;select.value='none';toggleCommercialAccess(prefix);}
 }
 function readCommercialAccessForm(prefix){
+  if(document.getElementById(prefix==='eu'?'euRole':'newUserRole')?.value==='director')return {mode:'general'};
   const mode=document.getElementById(prefix+'CommercialMode').value;
   const result={mode};
   if(['seller','supervisor'].includes(mode)){
@@ -6176,6 +6183,7 @@ function rebuildEditUserPageChecks(selectedIds = []) {
 }
 
 function toggleSectorField() {
+  applyDirectorCommercialAccess('newUser');
   const role = document.getElementById('newUserRole').value;
   const isSector = role === 'sector';
   document.getElementById('sectorField').style.display = isSector ? 'block' : 'none';
@@ -9545,6 +9553,7 @@ function openEditUser(id) {
 }
 
 function toggleEuSectors() {
+  applyDirectorCommercialAccess('eu');
   const roleEl = document.getElementById('euRole');
   if (!roleEl) return;
 
