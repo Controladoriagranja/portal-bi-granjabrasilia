@@ -9930,8 +9930,15 @@ function statusBadgeUpdate(status){
 
 function latestJobByRobot(jobs){
   const map = new Map();
+  // Uma solicitacao nova nao pode esconder o job que ainda esta executando.
+  const priority = job => job.status === 'executando' ? 2 : job.status === 'aguardando' ? 1 : 0;
   for (const job of jobs || []) {
-    if (!map.has(Number(job.robo_id))) map.set(Number(job.robo_id), job);
+    const id = Number(job.robo_id);
+    const current = map.get(id);
+    if (!current || priority(job) > priority(current) ||
+        (priority(job) === priority(current) && Number(job.id) > Number(current.id))) {
+      map.set(id, job);
+    }
   }
   return map;
 }
@@ -10101,6 +10108,15 @@ function renderUpdateProgress(jobs){
     : erros ? `Finalizado com ${erros} erro(s)`
     : '✅ Concluído com sucesso!';
 
+  if (batchIds.length) {
+    const selected = new Set(batchIds);
+    const outside = (jobs || []).filter(j => j.status === 'executando' && !selected.has(Number(j.id)));
+    if (outside.length) {
+      document.getElementById('updateProgressTitle').textContent +=
+        ` · ${outside.length} trabalho(s) executando fora deste lote`;
+    }
+  }
+
   document.getElementById('updateProgressText').textContent =
     `${pct}% · ${finalizados} de ${total} finalizados` +
     (erros ? ` · ${erros} erro(s)` : '');
@@ -10142,6 +10158,8 @@ async function loadUpdateStatus(){
       const job = latest.get(Number(robo.id));
       const status = job?.status || 'nunca executado';
       const ocupado = ['aguardando','executando'].includes(String(status));
+      const pendentes = jobs.filter(j => Number(j.robo_id) === Number(robo.id) &&
+        j.status === 'aguardando' && Number(j.id) !== Number(job?.id)).length;
       const erro = job?.erro ? `<details style="color:var(--red);margin-top:6px"><summary style="cursor:pointer">Ver erro completo</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere;max-height:280px;overflow:auto;font:inherit">${escTicket(job.erro)}</pre></details>` : '';
 
       return `<tr>
@@ -10150,7 +10168,10 @@ async function loadUpdateStatus(){
           <span class="update-table-file">${robo.codigo}</span>
           ${erro}
         </td>
-        <td>${statusBadgeUpdate(status)}</td>
+        <td>${statusBadgeUpdate(status)}
+          ${job ? `<span class="update-table-file">Job #${Number(job.id)}</span>` : ''}
+          ${pendentes ? `<span class="update-table-file">${pendentes} outro(s) pedido(s) aguardando</span>` : ''}
+        </td>
         <td>${job?.finalizado_em ? formatDateTimeUpdate(job.finalizado_em) : '—'}</td>
         <td>${job ? formatDurationUpdate(job) : '—'}</td>
         <td>${job ? periodDescriptionFromJob(job) : '—'}</td>
