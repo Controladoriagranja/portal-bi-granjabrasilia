@@ -6018,16 +6018,18 @@ function filterAccessLinks(prefix,selection){
   const search=document.getElementById(prefix+'CommercialSearch');
   const select=document.getElementById(prefix+'CommercialCode');
   const rows=accessLinkRows[prefix]||[];
-  const selected=selection===undefined?select.value:selection;
+  let selected=selection===undefined?select.value:selection;
   const terms=normalizeAccessSearch(search.value).trim().split(/\s+/).filter(Boolean);
   const filtered=rows.filter(row=>terms.every(term=>normalizeAccessSearch(row.label).includes(term)));
+  const automatic=terms.length>0&&filtered.length===1;
+  if(automatic)selected=filtered[0].code;
   select.replaceChildren(new Option(filtered.length?'Selecione...':'Nenhum resultado encontrado',''));
   for(const row of filtered)select.add(new Option(row.label,row.code));
   const pinned=selected&&rows.find(row=>row.code===selected)&&!filtered.some(row=>row.code===selected);
   if(pinned){const row=rows.find(row=>row.code===selected);select.add(new Option('Selecionado: '+row.label,row.code));}
-  select.value=selected||'';
+  select.value=selected||'';select.hidden=automatic;
   select.size=terms.length&&filtered.length?Math.min(6,filtered.length+1):1;
-  document.getElementById(prefix+'CommercialMatches').textContent=(filtered.length===1?'1 resultado':filtered.length+' resultados')+(pinned?' · Vínculo selecionado mantido.':'');
+  document.getElementById(prefix+'CommercialMatches').textContent=automatic?'Selecionado automaticamente: '+filtered[0].label:(filtered.length===1?'1 resultado':filtered.length+' resultados')+(pinned?' · Vínculo selecionado mantido.':terms.length&&filtered.length>1?' · Escolha o nome na lista.':'');
 }
 async function toggleCommercialAccess(prefix,selected=''){
   const mode=document.getElementById(prefix+'CommercialMode').value;
@@ -6035,7 +6037,7 @@ async function toggleCommercialAccess(prefix,selected=''){
   const select=document.getElementById(prefix+'CommercialCode');
   const error=document.getElementById(prefix+'CommercialError');
   const search=document.getElementById(prefix+'CommercialSearch');
-  search.value='';search.disabled=true;accessLinkRows[prefix]=[];select.size=1;
+  search.value='';search.disabled=true;accessLinkRows[prefix]=[];select.size=1;select.hidden=false;
   document.getElementById(prefix+'CommercialMatches').textContent='';
   const linked=['seller','supervisor'].includes(mode);
   link.style.display=linked?'block':'none';error.textContent='';
