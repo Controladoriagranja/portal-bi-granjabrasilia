@@ -2968,6 +2968,40 @@ def api_auth_me():
         }), 500
 
 
+@app.route("/api/auth/report-access", methods=["GET"])
+def api_auth_report_access():
+    """Permissão efetiva do relatório, para APIs dos módulos; não retorna dados."""
+    usuario = _usuario_autenticado()
+    if not usuario:
+        return _resposta_nao_autorizado()
+    try:
+        report_id = int(request.args.get("report_id", ""))
+        if report_id < 1:
+            raise ValueError()
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "erro": "Informe report_id válido."}), 400
+    if _usuario_e_admin(usuario) or str(usuario.get("role") or "").strip().lower() == "director":
+        return jsonify({"ok": True, "allowed": True})
+    with engine.connect() as conn:
+        allowed = conn.execute(text("""
+            SELECT EXISTS (
+                SELECT 1 FROM public.usuarios u
+                JOIN public.relatorios r ON r.id = :report_id
+                JOIN public.setores s ON s.id = r.setor_id AND s.ativo = TRUE
+                WHERE u.id = :usuario_id AND u.ativo = TRUE
+                  AND ((u.report_access_mode = 'specific' AND EXISTS (
+                        SELECT 1 FROM public.usuario_relatorios ur
+                        WHERE ur.usuario_id = u.id AND ur.relatorio_id = r.id))
+                    OR (COALESCE(u.report_access_mode, 'sector') <> 'specific' AND EXISTS (
+                        SELECT 1 FROM public.usuario_setores us
+                        WHERE us.usuario_id = u.id AND us.setor_id = r.setor_id)))
+            )
+        """), {"report_id": report_id, "usuario_id": int(usuario["usuario_id"])}).scalar()
+    response = jsonify({"ok": True, "allowed": bool(allowed)})
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 @app.route("/api/auth/logout", methods=["POST"])
 def api_auth_logout():
     # O token é stateless. O logout efetivo ocorre ao removê-lo do navegador.
