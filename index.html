@@ -3969,6 +3969,14 @@
   </div>
   <div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.5">Define o alcance dos dados nos relatórios liberados para o usuário. Admin e Diretor sempre têm acesso geral, sem restrição de equipe. Os relatórios permitidos continuam definidos acima.</div>
 </div>
+<div class="form-group" id="euOperationPermissions" style="border-top:1px solid var(--border);padding-top:14px">
+  <label>Permissões de operações</label>
+  <div style="font-size:12px;font-weight:700;margin:8px 0">Comercial</div>
+  <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer">
+    <input type="checkbox" data-operation-permission="comercial.frete.editar" style="width:16px;height:16px;accent-color:#e54837"> Editar fretes
+  </label>
+  <div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.5">Autoriza a operação mediante validação da API. O acesso às unidades será validado separadamente. Admin e Diretor também precisam de concessão explícita.</div>
+</div>
               <div class="form-group" style="margin-top:4px">
                 <label>Permissões do portal</label>
                 <label style="display:flex;align-items:flex-start;gap:10px;padding:12px 13px;border:1px solid var(--border);border-radius:9px;background:var(--bg);cursor:pointer">
@@ -4078,6 +4086,14 @@
     <div id="newUserCommercialError" role="status" style="font-size:12px;color:var(--orange);margin-top:6px"></div>
   </div>
   <div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.5">Define o alcance dos dados nos relatórios liberados para o usuário. Admin e Diretor sempre têm acesso geral, sem restrição de equipe. Os relatórios permitidos continuam definidos acima.</div>
+</div>
+<div class="form-group" id="newUserOperationPermissions" style="border-top:1px solid var(--border);padding-top:14px">
+  <label>Permissões de operações</label>
+  <div style="font-size:12px;font-weight:700;margin:8px 0">Comercial</div>
+  <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer">
+    <input type="checkbox" data-operation-permission="comercial.frete.editar" style="width:16px;height:16px;accent-color:#e54837"> Editar fretes
+  </label>
+  <div style="font-size:11px;color:var(--text-muted);margin-top:6px;line-height:1.5">Autoriza a operação mediante validação da API. O acesso às unidades será validado separadamente. Admin e Diretor também precisam de concessão explícita.</div>
 </div>
           <button class="btn-sm accent" id="addUserBtn" onclick="addUser(this)" style="margin-top:4px">✔ Liberar Acesso</button>
         </div>
@@ -4739,6 +4755,7 @@ function saveDB({passwordUpdates=[]}={}) {
   }
 
   const snapshot = portalDbSnapshot();
+  snapshot.users.forEach(user => { delete user.operationPermissions; });
   const transientPasswords = Array.isArray(passwordUpdates)
     ? passwordUpdates.map(x=>({email:String(x?.email||'').trim().toLowerCase(),password:String(x?.password||'')}))
     : [];
@@ -6104,6 +6121,25 @@ function readCommercialAccessForm(prefix){
   return result;
 }
 
+function setOperationPermissionsForm(prefix, permissions=[]){
+  const group = document.getElementById(prefix+'OperationPermissions');
+  const values = Array.isArray(permissions) ? permissions : [];
+  group.dataset.originalPermissions = JSON.stringify(values);
+  group.querySelectorAll('[data-operation-permission]').forEach(input => {
+    input.checked = values.includes(input.dataset.operationPermission);
+  });
+}
+
+function readOperationPermissionsForm(prefix){
+  const group = document.getElementById(prefix+'OperationPermissions');
+  const inputs = [...group.querySelectorAll('[data-operation-permission]')];
+  const rendered = new Set(inputs.map(input => input.dataset.operationPermission));
+  // Preserve permissions not rendered by this frontend version.
+  const original = JSON.parse(group.dataset.originalPermissions || '[]');
+  return [...new Set([...original.filter(code => !rendered.has(code)),
+    ...inputs.filter(input => input.checked).map(input => input.dataset.operationPermission)])];
+}
+
 function adminUserPayload(u, overrides={}) {
   return {
     name: overrides.name ?? u.name,
@@ -6116,6 +6152,8 @@ function adminUserPayload(u, overrides={}) {
     ticketPanelAccess: overrides.ticketPanelAccess ?? (u.ticketPanelAccess === true),
     dataAccess: overrides.dataAccess ?? overrides.commercialAccess ?? u.dataAccess ?? u.commercialAccess ?? {mode:'none'},
     commercialAccess: overrides.dataAccess ?? overrides.commercialAccess ?? u.dataAccess ?? u.commercialAccess ?? {mode:'none'},
+    ...(Object.prototype.hasOwnProperty.call(overrides, 'operationPermissions')
+      ? {operationPermissions: overrides.operationPermissions} : {}),
     password: overrides.password ?? ''
   };
 }
@@ -6298,11 +6336,12 @@ async function addUser(button=null) {
   setButtonBusy(button || document.getElementById('addUserBtn'), true, 'Criando...');
   try {
     const commercialAccess=readCommercialAccessForm('newUser');
+    const operationPermissions=readOperationPermissionsForm('newUser');
     const resposta = await portalApiRequest('/api/admin/usuarios', {
       method:'POST',
       body:JSON.stringify({
         name, email, role, status:'active', sectors,
-        reportAccessMode, reportIds, ticketPanelAccess:false, dataAccess:commercialAccess, commercialAccess,
+        reportAccessMode, reportIds, ticketPanelAccess:false, dataAccess:commercialAccess, commercialAccess, operationPermissions,
         password:initialPwd
       })
     });
@@ -6313,6 +6352,7 @@ async function addUser(button=null) {
     document.getElementById('newUserPwd').value = '';
     document.getElementById('newUserRole').value = '';
     setCommercialAccessForm('newUser',{mode:'none'});
+    setOperationPermissionsForm('newUser');
     document.getElementById('newUserReportMode').value = 'sector';
     document.getElementById('sectorField').style.display = 'none';
     document.getElementById('reportAccessModeField').style.display = 'none';
@@ -9564,6 +9604,7 @@ function openEditUser(id) {
   document.getElementById('euEmail').value = u.email;
   document.getElementById('euRole').value = u.role;
   setCommercialAccessForm('eu',u.dataAccess || u.commercialAccess || {mode:'none'});
+  setOperationPermissionsForm('eu',u.operationPermissions);
   document.getElementById('euNewPwd').value = '';
   document.getElementById('euAvatar').textContent = u.name[0].toUpperCase();
   document.getElementById('euNameDisplay').textContent = u.name;
@@ -9674,8 +9715,9 @@ async function saveEditUser(button=null) {
   setButtonBusy(button || document.getElementById('saveEditUserBtn'), true, 'Salvando...');
   try {
     const commercialAccess=readCommercialAccessForm('eu');
+    const operationPermissions=readOperationPermissionsForm('eu');
     await patchAdminUser(u, {
-      commercialAccess, name, email, role, status, sectors, reportAccessMode,
+      commercialAccess, operationPermissions, name, email, role, status, sectors, reportAccessMode,
       reportIds, ticketPanelAccess, password:newPwd || ''
     });
 

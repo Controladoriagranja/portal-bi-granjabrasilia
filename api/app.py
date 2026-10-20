@@ -1,4 +1,6 @@
 from commercial_access import normalize_commercial_access, effective_commercial_access
+from operation_permissions import (operation_permissions_from_payload,
+                                   replace_operation_permissions, effective_operation_permissions)
 import json
 import base64
 import gzip
@@ -2325,7 +2327,11 @@ def carregar_portal_data_neon():
                 u.allow_updates,
                 u.ticket_panel_access,
                 u.supervisor_code,
-                u.commercial_access
+                u.commercial_access,
+                ARRAY(
+                    SELECT op.permissao FROM public.usuario_operacoes op
+                    WHERE op.usuario_id = u.id ORDER BY op.permissao
+                ) AS operation_permissions
             FROM usuarios u
             ORDER BY u.id
         """)).mappings().all()
@@ -2375,6 +2381,7 @@ def carregar_portal_data_neon():
                 "supervisorCode": r["supervisor_code"],
                 "dataAccess": effective_commercial_access(r),
                 "commercialAccess": effective_commercial_access(r),
+                "operationPermissions": list(r.get("operation_permissions") or []),
             })
 
         reports = []
@@ -2526,6 +2533,8 @@ def salvar_portal_data_neon(payload):
             if 'dataAccess' in u:
                 u = {**u, 'commercialAccess': u['dataAccess']}
 
+            operation_permissions = operation_permissions_from_payload(u)
+
             params_usuario = {
                 "legacy_id": legacy_id,
                 "nome": str(u.get("name") or email).strip(),
@@ -2571,6 +2580,8 @@ def salvar_portal_data_neon(payload):
                     )
                     RETURNING id
                 """), params_usuario).scalar_one())
+
+            replace_operation_permissions(conn, usuario_id, operation_permissions)
 
             usuario_ids[email] = usuario_id
 
@@ -2820,7 +2831,11 @@ def _usuario_por_token(token):
                 u.perfil,
                 u.role,
                 u.ativo,
-                u.commercial_access
+                u.commercial_access,
+                ARRAY(
+                    SELECT op.permissao FROM public.usuario_operacoes op
+                    WHERE op.usuario_id = u.id ORDER BY op.permissao
+                ) AS operation_permissions
             FROM public.usuarios u
             WHERE u.id = :usuario_id
               AND u.ativo = TRUE
@@ -2856,6 +2871,7 @@ def _usuario_publico(usuario):
         "isAdmin": _usuario_e_admin(usuario),
         "dataAccess": effective_commercial_access(usuario),
         "commercialAccess": effective_commercial_access(usuario),
+        "operationPermissions": effective_operation_permissions(usuario),
     }
 
 
@@ -2888,7 +2904,11 @@ def api_auth_login():
                     u.perfil,
                     u.role,
                     u.ativo,
-                    u.commercial_access
+                    u.commercial_access,
+                    ARRAY(
+                        SELECT op.permissao FROM public.usuario_operacoes op
+                        WHERE op.usuario_id = u.id ORDER BY op.permissao
+                    ) AS operation_permissions
                 FROM public.usuarios u
                 WHERE lower(u.email) = :email
                   AND u.ativo = TRUE
@@ -2950,10 +2970,12 @@ def api_auth_me():
         if not usuario:
             return _resposta_nao_autorizado()
 
-        return jsonify({
+        response = jsonify({
             "ok": True,
             "user": _usuario_publico(usuario),
         })
+        response.headers["Cache-Control"] = "no-store"
+        return response
     except RuntimeError as e:
         log(f"Configuração de autenticação inválida: {e}", "ERRO")
         return jsonify({
@@ -3106,6 +3128,7 @@ def api_admin_usuario_patch(usuario_id):
         return jsonify({"ok": False, "erro": "Payload inválido."}), 400
 
     try:
+        operation_permissions = operation_permissions_from_payload(body)
         commercial_access = {'mode':'general'} if str(body.get('role') or '').strip().lower() in {'admin','director'} else (normalize_commercial_access(body['commercialAccess']) if 'commercialAccess' in body else None)
     except ValueError as error:
         return jsonify({"ok":False,"erro":str(error)}),400
@@ -3179,6 +3202,8 @@ def api_admin_usuario_patch(usuario_id):
                     atualizado_em = NOW()
                 WHERE id = :id
             """), params)
+
+            replace_operation_permissions(conn, usuario_id, operation_permissions)
 
             if senha:
                 conn.execute(text("""
@@ -3316,10 +3341,13 @@ def api_admin_usuario_create():
         return erro
 
     body = request.get_json(silent=True) or {}
+    if not isinstance(body, dict):
+        return jsonify({"ok": False, "erro": "Payload inválido."}), 400
     if isinstance(body, dict) and 'dataAccess' in body:
         body = {**body, 'commercialAccess': body['dataAccess']}
 
     try:
+        operation_permissions = operation_permissions_from_payload(body)
         commercial_access = {'mode':'general'} if str(body.get('role') or '').strip().lower() in {'admin','director'} else normalize_commercial_access(body.get('commercialAccess', {'mode':'none'}))
     except ValueError as error:
         return jsonify({"ok":False,"erro":str(error)}),400
@@ -3374,6 +3402,7 @@ def api_admin_usuario_create():
             }).scalar_one())
 
             _sincronizar_usuario_relacoes(conn, usuario_id, sectors, report_ids)
+            replace_operation_permissions(conn, usuario_id, operation_permissions)
 
         log(f"Usuário criado por {usuario_atual.get('email')}: {email}", "INFO")
         return jsonify({"ok": True, "data": carregar_portal_data_neon()}), 201
