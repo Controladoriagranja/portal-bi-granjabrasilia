@@ -5797,6 +5797,16 @@ document.addEventListener('webkitfullscreenchange', handleReportFullscreenChange
 
 let currentReportUrl = '';
 let originalReportUrl = '';
+function configureReportDownloads(iframe, reportUrl) {
+  let allowed = false;
+  try {
+    const url = new URL(reportUrl, location.href);
+    allowed = url.origin === 'https://controladoriagranja.github.io'
+      && (url.pathname === '/bi-Suprimentos' || url.pathname.startsWith('/bi-Suprimentos/'));
+  } catch (_) {}
+  iframe.sandbox.toggle('allow-downloads', allowed);
+}
+
 async function openReport(id, pageId = '') {
   const r = db.reports.find(x => Number(x.id) === Number(id));
   if (!r || !canOpenReportPage(id, pageId)) {
@@ -5846,7 +5856,7 @@ async function openReport(id, pageId = '') {
   }
   iframe.style.display = 'block';
   setTimeout(() => {
-    iframe.src = currentReportUrl;
+    configureReportDownloads(iframe, currentReportUrl); iframe.src = currentReportUrl;
     iframe.onload = () => { document.getElementById('iframeLoader').style.display = 'none'; };
     iframe.onerror = () => {
       document.getElementById('iframeLoader').style.display = 'none';
@@ -5865,7 +5875,7 @@ function retryIframe() {
   document.getElementById('iframeLoader').style.display = 'flex';
   const iframe = document.getElementById('reportIframe');
   iframe.src = '';
-  setTimeout(() => { iframe.src = currentReportUrl; }, 300);
+  setTimeout(() => { configureReportDownloads(iframe, currentReportUrl); iframe.src = currentReportUrl; }, 300);
   setTimeout(() => {
     document.getElementById('iframeLoader').style.display = 'none';
   }, 10000);
