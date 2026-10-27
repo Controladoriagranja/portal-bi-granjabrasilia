@@ -5756,6 +5756,9 @@ async function toggleReportFullscreen() {
   try {
     if (modal.requestFullscreen) {
       await modal.requestFullscreen();
+      if (!document.getElementById('modalOverlay').classList.contains('open')) {
+        await exitReportFullscreen();
+      }
       return;
     }
     if (modal.webkitRequestFullscreen) {
@@ -5766,7 +5769,9 @@ async function toggleReportFullscreen() {
     console.warn('Fullscreen nativo indisponível; usando fallback visual:', err);
   }
 
-  enableReportFullscreenFallback();
+  if (document.getElementById('modalOverlay').classList.contains('open')) {
+    enableReportFullscreenFallback();
+  }
 }
 
 async function exitReportFullscreen() {
@@ -5789,6 +5794,11 @@ async function exitReportFullscreen() {
 }
 
 function handleReportFullscreenChange() {
+  if (!document.getElementById('modalOverlay').classList.contains('open') &&
+      getFullscreenElement() === getReportViewerModal()) {
+    void exitReportFullscreen();
+    return;
+  }
   syncReportFullscreenState();
 }
 
@@ -5845,6 +5855,8 @@ async function openReport(id, pageId = '') {
   syncReportFullscreenState();
   document.getElementById('modalOverlay').classList.add('open');
   document.body.classList.add('report-viewer-open');
+  // Ainda no clique do usuario: solicitar fullscreen antes de timers/carregamento.
+  void toggleReportFullscreen();
 
   // Todos os relatórios continuam abrindo diretamente no iframe público.
   // Na página Supervisor, a URL já contém o filtro do usuário logado.
