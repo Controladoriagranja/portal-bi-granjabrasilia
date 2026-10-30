@@ -277,6 +277,39 @@
     display: none;
   }
 
+  /* Forms apenas na tela Dados & Power BI — Chamados. */
+  #view-tickets.ticket-forms-visible { padding: 0 !important; }
+  #view-tickets #ticketAdminListHost[hidden],
+  #view-tickets #ticketGoogleFormsView[hidden],
+  #view-tickets #ticketFormsAdminToolbar[hidden],
+  #view-tickets #ticketGoogleFormsLoading[hidden] { display: none !important; }
+  #view-tickets #ticketGoogleFormsView {
+    --ticket-form-offset: 160px;
+    width: 100%; max-width: 760px; min-width: 0; margin: 0 auto;
+  }
+  #view-tickets #ticketGoogleFormsView.ticket-form-admin { --ticket-form-offset: 212px; }
+  #view-tickets #ticketFormsAdminToolbar { margin-bottom: 14px; }
+  #view-tickets .ticket-google-form-shell {
+    position: relative; overflow: hidden; width: 100%;
+    border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+  }
+  #view-tickets #ticketGoogleFormsIframe {
+    display: block; width: 100%; max-width: 760px; margin: 0 auto;
+    height: calc(100vh - var(--ticket-form-offset));
+    height: calc(100dvh - var(--ticket-form-offset)); min-height: 560px;
+    border: 0; border-radius: inherit; background: var(--surface);
+  }
+  #view-tickets .ticket-google-form-loading {
+    position: absolute; inset: 0; z-index: 1;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; color: var(--text-muted); background: var(--surface); font-size: 13px;
+  }
+  @media (max-width: 767px) {
+    #view-tickets #ticketGoogleFormsView { --ticket-form-offset: 176px; max-width: 100%; }
+    #view-tickets #ticketGoogleFormsView.ticket-form-admin { --ticket-form-offset: 228px; }
+    #view-tickets #ticketGoogleFormsIframe { max-width: 100%; }
+  }
+
   /* ══════════════ PENDING ══════════════ */
   #screen-pending {
     min-height: 100vh;
@@ -4358,6 +4391,8 @@
 
       <!-- VIEW: CHAMADOS — TODOS OS USUÁRIOS -->
       <div class="view" id="view-tickets">
+        <div id="ticketAdminListHost" hidden></div>
+        <template id="ticketAdminListTemplate">
         <div class="section-header" style="margin-bottom:18px">
           <div>
             <div class="section-title" style="font-size:18px">Dados & Power BI — Chamados</div>
@@ -4400,6 +4435,10 @@
           <div class="table-wrapper" id="ticketTable"></div>
         </div>
 
+        <div id="ticketDetailView" style="display:none"></div>
+        </template>
+        <!-- Formulario legado preservado, inerte e nunca montado nesta tela. -->
+        <template id="legacyNewTicketTemplate">
         <div id="newTicketView" style="display:none">
           <div class="ticket-form">
             <div class="section-header" style="margin-bottom:18px">
@@ -4503,7 +4542,18 @@
           </div>
         </div>
 
-        <div id="ticketDetailView" style="display:none"></div>
+        </template>
+        <section id="ticketGoogleFormsView" hidden>
+          <div id="ticketFormsAdminToolbar" hidden>
+            <button type="button" class="btn-sm" onclick="closeNewTicket()">← Voltar</button>
+          </div>
+          <div class="ticket-google-form-shell" id="ticketGoogleFormsShell" aria-busy="true">
+            <div class="ticket-google-form-loading" id="ticketGoogleFormsLoading" role="status">
+              <div class="spinner" aria-hidden="true"></div><span>Carregando…</span>
+            </div>
+            <iframe id="ticketGoogleFormsIframe" title="Formulário de chamado" loading="lazy" data-src="https://docs.google.com/forms/d/e/1FAIpQLSd34H86yRAsPvFXT0RIfg5jLMplPNejN4ZYD-tCAcUYMJfksw/viewform?embedded=true"></iframe>
+          </div>
+        </section>
       </div>
 
       <!-- VIEW: APROVAÇÕES DO GESTOR -->
@@ -6776,6 +6826,7 @@ function authenticatedTicketRequester(){
 
 
 async function loadPortalTicketUsers({signal}={}){
+  if (isTicketsFormOnlyView()) return false;
   const token = getPortalToken();
   try{
     const data = await ticketApiRequest('/api/chamados/usuarios', {signal});
@@ -6801,6 +6852,53 @@ function selectedPortalUserId(elementId){
 
 function isTicketAdmin(){
   return currentUser?.role === 'admin' || currentUser?.perfil === 'admin' || currentUser?.isAdmin === true;
+}
+
+let ticketFormsOpen = false;
+let ticketFormsOwner = null;
+
+function isTicketsFormOnlyView(){
+  return !isTicketAdmin() && document.getElementById('view-tickets')?.classList.contains('active');
+}
+
+function finishTicketGoogleFormsLoad(){
+  if (!document.getElementById('ticketGoogleFormsIframe').getAttribute('src')) return;
+  document.getElementById('ticketGoogleFormsLoading').hidden = true;
+  document.getElementById('ticketGoogleFormsShell').setAttribute('aria-busy', 'false');
+}
+
+function configureTicketsView(){
+  const admin = isTicketAdmin();
+  const host = document.getElementById('ticketAdminListHost');
+  if (!host) return false;
+  const owner = String(currentUser?.dbId || currentUser?.id || '') + ':' + admin;
+  if (owner !== ticketFormsOwner) {
+    ticketFormsOwner = owner;
+    ticketFormsOpen = false;
+    host.replaceChildren();
+  }
+  if (admin && !host.hasChildNodes()) {
+    host.append(document.getElementById('ticketAdminListTemplate').content.cloneNode(true));
+  } else if (!admin) {
+    // Nao montar cards/lista, nem reutilizar DOM de uma sessao admin anterior.
+    host.replaceChildren();
+    ticketFormsOpen = false;
+  }
+  const form = document.getElementById('ticketGoogleFormsView');
+  const showForm = !admin || ticketFormsOpen;
+  document.getElementById('view-tickets').classList.toggle('ticket-forms-visible', showForm);
+  host.hidden = showForm;
+  form.hidden = !showForm;
+  form.classList.toggle('ticket-form-admin', admin);
+  document.getElementById('ticketFormsAdminToolbar').hidden = !admin;
+  if (showForm && document.getElementById('view-tickets').classList.contains('active')) {
+    const iframe = document.getElementById('ticketGoogleFormsIframe');
+    if (!iframe.getAttribute('src')) {
+      iframe.onload = finishTicketGoogleFormsLoad;
+      iframe.src = iframe.dataset.src;
+    }
+  }
+  return admin && !showForm;
 }
 
 function ticketResponsibleUsers(){
@@ -7103,6 +7201,7 @@ function renderTicketsAfterRemoteSync() {
 }
 
 async function pullTicketStoreFromServer({silent=true, signal}={}) {
+  if (isTicketsFormOnlyView()) return false;
   if (!currentUser || !getPortalToken() || signal?.aborted || ticketSaveInProgress || ticketDeleteInProgress || ticketPullInProgress) return false;
   const token = getPortalToken();
   const mutation = ticketMutationGeneration;
@@ -7169,7 +7268,8 @@ async function migrateLocalTicketsToServer() {
 function canSyncTickets() {
   if (!currentUser || !getPortalToken() || document.visibilityState !== 'visible' ||
       !document.getElementById('screen-portal')?.classList.contains('active')) return false;
-  return document.getElementById('view-tickets')?.classList.contains('active') ||
+  return (document.getElementById('view-tickets')?.classList.contains('active') &&
+      isTicketAdmin() && !ticketFormsOpen) ||
     (document.getElementById('view-ticketadmin')?.classList.contains('active') &&
       (currentUser.role === 'admin' || currentUser.ticketPanelAccess === true));
 }
@@ -7524,50 +7624,19 @@ function createInternalDemand(){
 
 
 function openNewTicket() {
-  document.getElementById('ticketListView').style.display='none';
-  document.getElementById('ticketDetailView').style.display='none';
-  document.getElementById('newTicketView').style.display='block';
-
-  const requesterNameInput = document.getElementById('ticketRequesterName');
-  const authRequester = authenticatedTicketRequester();
-  if (requesterNameInput) {
-    const requesterUsers=isTicketAdmin()
-      ? portalTicketUsers
-      : (portalTicketUsers.some(u=>Number(u.id)===Number(authRequester.id))
-          ? portalTicketUsers.filter(u=>Number(u.id)===Number(authRequester.id))
-          : [{id:authRequester.id,nome:authRequester.name,email:authRequester.email}]);
-    fillPortalUserSelect('ticketRequesterName', authRequester.name, false, requesterUsers);
-    requesterNameInput.value = authRequester.name;
-    requesterNameInput.disabled = !isTicketAdmin();
-  }
-  const help=document.getElementById('ticketRequesterHelp');
-  if(help){
-    help.textContent=isTicketAdmin()
-      ? 'Administrador: você pode abrir o chamado em nome de qualquer usuário ativo.'
-      : 'Preenchido automaticamente pelo seu login e não pode ser alterado.';
-  }
-
-  const planningDates = document.getElementById('ticketAdminPlanningDates');
-  const canPlanDates = isTicketAdmin();
-  if (planningDates) planningDates.style.display = canPlanDates ? 'grid' : 'none';
-  if (!canPlanDates) {
-    const ps = document.getElementById('ticketNewPlannedStart');
-    const pe = document.getElementById('ticketNewPlannedEnd');
-    if (ps) ps.value = '';
-    if (pe) pe.value = '';
-  }
-
-  ticketSelectedFiles = [];
-  renderTicketFileList();
-  renderTicketProjects();
-  updateTicketManagerInfo();
+  configureTicketsView();
+  ticketFormsOpen = true;
+  configureTicketsView();
+  if (document.getElementById('view-tickets').classList.contains('active')) stopCentralTicketSync();
 }
 function closeNewTicket() {
-  document.getElementById('newTicketView').style.display='none';
-  document.getElementById('ticketDetailView').style.display='none';
-  document.getElementById('ticketListView').style.display='block';
-  ticketSelectedFiles = [];
+  if (!isTicketAdmin()) { configureTicketsView(); return; }
+  ticketFormsOpen = false;
+  configureTicketsView();
+  document.getElementById('ticketDetailView').style.display = 'none';
+  document.getElementById('ticketListView').style.display = 'block';
   renderTickets();
+  initCentralTicketSync();
 }
 function addTicketFiles(fileList) {
   if(!validateTicketFiles(fileList)) {
@@ -7708,7 +7777,7 @@ async function createTicket(button=null) {
 }
 
 function visibleTicketsForCurrentUser() {
-  if (currentUser?.role === 'admin') return ticketStore.tickets;
+  if (isTicketAdmin()) return ticketStore.tickets;
   return ticketStore.tickets.filter(t => String(t.requesterEmail||'').toLowerCase()===currentEmail());
 }
 let ticketTableSort = { key:'createdAt', dir:'asc' };
@@ -7754,6 +7823,7 @@ function ticketTableSortValue(t,key){
 }
 
 function renderTickets() {
+  if (!configureTicketsView()) return;
   const table = document.getElementById('ticketTable');
   if (!table) return;
   let rows = visibleTicketsForCurrentUser();
@@ -7852,10 +7922,12 @@ function ticketTimelineHtml(t) {
 let openedUserTicketId = null;
 
 function openTicketDetail(id) {
+  if (!isTicketAdmin()) { configureTicketsView(); return; }
+  ticketFormsOpen = false;
+  configureTicketsView();
   const t=ticketStore.tickets.find(x=>Number(x.id)===Number(id)); if(!t)return;
   openedUserTicketId = Number(id);
   document.getElementById('ticketListView').style.display='none';
-  document.getElementById('newTicketView').style.display='none';
   const el=document.getElementById('ticketDetailView');
   el.style.display='block';
   const managers=managersForProject(t.project,'both');
@@ -7896,6 +7968,7 @@ function refreshOpenedUserTicketDetail(){
 }
 
 function closeTicketDetail(){
+  if (!isTicketAdmin()) { configureTicketsView(); return; }
   openedUserTicketId = null;
   document.getElementById('ticketDetailView').style.display='none';
   document.getElementById('ticketListView').style.display='block';
@@ -9748,7 +9821,7 @@ function switchView(viewId, navEl) {
   if (viewId === 'changepass') prepareChangePasswordView();
   if (viewId === 'sectors') renderSectorsList();
   if (viewId === 'updates') startUpdateMonitor();
-  if (viewId === 'tickets') { renderTickets(); renderTicketProjects(); updateTicketManagerInfo(); }
+  if (viewId === 'tickets') renderTickets();
   if (viewId === 'ticketadmin') renderTicketAdmin();
 
   // O status de sincronização pertence ao topo e só aparece no Painel de Chamados.
