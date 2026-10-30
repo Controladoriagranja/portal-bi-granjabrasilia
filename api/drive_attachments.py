@@ -1,4 +1,4 @@
-"""Anexos do Forms: bytes somente no Drive; PostgreSQL guarda recibos/metadados."""
+"""Envio direto ao Drive sem gravação no banco; helpers legados por compatibilidade."""
 import base64
 import hashlib
 import hmac
@@ -19,14 +19,24 @@ MAX_BYTES = 10 * 1024 * 1024
 MAX_FILES = 5
 
 
-def upload_config():
+def upload_status():
     url = os.getenv("PORTAL_DRIVE_UPLOAD_URL", "").strip()
     secret = os.getenv("PORTAL_DRIVE_UPLOAD_SECRET", "").strip()
-    if not url or not secret:
+    if not url:
+        return "missing_url"
+    if not secret:
+        return "missing_secret"
+    if not re.fullmatch(r"https://script\.google\.com/macros/s/[A-Za-z0-9_-]+/exec", url):
+        return "invalid_url"
+    if len(secret) < 32:
+        return "secret_too_short"
+    return "ready"
+
+
+def upload_config():
+    if upload_status() != "ready":
         return None
-    if not re.fullmatch(r"https://script\.google\.com/macros/s/[A-Za-z0-9_-]+/exec", url) or len(secret) < 32:
-        return None
-    return url, secret
+    return os.environ["PORTAL_DRIVE_UPLOAD_URL"].strip(), os.environ["PORTAL_DRIVE_UPLOAD_SECRET"].strip()
 
 
 def json_list(value):
@@ -92,6 +102,23 @@ def read_file(storage):
 def safe_name(value, limit):
     value = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode()
     return re.sub(r"[^A-Za-z0-9_.-]+", "_", value).strip("._")[:limit] or "Arquivo"
+
+
+def direct_receipt(user, file, started, upload_key):
+    """Nome estável para repetir o envio, sem recibo ou gravação no PostgreSQL."""
+    if not re.fullmatch(r"[a-f0-9]{32}", upload_key):
+        raise ValueError("Identificador do envio inválido.")
+    key = hashlib.sha256(json.dumps([int(user["usuario_id"]), started.isoformat(),
+        upload_key, file["sha256"], file["original_name"]], ensure_ascii=True).encode()).hexdigest()[:32]
+    stamp = started.astimezone(CSV_TIMEZONE).strftime("%Y-%m-%d_%H-%M-%S")
+    return {**file, "upload_key": key,
+        "stored_name": f'{safe_name(str(user["nome"]), 60)}_{stamp}_{key}_{safe_name(file["original_name"], 120)}'}
+
+
+def direct_attachment(receipt, file_id):
+    return {"key": "drive:" + receipt["upload_key"], "name": receipt["original_name"],
+        "size": receipt["bytes_size"], "storage": "portal-drive", "driveName": receipt["stored_name"],
+        "url": "https://drive.google.com/file/d/" + file_id + "/view"}
 
 
 def reserve(conn, user, ticket_id, since, upload_key, file):

@@ -248,5 +248,15 @@ class FormsTests(unittest.TestCase):
         self.assertEqual(api['forms_fetch_rows'].call_args.args[1], self.user['email'])
         self.assertEqual(response.headers['Cache-Control'], 'no-store')
 
+    def test_direct_mode_skips_attachment_targets_and_extra_transaction(self):
+        api=self.routes()
+        api['request'].get_json.return_value['attachmentsMode']='direct'
+        api['forms_drive'].upload_config=lambda:('configured','test-secret')
+        response,status=api['api_forms_import']()
+        self.assertEqual((status,response['imported']),(200,1))
+        self.assertEqual(response['uploadTargets'],[])
+        self.assertEqual(api['engine'].begin.call_count,1)
+        api['forms_drive'].own_targets.assert_not_called()
+
 
 if __name__ == '__main__': unittest.main()

@@ -29,7 +29,7 @@ link, conforme autorizado pelo usuário; isso não publica credenciais do Portal
 - Os chamados chegam em `awaiting_manager`, prioridade Média, sem criar usuários,
   conceder acessos, aprovar solicitações ou atribuir responsável/datas automaticamente.
 - Os detalhes de ajuste, melhoria e pedido de usuário são copiados como texto com
-  seus rótulos. As referências de anexos são texto; não há download ou integração Drive.
+  seus rótulos. As referências de anexos são texto; o importador não baixa arquivos do Drive.
 - Os perfis comuns continuam somente com Forms e sem leitura da lista de chamados.
 
 O CSV preserva as duas colunas E-mail por posição. Os 16 cabeçalhos são conferidos.
@@ -58,8 +58,10 @@ O formulário público conferido não contém pergunta de upload. Ativar upload 
 Google exige alterar o próprio formulário; o HTML do portal não cria perguntas no
 iframe. O código legado de anexos do portal guarda nome/tamanho, não o arquivo.
 Destino definido: upload pelo portal para pasta no Google Drive, com nome da
-pessoa e data/hora. O código está preparado; a autorização do Google e ativação
-manual estão em [ANEXOS_DRIVE.md](ANEXOS_DRIVE.md). Não houve envio real de arquivos.
+pessoa e data/hora. O fluxo simples é independente da importação, não exige selecionar
+chamado e não grava recibos/metadados de anexos no Neon. Os arquivos ficam na pasta,
+sem vínculo automático com a lista. Instruções em [ANEXOS_DRIVE.md](ANEXOS_DRIVE.md).
+Não houve envio real de arquivos pelo Codex.
 
 "Logado" segue o modelo de autenticação já existente: token válido, não expirado e
 usuário ativo, verificados na requisição. O logout é stateless. O e-mail no Forms

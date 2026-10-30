@@ -151,15 +151,22 @@ class DriveTests(unittest.TestCase):
               '_auth_serializer':Mock(), 'forms_read_context':Mock(return_value=self.since),
               '_resposta_nao_autorizado':lambda:(jsonify(ok=False),401), 'engine':Mock(),
               'BadSignature':BadSignature, 'SignatureExpired':SignatureExpired, 'RequestEntityTooLarge':RequestEntityTooLarge}
+        ns.update(forms_new_context=Mock(return_value='new-signed-context'), datetime=datetime, timezone=timezone)
+        mocked.upload_status.return_value = 'ready'
+        mocked.direct_receipt.side_effect = drive.direct_receipt
+        mocked.direct_attachment.side_effect = drive.direct_attachment
         conn = Mock()
         ns['engine'].begin.return_value.__enter__ = Mock(return_value=conn)
         ns['engine'].begin.return_value.__exit__ = Mock(return_value=False)
         tree = ast.parse((ROOT/'api/app.py').read_text(encoding='utf-8-sig'))
         for node in tree.body:
-            if isinstance(node, ast.FunctionDef) and node.name in {'_forms_import_response','api_forms_attachment'}:
+            if isinstance(node, ast.FunctionDef) and node.name in {'_forms_import_response','api_forms_attachment',
+                    'api_forms_attachment_status','api_forms_attachment_direct'}:
                 node.decorator_list=[]
                 exec(compile(ast.Module(body=[node],type_ignores=[]),'isolated-upload','exec'),ns)
         app.add_url_rule('/upload',view_func=ns['api_forms_attachment'],methods=['POST'])
+        app.add_url_rule('/status',view_func=ns['api_forms_attachment_status'],methods=['GET'])
+        app.add_url_rule('/direct',view_func=ns['api_forms_attachment_direct'],methods=['POST'])
         return app.test_client(), ns, mocked
 
     def payload(self):
@@ -201,6 +208,61 @@ class DriveTests(unittest.TestCase):
         remote.send_to_drive.side_effect = TimeoutError('mock-timeout')
         self.assertEqual(client.post('/upload',data=self.payload()).status_code,503)
         remote.finish.assert_not_called()
+
+    def test_status_has_no_database_or_remote_calls(self):
+        client, ns, remote = self.routes()
+        response=client.get('/status')
+        self.assertEqual(response.status_code,200)
+        self.assertTrue(response.json['uploadsEnabled'])
+        self.assertEqual(response.json['context'],'new-signed-context')
+        ns['engine'].begin.assert_not_called()
+        remote.send_to_drive.assert_not_called()
+
+    def test_direct_upload_requires_session_and_context_but_not_ticket(self):
+        client, ns, remote = self.routes()
+        payload=self.payload();payload.pop('ticketId')
+        response=client.post('/direct',data=payload)
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.json['attachment']['url'],'https://drive.google.com/file/d/driveFile12345678/view')
+        remote.reserve.assert_not_called();remote.finish.assert_not_called()
+        ns['engine'].begin.assert_not_called()
+        ns['_usuario_autenticado']=lambda:None
+        remote.send_to_drive.reset_mock()
+        payload=self.payload();payload.pop('ticketId')
+        self.assertEqual(client.post('/direct',data=payload).status_code,401)
+        remote.send_to_drive.assert_not_called()
+
+    def test_direct_invalid_context_and_identity_override_rejected(self):
+        client, ns, remote = self.routes()
+        ns['forms_read_context'].side_effect=BadSignature('invalid')
+        payload=self.payload();payload.pop('ticketId')
+        self.assertEqual(client.post('/direct',data=payload).status_code,403)
+        payload=self.payload();payload.pop('ticketId');payload['nome']='Pessoa falsa'
+        self.assertEqual(client.post('/direct',data=payload).status_code,400)
+        remote.send_to_drive.assert_not_called()
+        ns['engine'].begin.assert_not_called()
+
+    def test_direct_name_is_stable_and_bound_to_identity_contents_and_server_stamp(self):
+        first=drive.direct_receipt(self.user,self.file,self.since,self.key)
+        second=drive.direct_receipt(self.user,self.file,self.since,self.key)
+        self.assertEqual(first,second)
+        self.assertIn(self.since.astimezone(drive.CSV_TIMEZONE).strftime('%Y-%m-%d_%H-%M-%S'),first['stored_name'])
+        other=drive.direct_receipt({**self.user,'usuario_id':42},self.file,self.since,self.key)
+        self.assertNotEqual(first['upload_key'],other['upload_key'])
+        other=drive.direct_receipt(self.user,{**self.file,'sha256':'0'*64},self.since,self.key)
+        self.assertNotEqual(first['upload_key'],other['upload_key'])
+
+    def test_config_status_exposes_only_reason_never_values(self):
+        with patch.dict(os.environ,{},clear=True):
+            self.assertEqual(drive.upload_status(),'missing_url')
+            os.environ['PORTAL_DRIVE_UPLOAD_URL']=self.config[0]
+            self.assertEqual(drive.upload_status(),'missing_secret')
+            os.environ['PORTAL_DRIVE_UPLOAD_SECRET']='short'
+            self.assertEqual(drive.upload_status(),'secret_too_short')
+            os.environ['PORTAL_DRIVE_UPLOAD_SECRET']=self.config[1]
+            self.assertEqual(drive.upload_status(),'ready')
+            os.environ['PORTAL_DRIVE_UPLOAD_URL']='https://wrong.invalid'
+            self.assertEqual(drive.upload_status(),'invalid_url')
 
 
 if __name__ == '__main__': unittest.main()

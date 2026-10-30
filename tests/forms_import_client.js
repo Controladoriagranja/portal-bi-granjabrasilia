@@ -6,7 +6,7 @@ async function testFormsImportClient(html) {
   const end = html.indexOf('function configureTicketsView()', start);
   const controller = html.slice(start, end);
   const script = `
-    let currentUser={id:41,role:'sector'}, token='offline', enabled=true, imported=0;
+    let currentUser={id:41,role:'sector'}, token='offline', enabled=true, imported=0,failSession=false;
     const requests=[],toasts=[],timers=new Map();let timerId=0,late=null;
     const getPortalToken=()=>token;
     const document={visibilityState:'visible',getElementById:id=>({hidden:false,classList:{contains:()=>true}})};
@@ -18,7 +18,10 @@ async function testFormsImportClient(html) {
     const console={warn:()=>{}};
     async function portalApiRequest(path,options){
       requests.push({path,options});
-      if(path.endsWith('/session'))return {ok:true,enabled,context:enabled?'signed-context':null};
+      if(path.endsWith('/session')){
+        if(failSession){failSession=false;throw new Error('Falha inicial simulada')}
+        return {ok:true,enabled,context:enabled?'signed-context':null};
+      }
       if(late)return new Promise(resolve=>{late.resolve=resolve});
       return {ok:true,imported};
     }
@@ -29,6 +32,7 @@ async function testFormsImportClient(html) {
       requests,toasts,timers,document,
       login:value=>{currentUser=value?{id:41}:null;token=value?'offline':''},
       disable:()=>{enabled=false},value:n=>{imported=n},
+      failFirst:()=>{failSession=true},
       hold:()=>{late={};return late;}
     };`;
   const client = new Function(script)();
@@ -42,7 +46,7 @@ async function testFormsImportClient(html) {
   assert(client.timers.size===0,'Criou polling ocioso');
   assert(!client.requests.some(r=>r.path==='/api/chamados'),'Comum carregou lista');
   assert(client.requests.filter(r=>r.path.endsWith('/import')).every(r=>
-    JSON.stringify(JSON.parse(r.options.body))==='{"context":"signed-context"}'),'Cliente enviou identidade/linhas');
+    JSON.stringify(JSON.parse(r.options.body))==='{"context":"signed-context","attachmentsMode":"direct"}'),'Cliente enviou identidade/linhas');
   client.value(1);client.schedule([1,2,3]);await client.next();
   assert(client.toasts.length===1&&client.timers.size===0,'Sucesso nao encerrou tentativas');
   client.document.visibilityState='hidden';const count=client.requests.length;client.schedule();
@@ -54,6 +58,9 @@ async function testFormsImportClient(html) {
   assert(client.toasts.length===1&&client.timers.size===0,'Logout reativou importacao');
   const off=new Function(script)();off.disable();await off.prepare();off.schedule();await off.next();
   assert(off.requests.every(r=>r.path.endsWith('/session')),'Integracao desabilitada consultou Google');
+  const recovery=new Function(script)();recovery.failFirst();
+  assert(await recovery.prepare()===null,'Falha simulada nao ocorreu');
+  assert((await recovery.prepare()).enabled && recovery.requests.length===2,'Falha inicial travou a sessao ate logout');
   assert(html.includes("url.searchParams.set('entry.1258827024', email)") &&
     !html.includes("url.searchParams.set('entry.455859597'"),'Preencheu o segundo E-mail em vez do solicitante');
   const wrapper=html.match(/^async function fetchJsonWithTimeout\([^\n]*\) ?\{[\s\S]*?^\}/m)[0];

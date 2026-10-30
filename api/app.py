@@ -22,7 +22,7 @@ import threading
 import time
 import unicodedata
 from collections import deque
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from flask import Flask, jsonify, request, send_from_directory, Response
@@ -4379,7 +4379,8 @@ def api_forms_import():
         if not config:
             return _forms_import_response({"ok": False, "erro": "Importação do Forms não habilitada."}, 503)
         body = request.get_json(silent=True)
-        if not isinstance(body, dict) or set(body) != {"context"}:
+        if (not isinstance(body, dict) or set(body) not in ({"context"}, {"context", "attachmentsMode"}) or
+                ("attachmentsMode" in body and body["attachmentsMode"] != "direct")):
             return _forms_import_response({"ok": False, "erro": "Envie apenas o contexto autenticado."}, 400)
         try:
             since = forms_read_context(_auth_serializer(), body["context"], user, _extrair_bearer_token())
@@ -4394,7 +4395,7 @@ def api_forms_import():
                 imported = forms_persist_rows(conn, user, rows,
                     lambda connection, ticket_id: _numero_para_novo_chamado(connection, ticket_id, None))
         targets = []
-        if forms_drive.upload_config():
+        if body.get("attachmentsMode") != "direct" and forms_drive.upload_config():
             with engine.begin() as conn:
                 targets = forms_drive.own_targets(conn, user, since)
         return _forms_import_response({"ok": True, "imported": imported, "uploadTargets": targets})
@@ -4405,6 +4406,55 @@ def api_forms_import():
     except Exception:
         log("Falha na importacao do Forms; nenhum lote parcial foi confirmado.", "ERRO")
         return _forms_import_response({"ok": False, "erro": "Não foi possível importar o Forms agora."}, 503)
+
+
+@app.route("/api/chamados/google-forms/attachments/status", methods=["GET"])
+def api_forms_attachment_status():
+    try:
+        user = _usuario_autenticado()
+        if not user:
+            return _resposta_nao_autorizado()
+        status = forms_drive.upload_status()
+        context = None
+        if status == "ready":
+            # Carimbo oficial do servidor; não depende do CSV nem de tabelas de recibos.
+            context = forms_new_context(_auth_serializer(), user, _extrair_bearer_token(),
+                                        datetime.now(timezone.utc))
+        return _forms_import_response({"ok": True, "uploadsEnabled": status == "ready",
+                                       "uploadStatus": status, "context": context})
+    except Exception:
+        return _forms_import_response({"ok": False, "erro": "Não foi possível preparar o envio. Tente novamente."}, 503)
+
+
+@app.route("/api/chamados/google-forms/attachments/direct", methods=["POST"])
+def api_forms_attachment_direct():
+    try:
+        user = _usuario_autenticado()
+        if not user:
+            return _resposta_nao_autorizado()
+        config = forms_drive.upload_config()
+        if not config:
+            return _forms_import_response({"ok": False, "erro": "O envio de anexos aguarda configuração no servidor.",
+                                           "uploadStatus": forms_drive.upload_status()}, 503)
+        request.max_content_length = forms_drive.MAX_BYTES + 256 * 1024
+        if set(request.form) != {"context", "uploadId"} or set(request.files) != {"file"}:
+            raise ValueError("Envie um arquivo e o contexto autenticado.")
+        try:
+            started = forms_read_context(_auth_serializer(), request.form["context"], user, _extrair_bearer_token())
+        except (BadSignature, SignatureExpired, ValueError, TypeError):
+            return _forms_import_response({"ok": False, "erro": "Sessão do envio expirada. Recarregue a página."}, 403)
+        file, contents = forms_drive.read_file(request.files["file"])
+        receipt = forms_drive.direct_receipt(user, file, started, request.form["uploadId"])
+        file_id = forms_drive.send_to_drive(config, receipt, contents)
+        # Sem engine.begin(), inserts ou atualização de chamado/planilha neste fluxo.
+        return _forms_import_response({"ok": True, "attachment": forms_drive.direct_attachment(receipt, file_id)})
+    except RequestEntityTooLarge:
+        return _forms_import_response({"ok": False, "erro": "O arquivo excede o limite de 10 MB."}, 413)
+    except ValueError as error:
+        return _forms_import_response({"ok": False, "erro": str(error)}, 400)
+    except Exception:
+        log("Falha no envio direto de anexo ao Drive.", "ERRO")
+        return _forms_import_response({"ok": False, "erro": "Não foi possível enviar. Tente novamente com o mesmo arquivo."}, 503)
 
 
 @app.route("/api/chamados/google-forms/attachments", methods=["POST"])
