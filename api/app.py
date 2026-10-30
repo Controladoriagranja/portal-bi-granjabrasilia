@@ -1,6 +1,9 @@
 from commercial_access import normalize_commercial_access, effective_commercial_access
 from operation_permissions import (operation_permissions_from_payload,
                                    replace_operation_permissions, effective_operation_permissions)
+from forms_import import (reader_config as forms_reader_config, new_context as forms_new_context,
+                          read_context as forms_read_context, fetch_rows as forms_fetch_rows,
+                          prepare_rows as forms_prepare_rows, persist_rows as forms_persist_rows)
 import json
 import base64
 import gzip
@@ -365,7 +368,10 @@ def ler_chamados_store():
         raise
 
 
-def _numero_para_novo_chamado(conn, ticket_id, numero_solicitado):
+def _numero_para_novo_chamado(conn, ticket_id, numero_solicitado, novo=False):
+    if novo:
+        # Mesmo lock para criacao normal e importacao: nao reservar MAX(numero) em paralelo.
+        conn.execute(text("SELECT pg_advisory_xact_lock(742013, 2)"))
     try:
         numero = int(numero_solicitado)
     except Exception:
@@ -543,7 +549,7 @@ def _upsert_ticket(conn, ticket, usuario_sessao=None):
         if db_updated is not None and incoming_updated < db_updated - timedelta(seconds=2):
             return False
 
-    numero = _numero_para_novo_chamado(conn, ticket_id, ticket.get("number"))
+    numero = _numero_para_novo_chamado(conn, ticket_id, ticket.get("number"), novo=existente is None)
     titulo = str(ticket.get("title") or "").strip() or f"Chamado #{numero}"
     descricao = str(ticket.get("description") or "").strip() or "Sem descrição."
     criado_em = _timestamp_ou_none(ticket.get("createdAt"))
@@ -4333,6 +4339,63 @@ def api_agent_finish_job(job_id):
 # =============================================================================
 # ROTAS — CHAMADOS MULTIUSUÁRIO (NEON)
 # =============================================================================
+
+def _forms_import_response(data, status=200):
+    response = jsonify(data)
+    response.headers["Cache-Control"] = "no-store"
+    return response, status
+
+
+@app.route("/api/chamados/google-forms/session", methods=["POST"])
+def api_forms_import_session():
+    try:
+        user = _usuario_autenticado()
+        if not user:
+            return _resposta_nao_autorizado()
+        if not forms_reader_config():
+            return _forms_import_response({"ok": True, "enabled": False})
+        token = _extrair_bearer_token()
+        _, started = _auth_serializer().loads(token, max_age=AUTH_TOKEN_MAX_AGE, return_timestamp=True)
+        context = forms_new_context(_auth_serializer(), user, token, started)
+        return _forms_import_response({"ok": True, "enabled": True, "context": context})
+    except Exception:
+        log("Falha ao preparar importacao autenticada do Forms.", "ERRO")
+        return _forms_import_response({"ok": False, "erro": "Importação do Forms indisponível."}, 503)
+
+
+@app.route("/api/chamados/google-forms/import", methods=["POST"])
+def api_forms_import():
+    try:
+        user = _usuario_autenticado()
+        if not user:
+            return _resposta_nao_autorizado()
+        config = forms_reader_config()
+        if not config:
+            return _forms_import_response({"ok": False, "erro": "Importação do Forms não habilitada."}, 503)
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict) or set(body) != {"context"}:
+            return _forms_import_response({"ok": False, "erro": "Envie apenas o contexto autenticado."}, 400)
+        try:
+            since = forms_read_context(_auth_serializer(), body["context"], user, _extrair_bearer_token())
+        except (BadSignature, SignatureExpired, ValueError, TypeError):
+            return _forms_import_response({"ok": False, "erro": "Contexto de solicitação inválido ou expirado."}, 403)
+        # Nao manter conexao/transacao SQL aberta durante a chamada ao Google.
+        source = forms_fetch_rows(config, user["email"], since)
+        rows = forms_prepare_rows(source, user, since)
+        imported = 0
+        if rows:
+            with engine.begin() as conn:
+                imported = forms_persist_rows(conn, user, rows,
+                    lambda connection, ticket_id: _numero_para_novo_chamado(connection, ticket_id, None))
+        return _forms_import_response({"ok": True, "imported": imported})
+    except PermissionError:
+        return _resposta_nao_autorizado()
+    except ValueError as error:
+        return _forms_import_response({"ok": False, "erro": str(error)}, 400)
+    except Exception:
+        log("Falha na importacao do Forms; nenhum lote parcial foi confirmado.", "ERRO")
+        return _forms_import_response({"ok": False, "erro": "Não foi possível importar o Forms agora."}, 503)
+
 
 @app.route("/api/chamados/usuarios", methods=["GET"])
 def api_chamados_usuarios():

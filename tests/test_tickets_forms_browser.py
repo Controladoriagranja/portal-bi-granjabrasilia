@@ -64,6 +64,8 @@ def main():
       window.reads=0; window.calls=[];window.boardRenders=0;
       let ticketStore=new Proxy({tickets:records},{get(target,key){if(key==='tickets')window.reads++;return target[key];}});
       const getPortalToken=()=> 'offline'; const currentEmail=()=>'';
+      const prepareTicketFormsImport=async()=>null;const stopTicketFormsImport=()=>{};
+      const scheduleTicketFormsImport=()=>{};let ticketFormsImportState=null;
       const updateTicketSyncIndicator=()=>{};const stopUpdateMonitor=()=>{};const showToast=()=>{};
       const renderTicketAdmin=()=>{window.boardRenders++};
       const renderPortalTicketUserSelects=()=>{};const cacheTicketStore=()=>{};
@@ -117,7 +119,7 @@ def main():
         js("currentUser={id:41,role:'sector'};window.calls=[];switchView('tickets')")
         for width, height, name in ((1440,1000,'pc'),(768,1024,'tablet'),(390,844,'celular'),(320,640,'pequeno')):
             driver.execute_cdp_cmd('Emulation.setDeviceMetricsOverride', {'width':width,'height':height,'deviceScaleFactor':1,'mobile':width<768})
-            check(js("const f=document.getElementById('ticketGoogleFormsIframe').getBoundingClientRect();return f.width<=760.5&&f.width<=innerWidth&&f.height>=560"), name+": dimensoes")
+            check(js("const f=document.getElementById('ticketGoogleFormsIframe').getBoundingClientRect();const v=document.getElementById('view-tickets').getBoundingClientRect();return Math.abs(f.width-v.width)<3&&f.width<=innerWidth&&f.height>=560"), name+": dimensoes/largura total")
             check(js("return document.documentElement.scrollWidth<=innerWidth+1"), name+": overflow horizontal")
             if name == 'celular':
                 check(js("return document.getElementById('ticketGoogleFormsIframe').getBoundingClientRect().bottom<=innerHeight-70"), "Forms coberto pela navegacao movel")
