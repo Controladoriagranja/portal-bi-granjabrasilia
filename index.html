@@ -284,10 +284,10 @@
   #view-tickets #ticketFormsAdminToolbar[hidden],
   #view-tickets #ticketGoogleFormsLoading[hidden] { display: none !important; }
   #view-tickets #ticketGoogleFormsView {
-    --ticket-form-offset: 160px;
+    --ticket-form-offset: 200px;
     width: 100%; max-width: none; min-width: 0; margin: 0;
   }
-  #view-tickets #ticketGoogleFormsView.ticket-form-admin { --ticket-form-offset: 212px; }
+  #view-tickets #ticketGoogleFormsView.ticket-form-admin { --ticket-form-offset: 252px; }
   #view-tickets #ticketFormsAdminToolbar { margin-bottom: 14px; }
   #view-tickets .ticket-google-form-shell {
     position: relative; overflow: hidden; width: 100%;
@@ -304,9 +304,31 @@
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: 14px; color: var(--text-muted); background: var(--surface); font-size: 13px;
   }
+  #view-tickets .ticket-drive-upload {
+    margin-top: 14px; padding: 16px; min-width: 0;
+    border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+  }
+  #view-tickets .ticket-drive-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }
+  #view-tickets .ticket-drive-controls select {
+    flex: 1 1 230px; min-width: 0; max-width: 100%; min-height: 36px;
+    padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface2); color: var(--text); font: inherit; font-size: 12px;
+  }
+  #view-tickets .ticket-drive-controls label { flex: 1 1 200px; min-width: 0; }
+  #view-tickets .ticket-drive-controls input { display: block; max-width: 100%; margin-top: 6px; color: var(--text-muted); font: inherit; }
+  #view-tickets .ticket-drive-controls input::file-selector-button {
+    padding: 8px 10px; margin-right: 8px; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--surface2); color: var(--text); font: inherit; cursor: pointer;
+    transition: background-color .18s ease;
+  }
+  #view-tickets .ticket-drive-controls input::file-selector-button:hover { background: var(--border); }
+  #view-tickets .ticket-drive-note { color: var(--text-muted); font-size: 12px; line-height: 1.5; }
+  #view-tickets .ticket-drive-files { margin-top: 10px; overflow-wrap: anywhere; font-size: 12px; }
+  #view-tickets .ticket-drive-files > div { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
+  #view-tickets .ticket-drive-files span { flex: 1; min-width: 0; }
   @media (max-width: 767px) {
-    #view-tickets #ticketGoogleFormsView { --ticket-form-offset: 176px; max-width: 100%; }
-    #view-tickets #ticketGoogleFormsView.ticket-form-admin { --ticket-form-offset: 228px; }
+    #view-tickets #ticketGoogleFormsView { --ticket-form-offset: 216px; max-width: 100%; }
+    #view-tickets #ticketGoogleFormsView.ticket-form-admin { --ticket-form-offset: 268px; }
     #view-tickets #ticketGoogleFormsIframe { max-width: 100%; }
   }
 
@@ -4547,12 +4569,28 @@
           <div id="ticketFormsAdminToolbar" hidden>
             <button type="button" class="btn-sm" onclick="closeNewTicket()">← Voltar</button>
           </div>
+          <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+            <button type="button" class="btn-sm" onclick="document.getElementById('ticketDriveUpload').scrollIntoView({behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'center'})">Anexar arquivos</button>
+          </div>
           <div class="ticket-google-form-shell" id="ticketGoogleFormsShell" aria-busy="true">
             <div class="ticket-google-form-loading" id="ticketGoogleFormsLoading" role="status">
               <div class="spinner" aria-hidden="true"></div><span>Carregando…</span>
             </div>
             <iframe id="ticketGoogleFormsIframe" title="Formulário de chamado" loading="lazy" data-src="https://docs.google.com/forms/d/e/1FAIpQLSd34H86yRAsPvFXT0RIfg5jLMplPNejN4ZYD-tCAcUYMJfksw/viewform?embedded=true"></iframe>
           </div>
+          <section class="ticket-drive-upload" id="ticketDriveUpload" aria-label="Anexos da solicitação">
+            <strong>Anexos da solicitação</strong>
+            <p class="ticket-drive-note" id="ticketDriveMessage" role="status" aria-live="polite">Após enviar o formulário acima, anexe os arquivos à solicitação registrada.</p>
+            <div class="ticket-drive-controls">
+              <select id="ticketDriveTarget" aria-label="Solicitação para os anexos" disabled onchange="changeTicketDriveTarget()"><option value="">Envie o formulário primeiro</option></select>
+              <label class="ticket-drive-note">Até 5 arquivos de 10 MB cada
+                <input type="file" id="ticketDriveFiles" multiple disabled onchange="selectTicketDriveFiles(this.files)">
+              </label>
+              <button type="button" class="btn-sm accent" id="ticketDriveSend" disabled onclick="sendTicketDriveFiles()">Enviar anexos</button>
+              <button type="button" class="btn-sm" id="ticketDriveRefresh" onclick="scheduleTicketFormsImport([0,5000,15000])">Verificar envio do formulário</button>
+            </div>
+            <div class="ticket-drive-files" id="ticketDriveFileList"></div>
+          </section>
         </section>
       </div>
 
@@ -5414,7 +5452,7 @@ async function portalApiRequest(path, options = {}) {
   const headers = new Headers(options.headers || {});
   headers.set("Accept", "application/json");
   headers.set("Authorization", `Bearer ${neonSessionToken}`);
-  if (options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  if (options.body && !(options.body instanceof FormData) && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
 
   try {
     const {response, data} = await fetchJsonWithTimeout(
@@ -6884,7 +6922,7 @@ function stopTicketFormsImport(reset=false){
   if (ticketFormsImportTimer !== null) clearTimeout(ticketFormsImportTimer);
   ticketFormsImportTimer = null;
   ticketFormsImportController?.abort();
-  if (reset) ticketFormsImportState = null;
+  if (reset) { ticketFormsImportState = null; resetTicketDriveUpload(); }
 }
 
 async function prepareTicketFormsImport(){
@@ -6901,6 +6939,8 @@ async function prepareTicketFormsImport(){
       if (ticketFormsImportState !== state || token !== getPortalToken()) return null;
       state.enabled = data.enabled === true && !!data.context;
       state.context = data.context || null;
+      state.uploadsEnabled = data.uploadsEnabled === true;
+      renderTicketDriveUpload();
       return state;
     } catch (error) {
       if (error?.name !== 'AbortError') console.warn('Importação autenticada do Forms indisponível.');
@@ -6936,6 +6976,7 @@ function scheduleTicketFormsImport(delays=[1500]){
       });
       if (!valid() || controller.signal.aborted) return;
       imported = Number(data.imported) || 0;
+      setTicketDriveTargets(data.uploadTargets || []);
       if (imported) showToast(`${imported} solicitação(ões) registrada(s) para aprovação.`, 'success');
     } catch (error) {
       if (error?.name !== 'AbortError' && valid()) console.warn('Não foi possível sincronizar o Forms agora.');
@@ -6960,15 +7001,33 @@ function finishTicketGoogleFormsLoad(){
   scheduleTicketFormsImport(state?.loadCount > 1 ? [1500, 5000, 15000] : [1500]);
 }
 
+function ticketGoogleFormsPrefillUrl(baseUrl){
+  const url = new URL(baseUrl);
+  // Identificadores conferidos no formulario publico; nunca preencher o segundo E-mail.
+  if (!currentUser || url.origin !== 'https://docs.google.com' ||
+      url.pathname !== '/forms/d/e/1FAIpQLSd34H86yRAsPvFXT0RIfg5jLMplPNejN4ZYD-tCAcUYMJfksw/viewform') return baseUrl;
+  const name = String(currentUser.name || currentUser.nome || '').trim();
+  const email = String(currentUser.email || '').trim();
+  const sectors = [...new Set((Array.isArray(currentUser.sectors) ? currentUser.sectors : []).filter(Boolean))];
+  url.searchParams.set('usp', 'pp_url');
+  if (name) url.searchParams.set('entry.431207813', name);
+  if (email) url.searchParams.set('entry.1258827024', email);
+  if (sectors.length === 1) url.searchParams.set('entry.1132196072', sectorLabel(sectors[0]));
+  return url.href;
+}
+
 function configureTicketsView(){
   const admin = isTicketAdmin();
   const host = document.getElementById('ticketAdminListHost');
   if (!host) return false;
-  const owner = String(currentUser?.dbId || currentUser?.id || '') + ':' + admin;
+  const owner = String(currentUser?.dbId || currentUser?.id || '') + ':' + admin + ':' + portalSessionGeneration;
   if (owner !== ticketFormsOwner) {
     ticketFormsOwner = owner;
     ticketFormsOpen = false;
     host.replaceChildren();
+    document.getElementById('ticketGoogleFormsIframe').removeAttribute('src');
+    document.getElementById('ticketGoogleFormsLoading').hidden = false;
+    document.getElementById('ticketGoogleFormsShell').setAttribute('aria-busy', 'true');
   }
   if (admin && !host.hasChildNodes()) {
     host.append(document.getElementById('ticketAdminListTemplate').content.cloneNode(true));
@@ -6995,10 +7054,149 @@ function configureTicketsView(){
     const iframe = document.getElementById('ticketGoogleFormsIframe');
     if (!iframe.getAttribute('src')) {
       iframe.onload = finishTicketGoogleFormsLoad;
-      iframe.src = iframe.dataset.src;
+      iframe.src = ticketGoogleFormsPrefillUrl(iframe.dataset.src);
     }
   }
   return admin && !showForm;
+}
+
+let ticketDriveQueue = [];
+let ticketDriveTargets = [];
+let ticketDriveBusy = false;
+let ticketDriveEpoch = 0;
+let ticketDriveController = null;
+let ticketDriveNotice = '';
+
+function resetTicketDriveUpload(){
+  ticketDriveEpoch++;
+  ticketDriveController?.abort();
+  ticketDriveController = null;
+  ticketDriveBusy = false;
+  ticketDriveQueue = [];
+  ticketDriveTargets = [];
+  ticketDriveNotice = '';
+  const select = document.getElementById('ticketDriveTarget');
+  if (select) select.innerHTML = '<option value="">Envie o formulário primeiro</option>';
+  const picker = document.getElementById('ticketDriveFiles');
+  if (picker) picker.value = '';
+  renderTicketDriveUpload();
+}
+
+function setTicketDriveTargets(targets){
+  const select = document.getElementById('ticketDriveTarget');
+  if (!select) return;
+  const selected = select.value;
+  const previous = new Set(ticketDriveTargets.map(t=>String(t.id)));
+  ticketDriveTargets = (Array.isArray(targets) ? targets : []).filter(t=>
+    t && /^[1-9][0-9]{0,15}$/.test(String(t.id))).slice(0,20);
+  select.innerHTML = '<option value="">Selecione a solicitação</option>' + ticketDriveTargets.map(t=>
+    `<option value="${String(t.id)}">#${escTicket(String(t.number))} — ${escTicket(String(t.title || 'Solicitação'))}</option>`).join('');
+  if (ticketDriveBusy || (selected && ticketDriveTargets.every(t=>previous.has(String(t.id))))) {
+    select.value = ticketDriveTargets.some(t=>String(t.id)===selected) ? selected : '';
+  } else if (ticketDriveTargets.length===1 && (!ticketDriveQueue.length || selected===String(ticketDriveTargets[0].id))) {
+    select.value = String(ticketDriveTargets[0].id);
+  }
+  renderTicketDriveUpload();
+}
+
+function driveAttachmentUrl(attachment){
+  const url = String(attachment?.url || '');
+  return attachment?.storage === 'portal-drive' &&
+    /^https:\/\/drive\.google\.com\/file\/d\/[A-Za-z0-9_-]{10,200}\/view$/.test(url) ? url : '';
+}
+
+function renderTicketDriveUpload(){
+  const panel = document.getElementById('ticketDriveUpload');
+  if (!panel) return;
+  const state = ticketFormsImportState;
+  const select = document.getElementById('ticketDriveTarget');
+  const ready = !!currentUser && !!state?.uploadsEnabled && !!state.context;
+  select.disabled = !ready || !ticketDriveTargets.length || ticketDriveBusy;
+  document.getElementById('ticketDriveFiles').disabled = !ready || !select.value || ticketDriveBusy;
+  document.getElementById('ticketDriveSend').disabled = !ready || !select.value || ticketDriveBusy ||
+    !ticketDriveQueue.some(item=>!item.attachment);
+  document.getElementById('ticketDriveSend').textContent = ticketDriveBusy ? 'Enviando…' : 'Enviar anexos';
+  document.getElementById('ticketDriveRefresh').disabled = ticketDriveBusy || !state?.enabled;
+  document.getElementById('ticketDriveMessage').textContent = ticketDriveNotice ||
+    (state && !state.uploadsEnabled ? 'O envio de anexos está indisponível no momento. O formulário continua funcionando.' :
+     select.value ? 'Confira a solicitação selecionada. Os arquivos serão salvos no Drive e vinculados a ela.' :
+     'Envie o formulário acima primeiro. Se a solicitação ainda não aparecer, clique em “Verificar envio do formulário”.');
+  document.getElementById('ticketDriveFileList').innerHTML = ticketDriveQueue.map((item,index)=> {
+    const link = driveAttachmentUrl(item.attachment);
+    return `<div><span>${escTicket(item.file.name)}${item.attachment ? ' — enviado' : ''}</span>` +
+      (link ? `<a class="btn-sm" href="${link}" target="_blank" rel="noopener noreferrer">Abrir</a>` :
+       `<button type="button" class="btn-sm" ${ticketDriveBusy?'disabled':''} onclick="removeTicketDriveFile(${index})" aria-label="Remover arquivo selecionado">×</button>`) + '</div>';
+  }).join('');
+}
+
+function changeTicketDriveTarget(){
+  if (ticketDriveBusy) return;
+  ticketDriveQueue = [];
+  ticketDriveNotice = '';
+  document.getElementById('ticketDriveFiles').value = '';
+  renderTicketDriveUpload();
+}
+
+function selectTicketDriveFiles(files){
+  if (ticketDriveBusy || !canImportTicketForms() || !document.getElementById('ticketDriveTarget').value) return;
+  ticketDriveNotice = '';
+  for (const file of Array.from(files || [])) {
+    if (file.size < 1 || file.size > 10*1024*1024) { ticketDriveNotice = 'Cada arquivo deve ter conteúdo e no máximo 10 MB.'; continue; }
+    if (ticketDriveQueue.some(item=>item.file.name===file.name && item.file.size===file.size && item.file.lastModified===file.lastModified)) continue;
+    if (ticketDriveQueue.length >= 5) { ticketDriveNotice = 'Selecione até 5 arquivos por solicitação.'; break; }
+    const bytes = new Uint8Array(16); crypto.getRandomValues(bytes);
+    ticketDriveQueue.push({file, uploadId:Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join(''), attachment:null});
+  }
+  document.getElementById('ticketDriveFiles').value = '';
+  renderTicketDriveUpload();
+}
+
+function removeTicketDriveFile(index){
+  if (ticketDriveBusy || ticketDriveQueue[index]?.attachment) return;
+  ticketDriveQueue.splice(index,1);
+  renderTicketDriveUpload();
+}
+
+async function sendTicketDriveFiles(){
+  const state = ticketFormsImportState;
+  const ticketId = document.getElementById('ticketDriveTarget').value;
+  if (ticketDriveBusy || !canImportTicketForms() || !state?.uploadsEnabled || !state.context ||
+      !ticketDriveTargets.some(t=>String(t.id)===ticketId) || !ticketDriveQueue.some(item=>!item.attachment)) return;
+  const epoch = ticketDriveEpoch;
+  const token = getPortalToken();
+  const valid = () => epoch === ticketDriveEpoch && token === getPortalToken() && state === ticketFormsImportState;
+  const controller = new AbortController();
+  ticketDriveController = controller;
+  ticketDriveBusy = true;
+  ticketDriveNotice = 'Enviando os arquivos… Aguarde a confirmação antes de sair.';
+  renderTicketDriveUpload();
+  try {
+    for (const item of ticketDriveQueue) {
+      if (!valid() || controller.signal.aborted) return;
+      if (item.attachment) continue;
+      const form = new FormData();
+      form.append('context', state.context);
+      form.append('ticketId', ticketId);
+      form.append('uploadId', item.uploadId);
+      form.append('file', item.file, item.file.name);
+      const response = await portalApiRequest('/api/chamados/google-forms/attachments', {
+        method:'POST', body:form, signal:controller.signal
+      });
+      if (!valid()) return;
+      if (!response?.ok || !driveAttachmentUrl(response.attachment)) throw new Error('Não foi possível confirmar o arquivo. Tente novamente.');
+      item.attachment = response.attachment;
+      renderTicketDriveUpload();
+    }
+    ticketDriveNotice = 'Anexos enviados e vinculados à solicitação.';
+  } catch (error) {
+    if (valid()) ticketDriveNotice = error.message || 'Não foi possível enviar. Tente novamente.';
+  } finally {
+    if (valid()) {
+      ticketDriveBusy = false;
+      ticketDriveController = null;
+      renderTicketDriveUpload();
+    }
+  }
 }
 
 function ticketResponsibleUsers(){
@@ -8853,6 +9051,7 @@ function addChamadoDetailFiles(fileList){
 
 function removeChamadoDetailFile(index){
   const t=getActiveChamado(); if(!t)return;
+  if(t.attachments[index]?.storage==='portal-drive')return;
   t.attachments.splice(index,1);
   saveTicketStore();renderChamadoDetailAttachments();renderTicketAdmin();
 }
@@ -8867,7 +9066,7 @@ function renderChamadoDetailAttachments(){
       <span>📎</span>
       <span class="name">${escTicket(a.name)}</span>
       <span style="font-size:10px;color:var(--text-muted)">${prettyBytes(Number(a.size)||0)}</span>
-      <button class="action-btn block" onclick="removeChamadoDetailFile(${i})">Excluir</button>
+      ${driveAttachmentUrl(a) ? `<a class="action-btn edit" href="${driveAttachmentUrl(a)}" target="_blank" rel="noopener noreferrer">Abrir no Drive</a>` : `<button class="action-btn block" onclick="removeChamadoDetailFile(${i})">Excluir</button>`}
     </div>`).join('');
 }
 
@@ -9631,7 +9830,7 @@ function openTicketAttachments(id){
               <span>📎</span>
               <span class="name">${escTicket(a.name || 'Arquivo')}</span>
               <span style="color:var(--text-muted)">${prettyBytes(Number(a.size)||0)}</span>
-              ${a.dataUrl ? `<a class="action-btn edit" href="${a.dataUrl}" target="_blank" rel="noopener">Abrir</a>` : `<span style="font-size:11px;color:var(--text-dim)">visualização disponível no sistema publicado</span>`}
+              ${driveAttachmentUrl(a) || a.dataUrl ? `<a class="action-btn edit" href="${driveAttachmentUrl(a) || a.dataUrl}" target="_blank" rel="noopener noreferrer">Abrir</a>` : `<span style="font-size:11px;color:var(--text-dim)">visualização disponível no sistema publicado</span>`}
             </div>
           `).join('')}
         </div>

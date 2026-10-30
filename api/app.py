@@ -4,6 +4,8 @@ from operation_permissions import (operation_permissions_from_payload,
 from forms_import import (reader_config as forms_reader_config, new_context as forms_new_context,
                           read_context as forms_read_context, fetch_rows as forms_fetch_rows,
                           prepare_rows as forms_prepare_rows, persist_rows as forms_persist_rows)
+import drive_attachments as forms_drive
+from werkzeug.exceptions import RequestEntityTooLarge
 import json
 import base64
 import gzip
@@ -541,6 +543,7 @@ def _upsert_ticket(conn, ticket, usuario_sessao=None):
         SELECT id, atualizado_em
         FROM public.chamados
         WHERE id = :id
+        FOR UPDATE
     """), {"id": ticket_id}).mappings().first()
 
     incoming_updated = _timestamp_ou_none(ticket.get("updatedAt"))
@@ -565,7 +568,8 @@ def _upsert_ticket(conn, ticket, usuario_sessao=None):
             solicitante_nome,
             solicitante_email,
             inicio_previsto,
-            fim_previsto
+            fim_previsto,
+            anexos
         FROM public.chamados
         WHERE id = :id
         LIMIT 1
@@ -639,7 +643,8 @@ def _upsert_ticket(conn, ticket, usuario_sessao=None):
         "responsavel_id": int(responsavel_usuario["id"]) if responsavel_usuario else None,
         "inicio_previsto": inicio_previsto,
         "fim_previsto": fim_previsto,
-        "anexos": json.dumps(_json_lista(ticket.get("attachments")), ensure_ascii=False),
+        "anexos": json.dumps(_validar_lista_anexos(forms_drive.merge_managed(
+            existente.get("anexos") if existente else [], ticket.get("attachments"))), ensure_ascii=False),
         "comentarios": json.dumps(_json_lista(ticket.get("comments")), ensure_ascii=False),
         "checklist": json.dumps(_json_lista(ticket.get("checklist")), ensure_ascii=False),
         "tags": json.dumps(_json_lista(ticket.get("tags")), ensure_ascii=False),
@@ -4357,7 +4362,8 @@ def api_forms_import_session():
         token = _extrair_bearer_token()
         _, started = _auth_serializer().loads(token, max_age=AUTH_TOKEN_MAX_AGE, return_timestamp=True)
         context = forms_new_context(_auth_serializer(), user, token, started)
-        return _forms_import_response({"ok": True, "enabled": True, "context": context})
+        return _forms_import_response({"ok": True, "enabled": True, "context": context,
+                                       "uploadsEnabled": bool(forms_drive.upload_config())})
     except Exception:
         log("Falha ao preparar importacao autenticada do Forms.", "ERRO")
         return _forms_import_response({"ok": False, "erro": "Importação do Forms indisponível."}, 503)
@@ -4387,7 +4393,11 @@ def api_forms_import():
             with engine.begin() as conn:
                 imported = forms_persist_rows(conn, user, rows,
                     lambda connection, ticket_id: _numero_para_novo_chamado(connection, ticket_id, None))
-        return _forms_import_response({"ok": True, "imported": imported})
+        targets = []
+        if forms_drive.upload_config():
+            with engine.begin() as conn:
+                targets = forms_drive.own_targets(conn, user, since)
+        return _forms_import_response({"ok": True, "imported": imported, "uploadTargets": targets})
     except PermissionError:
         return _resposta_nao_autorizado()
     except ValueError as error:
@@ -4395,6 +4405,48 @@ def api_forms_import():
     except Exception:
         log("Falha na importacao do Forms; nenhum lote parcial foi confirmado.", "ERRO")
         return _forms_import_response({"ok": False, "erro": "Não foi possível importar o Forms agora."}, 503)
+
+
+@app.route("/api/chamados/google-forms/attachments", methods=["POST"])
+def api_forms_attachment():
+    try:
+        user = _usuario_autenticado()
+        if not user:
+            return _resposta_nao_autorizado()
+        config = forms_drive.upload_config()
+        if not config:
+            return _forms_import_response({"ok": False, "erro": "O envio de anexos ainda não foi configurado."}, 503)
+        # Limite específico deste endpoint, inclusive para multipart/chunked.
+        request.max_content_length = forms_drive.MAX_BYTES + 256 * 1024
+        if set(request.form) != {"context", "ticketId", "uploadId"} or set(request.files) != {"file"}:
+            raise ValueError("Envie um arquivo e o contexto da solicitação.")
+        try:
+            since = forms_read_context(_auth_serializer(), request.form["context"], user, _extrair_bearer_token())
+        except (BadSignature, SignatureExpired, ValueError, TypeError):
+            return _forms_import_response({"ok": False, "erro": "Sessão do formulário expirada. Entre novamente."}, 403)
+        raw_id = request.form["ticketId"]
+        if not re.fullmatch(r"[1-9][0-9]{0,15}", raw_id):
+            raise ValueError("Solicitação inválida.")
+        ticket_id = int(raw_id)
+        file, contents = forms_drive.read_file(request.files["file"])
+        with engine.begin() as conn:
+            receipt = forms_drive.reserve(conn, user, ticket_id, since, request.form["uploadId"], file)
+        # Fora da transação SQL. Nome vem do cadastro autenticado, não do navegador.
+        file_id = receipt.get("drive_file_id") if receipt["status"] == "done" else None
+        if not file_id:
+            file_id = forms_drive.send_to_drive(config, receipt, contents)
+        with engine.begin() as conn:
+            attachment = forms_drive.finish(conn, user, ticket_id, since, receipt, file_id)
+        return _forms_import_response({"ok": True, "attachment": attachment})
+    except RequestEntityTooLarge:
+        return _forms_import_response({"ok": False, "erro": "O arquivo excede o limite de 10 MB."}, 413)
+    except PermissionError:
+        return _forms_import_response({"ok": False, "erro": "Você não pode anexar a esta solicitação nesta sessão."}, 403)
+    except ValueError as error:
+        return _forms_import_response({"ok": False, "erro": str(error)}, 400)
+    except Exception:
+        log("Falha ao enviar anexo do Forms para o Drive.", "ERRO")
+        return _forms_import_response({"ok": False, "erro": "Não foi possível confirmar o envio. Tente novamente; o mesmo arquivo não será duplicado."}, 503)
 
 
 @app.route("/api/chamados/usuarios", methods=["GET"])

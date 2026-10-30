@@ -38,6 +38,29 @@ O formato verificado foi `29/10/2026 17:46:39`, interpretado no fuso de Brasíli
 nem a formatação da planilha. A aba padrão exportada atualmente tem os cabeçalhos
 corretos; se a estrutura ou a aba mudar, conferir a leitura antes de continuar.
 
+## Preenchimento no Forms
+
+Na tela autenticada de Chamados, a URL incorporada preenche o Nome e o primeiro
+E-mail com o cadastro do usuário logado. Os identificadores foram conferidos no
+formulário público: `entry.431207813` (Nome), `entry.1258827024` (E-mail do solicitante)
+e `entry.1132196072` (Setor). O E-mail do usuário solicitado, `entry.455859597`, fica
+sem preenchimento automático. Nenhum token ou senha é colocado na URL do Google.
+
+Quando existe um único setor liberado no cadastro, seu rótulo preenche o Setor.
+Quando existem vários, o campo fica em branco, conforme definido pelo usuário:
+os setores cadastrados são permissões de relatórios, não um departamento pessoal.
+Outro usuário/login recarrega o iframe, evitando dados da sessão
+anterior. No botão público da tela de login não há identidade autenticada para preencher.
+
+O pré-preenchimento não envia respostas nem modifica a planilha. Os campos do
+Google continuam editáveis; a API mantém a validação da identidade na importação.
+O formulário público conferido não contém pergunta de upload. Ativar upload no
+Google exige alterar o próprio formulário; o HTML do portal não cria perguntas no
+iframe. O código legado de anexos do portal guarda nome/tamanho, não o arquivo.
+Destino definido: upload pelo portal para pasta no Google Drive, com nome da
+pessoa e data/hora. O código está preparado; a autorização do Google e ativação
+manual estão em [ANEXOS_DRIVE.md](ANEXOS_DRIVE.md). Não houve envio real de arquivos.
+
 "Logado" segue o modelo de autenticação já existente: token válido, não expirado e
 usuário ativo, verificados na requisição. O logout é stateless. O e-mail no Forms
 é autodeclarado; cruzá-lo com o login não prova quem digitou a resposta no Google.

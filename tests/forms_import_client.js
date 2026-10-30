@@ -14,6 +14,7 @@ async function testFormsImportClient(html) {
     const clearTimeout=id=>timers.delete(id);
     class AbortController{constructor(){this.signal={aborted:false}}abort(){this.signal.aborted=true}}
     const showToast=message=>toasts.push(message);
+    const resetTicketDriveUpload=()=>{},renderTicketDriveUpload=()=>{},setTicketDriveTargets=()=>{};
     const console={warn:()=>{}};
     async function portalApiRequest(path,options){
       requests.push({path,options});
@@ -53,7 +54,8 @@ async function testFormsImportClient(html) {
   assert(client.toasts.length===1&&client.timers.size===0,'Logout reativou importacao');
   const off=new Function(script)();off.disable();await off.prepare();off.schedule();await off.next();
   assert(off.requests.every(r=>r.path.endsWith('/session')),'Integracao desabilitada consultou Google');
-  assert(!html.match(/ticketGoogleFormsIframe[^>]+entry\./),'Introduziu preenchimento no Forms');
+  assert(html.includes("url.searchParams.set('entry.1258827024', email)") &&
+    !html.includes("url.searchParams.set('entry.455859597'"),'Preencheu o segundo E-mail em vez do solicitante');
   const wrapper=html.match(/^async function fetchJsonWithTimeout\([^\n]*\) ?\{[\s\S]*?^\}/m)[0];
   let listener,signal,removed=false;
   class Controller{constructor(){this.signal={aborted:false}}abort(){this.signal.aborted=true}}

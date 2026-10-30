@@ -16,6 +16,7 @@ from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'api'))
 import forms_import as forms
+import drive_attachments
 
 
 class Result:
@@ -87,6 +88,7 @@ class FormsTests(unittest.TestCase):
               'forms_new_context': forms.new_context, 'forms_read_context': forms.read_context,
               'forms_fetch_rows': Mock(return_value=self.source), 'forms_prepare_rows': forms.prepare_rows,
               'forms_persist_rows': forms.persist_rows, 'engine': Mock(),
+              'forms_drive': Mock(upload_config=lambda: None),
               '_numero_para_novo_chamado': lambda *args, **kwargs: 1054}
         tree = ast.parse((ROOT / 'api/app.py').read_text(encoding='utf-8-sig'))
         for node in tree.body:

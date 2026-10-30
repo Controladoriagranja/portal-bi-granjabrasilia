@@ -21,10 +21,12 @@ FORM_URL = "https://docs.google.com/forms/d/e/1FAIpQLSd34H86yRAsPvFXT0RIfg5jLMpl
 def main():
     html = (ROOT / "index.html").read_text(encoding="utf-8")
     names = ("isTicketAdmin", "isTicketsFormOnlyView", "finishTicketGoogleFormsLoad", "configureTicketsView",
-             "openNewTicket", "closeNewTicket", "renderTickets", "visibleTicketsForCurrentUser",
+             "openNewTicket", "closeNewTicket", "renderTickets", "visibleTicketsForCurrentUser", "ticketGoogleFormsPrefillUrl",
              "canSyncTickets", "stopCentralTicketSync", "initCentralTicketSync", "runCentralTicketSync",
              "refreshTicketsManually", "pullTicketStoreFromServer", "loadPortalTicketUsers", "switchView",
-             "escTicket", "ticketTableSortValue", "ticketStatusClass", "ticketStatusText", "formatTicketDate")
+             "escTicket", "ticketTableSortValue", "ticketStatusClass", "ticketStatusText", "formatTicketDate",
+             "resetTicketDriveUpload", "setTicketDriveTargets", "driveAttachmentUrl", "renderTicketDriveUpload",
+             "changeTicketDriveTarget", "selectTicketDriveFiles", "removeTicketDriveFile", "sendTicketDriveFiles", "canImportTicketForms")
     source = "\n".join(re.search(r"(?m)^(?:async )?function " + name + r"\([^\n]*\) ?\{[\s\S]*?^\}", html).group()
                        for name in names)
     fixture = re.sub(r"<script\b[^>]*>[\s\S]*?</script>|<link\b[^>]*>", "", html, flags=re.I)
@@ -53,7 +55,7 @@ def main():
 
     bootstrap = """
       let currentUser = {id:41,role:'sector'};
-      let ticketFormsOpen=false,ticketFormsOwner=null;
+      let ticketFormsOpen=false,ticketFormsOwner=null,portalSessionGeneration=0;
       let ticketSyncActive=false,ticketSyncGeneration=0,ticketSyncTimer=null,ticketSyncReadController=null,ticketSyncRunPromise=null;
       let ticketSaveInProgress=false,ticketDeleteInProgress=false,ticketPullInProgress=false,ticketMutationGeneration=0;
       let ticketApiOnline=false,ticketHasConnectedOnce=false,ticketConsecutiveFailures=0,ticketLastRemoteSignature='';
@@ -64,8 +66,18 @@ def main():
       window.reads=0; window.calls=[];window.boardRenders=0;
       let ticketStore=new Proxy({tickets:records},{get(target,key){if(key==='tickets')window.reads++;return target[key];}});
       const getPortalToken=()=> 'offline'; const currentEmail=()=>'';
+      const sectorLabel=code=>({ti:'TI',comercial:'Comercial'}[code]||code);
       const prepareTicketFormsImport=async()=>null;const stopTicketFormsImport=()=>{};
       const scheduleTicketFormsImport=()=>{};let ticketFormsImportState=null;
+      let ticketDriveQueue=[],ticketDriveTargets=[],ticketDriveBusy=false,ticketDriveEpoch=0,ticketDriveController=null,ticketDriveNotice='';
+      window.uploadCalls=[];
+      async function portalApiRequest(path,options){
+        window.uploadCalls.push({path,options});
+        if(window.failUploadOnce){window.failUploadOnce=false;throw new Error('Falha simulada')}
+        const reply={ok:true,attachment:{storage:'portal-drive',url:'https://drive.google.com/file/d/mockDriveFile1234/view'}};
+        if(window.holdUpload)return new Promise(resolve=>window.releaseUpload=()=>resolve(reply));
+        return reply;
+      }
       const updateTicketSyncIndicator=()=>{};const stopUpdateMonitor=()=>{};const showToast=()=>{};
       const renderTicketAdmin=()=>{window.boardRenders++};
       const renderPortalTicketUserSelects=()=>{};const cacheTicketStore=()=>{};
@@ -90,6 +102,14 @@ def main():
         js("const s=document.createElement('script');s.textContent=arguments[0];document.head.append(s)", bootstrap + source)
         js("document.querySelectorAll('.screen').forEach(e=>e.classList.remove('active'));document.getElementById('screen-portal').classList.add('active')")
         check(js("return document.getElementById('ticketGoogleFormsIframe').dataset.src") == FORM_URL, "URL incorreta")
+        from urllib.parse import urlparse, parse_qs
+        prefilled=js("currentUser={id:41,name:'Nome & Teste',email:'autor@example.invalid',sectors:['ti']};return ticketGoogleFormsPrefillUrl(arguments[0])", FORM_URL)
+        query=parse_qs(urlparse(prefilled).query)
+        check(query['entry.431207813']==['Nome & Teste'] and query['entry.1258827024']==['autor@example.invalid'], 'Nome/email nao preenchidos')
+        check(query['entry.1132196072']==['TI'] and query['embedded']==['true'], 'Setor unico/iframe')
+        check('entry.455859597' not in query, 'Preencheu e-mail de usuario solicitado')
+        multiple=js("currentUser.sectors=['ti','comercial'];return ticketGoogleFormsPrefillUrl(arguments[0])", FORM_URL)
+        check('entry.1132196072' not in parse_qs(urlparse(multiple).query), 'Escolheu setor arbitrario')
         check(js("return !document.getElementById('newTicketView')"), "Formulario antigo montado")
         check(js("const f=document.getElementById('ticketGoogleFormsIframe');return f.title==='Formulário de chamado'&&f.loading==='lazy'&&!['width','height','frameborder','marginheight','marginwidth'].some(a=>f.hasAttribute(a))"), "Contrato iframe")
         mock = '<!doctype html><meta charset="utf-8"><style>body{font:16px Arial;margin:24px;color:#334155}div{height:1000px}</style><h2>Formulário de chamado</h2><p>Conteúdo simulado para teste local.</p><div></div>'
@@ -124,6 +144,35 @@ def main():
             if name == 'celular':
                 check(js("return document.getElementById('ticketGoogleFormsIframe').getBoundingClientRect().bottom<=innerHeight-70"), "Forms coberto pela navegacao movel")
             if name in ('pc','celular'): driver.save_screenshot(str(output/('forms-'+name+'.png')))
+        # Arquivos em memória, envio HTTP simulado e nenhum acesso a contas Google.
+        js("ticketFormsImportState={token:'offline',enabled:true,uploadsEnabled:true,context:'signed-test'};setTicketDriveTargets([{id:'7',number:1007,title:'Pedido de teste'}])")
+        check(js("return document.getElementById('ticketDriveTarget').value==='7'&&!document.getElementById('ticketDriveFiles').disabled"), 'Anexos nao habilitados para pedido proprio')
+        js("selectTicketDriveFiles([new File(['a'],'teste.pdf',{type:'application/pdf'})])")
+        check(js("return ticketDriveQueue.length===1&&!document.getElementById('ticketDriveSend').disabled"), 'Selecao de arquivo')
+        driver.execute_async_script("const done=arguments[0];sendTicketDriveFiles().then(done)")
+        check(js("const c=window.uploadCalls[0];return c.path==='/api/chamados/google-forms/attachments'&&c.options.body instanceof FormData&&c.options.body.get('context')==='signed-test'&&c.options.body.get('ticketId')==='7'&&!c.options.body.has('nome')"), 'Multipart ou identidade incorreta')
+        check(js("return ticketDriveQueue[0].attachment&&document.querySelector('#ticketDriveFileList a').rel.includes('noopener')&&document.getElementById('ticketDriveSend').disabled"), 'Arquivo nao confirmado/link seguro')
+        driver.execute_async_script("const done=arguments[0];sendTicketDriveFiles().then(done)")
+        check(js("return window.uploadCalls.length===1"), 'Reenviou arquivo ja confirmado')
+        check(js("return !driveAttachmentUrl({storage:'portal-drive',url:'javascript:alert(1)'})"), 'Link externo inseguro')
+        js("changeTicketDriveTarget();window.failUploadOnce=true;selectTicketDriveFiles([new File(['x'],'retentar.pdf')])")
+        driver.execute_async_script("const done=arguments[0];sendTicketDriveFiles().then(done)")
+        check(js("return !ticketDriveBusy&&!ticketDriveQueue[0].attachment&&document.getElementById('ticketDriveMessage').textContent==='Falha simulada'"), 'Falha perdeu arquivo ou bloqueou nova tentativa')
+        js("window.retryKey=window.uploadCalls.at(-1).options.body.get('uploadId')")
+        driver.execute_async_script("const done=arguments[0];sendTicketDriveFiles().then(done)")
+        check(js("return ticketDriveQueue[0].attachment&&window.uploadCalls.at(-1).options.body.get('uploadId')===window.retryKey"), 'Nova tentativa mudou identidade do envio')
+        js("changeTicketDriveTarget();selectTicketDriveFiles(Array.from({length:6},(_,i)=>new File(['x'],'f'+i+'.pdf'))) ")
+        check(js("return ticketDriveQueue.length===5"), 'Limite de 5 arquivos')
+        for width,height in ((1440,1000),(768,1024),(390,844),(320,640)):
+            driver.execute_cdp_cmd('Emulation.setDeviceMetricsOverride', {'width':width,'height':height,'deviceScaleFactor':1,'mobile':width<768})
+            js("document.getElementById('ticketDriveUpload').scrollIntoView({block:'center'})")
+            check(js("return document.documentElement.scrollWidth<=innerWidth+1&&document.getElementById('ticketDriveUpload').getBoundingClientRect().width<=innerWidth"), 'Anexos com scroll horizontal')
+            if width in (1440,390): driver.save_screenshot(str(output/('anexos-'+str(width)+'.png')))
+        js("changeTicketDriveTarget();window.holdUpload=true;selectTicketDriveFiles([new File(['x'],'pendente.pdf')]);window.pendingUpload=sendTicketDriveFiles()")
+        wait("return !!window.releaseUpload")
+        js("window.oldSignal=window.uploadCalls.at(-1).options.signal;resetTicketDriveUpload();currentUser=null;ticketFormsImportState=null;window.releaseUpload()")
+        wait("return !ticketDriveBusy")
+        check(js("return window.oldSignal.aborted&&ticketDriveQueue.length===0&&!document.getElementById('ticketDriveFileList').textContent"), 'Logout manteve arquivo ou resposta anterior')
         # Manter o Painel de Chamados com permissao individual, fora desta tela.
         js("currentUser={id:43,role:'sector',ticketPanelAccess:true};switchView('ticketadmin')")
         wait("return canSyncTickets()")
