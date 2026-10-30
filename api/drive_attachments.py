@@ -10,6 +10,8 @@ import time
 import unicodedata
 from datetime import datetime, timezone
 from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
+from http.client import HTTPException
 
 from sqlalchemy import text
 from forms_import import SPREADSHEET_ID, CSV_TIMEZONE
@@ -17,6 +19,13 @@ from forms_import import SPREADSHEET_ID, CSV_TIMEZONE
 FOLDER_ID = "1snZ6yjFvgoXidSdzXc5OnjCcIfmSK6mW"
 MAX_BYTES = 10 * 1024 * 1024
 MAX_FILES = 5
+
+
+class DriveUploadError(RuntimeError):
+    """Motivo seguro para a tela/log: nunca incluir corpo ou URL de uma exceção."""
+    def __init__(self, code, message):
+        super().__init__(message)
+        self.code = code
 
 
 def upload_status():
@@ -171,14 +180,39 @@ def send_to_drive(config, receipt, data):
     signature = hmac.new(secret.encode(), (stamp + "." + payload).encode(), hashlib.sha256).hexdigest()
     body = json.dumps({"timestamp": stamp, "payload": payload, "signature": signature}).encode()
     req = Request(url, data=body, method="POST", headers={"Content-Type": "application/json", "Accept": "application/json"})
-    with urlopen(req, timeout=35) as response:
-        raw = response.read(16385)
+    try:
+        with urlopen(req, timeout=35) as response:
+            raw = response.read(16385)
+    except HTTPError as error:
+        error.close()
+        if error.code in (401, 403):
+            raise DriveUploadError("google_access_denied", "O Google negou acesso ao serviço. Confira a implantação do Apps Script: executar como Eu e acesso Qualquer pessoa.") from None
+        if error.code in (404, 405):
+            raise DriveUploadError("google_deployment_invalid", "A implantação do Apps Script não aceitou o envio. Confira a URL /exec e a implantação como Aplicativo da Web.") from None
+        if error.code == 429:
+            raise DriveUploadError("google_rate_limit", "O Google limitou os envios temporariamente. Aguarde e tente novamente com os mesmos arquivos.") from None
+        raise DriveUploadError("google_http_error", "O serviço do Google retornou um erro. Tente novamente com os mesmos arquivos.") from None
+    except TimeoutError:
+        raise DriveUploadError("google_timeout", "O Google demorou para confirmar o envio. Tente novamente com os mesmos arquivos para recuperar a confirmação.") from None
+    except URLError as error:
+        if isinstance(error.reason, TimeoutError):
+            raise DriveUploadError("google_timeout", "O Google demorou para confirmar o envio. Tente novamente com os mesmos arquivos.") from None
+        raise DriveUploadError("google_connection_failed", "O servidor não conseguiu se conectar ao Google. Tente novamente em alguns instantes.") from None
+    except (OSError, HTTPException):
+        raise DriveUploadError("google_connection_failed", "A conexão com o Google foi interrompida. Tente novamente com os mesmos arquivos.") from None
     if len(raw) > 16384:
-        raise ValueError("Resposta do Drive inválida.")
-    result = json.loads(raw)
+        raise DriveUploadError("google_invalid_response", "O Google retornou uma resposta inesperada. Confira se o Apps Script está publicado como Aplicativo da Web com acesso Qualquer pessoa.")
+    try:
+        result = json.loads(raw)
+    except (ValueError, UnicodeError):
+        raise DriveUploadError("google_invalid_response", "O Google não retornou a confirmação de upload. Confira o acesso Qualquer pessoa e a versão implantada do Apps Script.") from None
+    if not isinstance(result, dict):
+        raise DriveUploadError("google_invalid_response", "O Google retornou uma confirmação inválida.")
     file_id = str(result.get("fileId") or "")
     if result.get("ok") is not True or not re.fullmatch(r"[A-Za-z0-9_-]{10,200}", file_id):
-        raise ValueError("Não foi possível gravar o anexo no Drive. Tente novamente.")
+        if result.get("retry") is True:
+            raise DriveUploadError("google_busy", "O serviço está concluindo outro envio. Aguarde alguns segundos e tente novamente.")
+        raise DriveUploadError("google_upload_rejected", "O Apps Script recusou o arquivo. Confira se o segredo é igual nos dois locais e se a conta do script pode editar a pasta.")
     return file_id
 
 

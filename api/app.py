@@ -6,6 +6,7 @@ from forms_import import (reader_config as forms_reader_config, new_context as f
                           prepare_rows as forms_prepare_rows, persist_rows as forms_persist_rows)
 import drive_attachments as forms_drive
 from werkzeug.exceptions import RequestEntityTooLarge
+from werkzeug.wsgi import LimitedStream
 import json
 import base64
 import gzip
@@ -4351,6 +4352,33 @@ def _forms_import_response(data, status=200):
     return response, status
 
 
+def _limit_forms_upload_request():
+    # Request.max_content_length só ganhou setter no Flask 3.1.
+    # Limitar o stream mantém compatibilidade sem mudar limites de outras rotas.
+    limit = forms_drive.MAX_BYTES + 256 * 1024
+    if request.content_length is not None and request.content_length > limit:
+        raise RequestEntityTooLarge()
+    request.environ["wsgi.input"] = LimitedStream(request.environ["wsgi.input"], limit, is_max=True)
+    # O parser pode abrir um arquivo temporário antes de descobrir excesso no stream.
+    # Fechar esses arquivos também quando a análise multipart é interrompida.
+    upload_request = request._get_current_object()
+    factory = upload_request._get_file_stream
+    opened = []
+    def tracked_stream(*args, **kwargs):
+        stream = factory(*args, **kwargs)
+        opened.append(stream)
+        return stream
+    upload_request._get_file_stream = tracked_stream
+    try:
+        upload_request._load_form_data()
+    except Exception:
+        for stream in opened:
+            stream.close()
+        raise
+    finally:
+        upload_request._get_file_stream = factory
+
+
 @app.route("/api/chamados/google-forms/session", methods=["POST"])
 def api_forms_import_session():
     try:
@@ -4436,7 +4464,7 @@ def api_forms_attachment_direct():
         if not config:
             return _forms_import_response({"ok": False, "erro": "O envio de anexos aguarda configuração no servidor.",
                                            "uploadStatus": forms_drive.upload_status()}, 503)
-        request.max_content_length = forms_drive.MAX_BYTES + 256 * 1024
+        _limit_forms_upload_request()
         if set(request.form) != {"context", "uploadId"} or set(request.files) != {"file"}:
             raise ValueError("Envie um arquivo e o contexto autenticado.")
         try:
@@ -4450,11 +4478,15 @@ def api_forms_attachment_direct():
         return _forms_import_response({"ok": True, "attachment": forms_drive.direct_attachment(receipt, file_id)})
     except RequestEntityTooLarge:
         return _forms_import_response({"ok": False, "erro": "O arquivo excede o limite de 10 MB."}, 413)
+    except forms_drive.DriveUploadError as error:
+        log(f"Falha no envio direto ao Drive: codigo={error.code}.", "ERRO")
+        return _forms_import_response({"ok": False, "erro": str(error), "errorCode": error.code}, 503)
     except ValueError as error:
         return _forms_import_response({"ok": False, "erro": str(error)}, 400)
-    except Exception:
-        log("Falha no envio direto de anexo ao Drive.", "ERRO")
-        return _forms_import_response({"ok": False, "erro": "Não foi possível enviar. Tente novamente com o mesmo arquivo."}, 503)
+    except Exception as error:
+        log(f"Falha no envio direto ao Drive: tipo={type(error).__name__}.", "ERRO")
+        return _forms_import_response({"ok": False, "erro": "Falha interna ao preparar o envio. Informe ao suporte o código upload_internal.",
+                                       "errorCode": "upload_internal"}, 503)
 
 
 @app.route("/api/chamados/google-forms/attachments", methods=["POST"])
@@ -4467,7 +4499,7 @@ def api_forms_attachment():
         if not config:
             return _forms_import_response({"ok": False, "erro": "O envio de anexos ainda não foi configurado."}, 503)
         # Limite específico deste endpoint, inclusive para multipart/chunked.
-        request.max_content_length = forms_drive.MAX_BYTES + 256 * 1024
+        _limit_forms_upload_request()
         if set(request.form) != {"context", "ticketId", "uploadId"} or set(request.files) != {"file"}:
             raise ValueError("Envie um arquivo e o contexto da solicitação.")
         try:

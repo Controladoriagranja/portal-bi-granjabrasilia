@@ -93,6 +93,14 @@ novos ou alteração do modelo de autenticação. Armazenamento/cotas são os da
 
 ## Verificação
 
+Correção de compatibilidade: o limite de upload é aplicado ao stream da requisição,
+sem depender do setter de `Request.max_content_length` (disponível apenas no Flask
+3.1+). Evita o 503 em versões anteriores sem alterar a biblioteca ou outros endpoints.
+Erros do Google agora têm mensagens e códigos distintos para acesso negado, implantação
+inválida, conexão, timeout, limite temporário e rejeição pelo Apps Script. Logs não
+incluem conteúdo, nomes de arquivo, URLs de resposta, tokens ou segredos.
+O arquivo `.gs` não mudou; esta correção publica apenas os arquivos do backend.
+
 Somente testes locais com mocks/AST e Chrome com tráfego externo bloqueado: contexto
 assinado, identidade, limites, nome/carimbo estáveis, nenhuma transação ou escrita
 no envio direto, recuperação após falha, logout, links e layout de celular/tablet/PC.

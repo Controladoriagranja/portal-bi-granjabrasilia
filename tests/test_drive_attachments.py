@@ -13,9 +13,11 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from flask import Flask, request, jsonify
+from flask import Flask, Request as FlaskRequest, request, jsonify
 from werkzeug.datastructures import FileStorage
 from werkzeug.exceptions import RequestEntityTooLarge
+from werkzeug.wsgi import LimitedStream
+from urllib.error import HTTPError, URLError
 from itsdangerous import BadSignature, SignatureExpired
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -117,7 +119,7 @@ class DriveTests(unittest.TestCase):
         response.__enter__ = Mock(return_value=response)
         response.__exit__ = Mock(return_value=False)
         response.read.return_value = b'{"ok":false}'
-        with patch.object(drive, 'urlopen', return_value=response), self.assertRaises(ValueError):
+        with patch.object(drive, 'urlopen', return_value=response), self.assertRaises(drive.DriveUploadError):
             drive.send_to_drive(self.config, self.reserve(), self.data)
 
     def test_finish_is_idempotent_and_preserves_previous_attachments(self):
@@ -137,10 +139,12 @@ class DriveTests(unittest.TestCase):
         legacy = {'name':'old-file'}
         self.assertEqual(drive.merge_managed([actual], [legacy, fake]), [legacy, actual])
 
-    def routes(self):
+    def routes(self, request_class=None):
         app = Flask('mock-upload-test')
+        if request_class is not None: app.request_class=request_class
         mocked = Mock(wraps=drive)
         mocked.MAX_BYTES = drive.MAX_BYTES
+        mocked.DriveUploadError = drive.DriveUploadError
         mocked.upload_config.return_value = self.config
         receipt = self.reserve()
         mocked.reserve.return_value = receipt
@@ -150,7 +154,8 @@ class DriveTests(unittest.TestCase):
               '_usuario_autenticado':lambda:self.user, '_extrair_bearer_token':lambda:'mock-token',
               '_auth_serializer':Mock(), 'forms_read_context':Mock(return_value=self.since),
               '_resposta_nao_autorizado':lambda:(jsonify(ok=False),401), 'engine':Mock(),
-              'BadSignature':BadSignature, 'SignatureExpired':SignatureExpired, 'RequestEntityTooLarge':RequestEntityTooLarge}
+              'BadSignature':BadSignature, 'SignatureExpired':SignatureExpired, 'RequestEntityTooLarge':RequestEntityTooLarge,
+              'LimitedStream':LimitedStream}
         ns.update(forms_new_context=Mock(return_value='new-signed-context'), datetime=datetime, timezone=timezone)
         mocked.upload_status.return_value = 'ready'
         mocked.direct_receipt.side_effect = drive.direct_receipt
@@ -160,7 +165,7 @@ class DriveTests(unittest.TestCase):
         ns['engine'].begin.return_value.__exit__ = Mock(return_value=False)
         tree = ast.parse((ROOT/'api/app.py').read_text(encoding='utf-8-sig'))
         for node in tree.body:
-            if isinstance(node, ast.FunctionDef) and node.name in {'_forms_import_response','api_forms_attachment',
+            if isinstance(node, ast.FunctionDef) and node.name in {'_forms_import_response','_limit_forms_upload_request','api_forms_attachment',
                     'api_forms_attachment_status','api_forms_attachment_direct'}:
                 node.decorator_list=[]
                 exec(compile(ast.Module(body=[node],type_ignores=[]),'isolated-upload','exec'),ns)
@@ -263,6 +268,88 @@ class DriveTests(unittest.TestCase):
             self.assertEqual(drive.upload_status(),'ready')
             os.environ['PORTAL_DRIVE_UPLOAD_URL']='https://wrong.invalid'
             self.assertEqual(drive.upload_status(),'invalid_url')
+
+    def test_direct_supports_readonly_limit_in_flask_before_31(self):
+        class OlderFlaskRequest(FlaskRequest):
+            @property
+            def max_content_length(self): return None
+        client, ns, remote=self.routes(OlderFlaskRequest)
+        payload=self.payload();payload.pop('ticketId')
+        response=client.post('/direct',data=payload)
+        self.assertEqual(response.status_code,200)
+        remote.send_to_drive.assert_called_once()
+
+    def test_known_google_errors_are_distinct_and_sanitized(self):
+        cases=[(HTTPError('https://private.invalid/token',403,'private-secret',None,None),'google_access_denied'),
+               (HTTPError('https://private.invalid/token',404,'private-secret',None,None),'google_deployment_invalid'),
+               (HTTPError('https://private.invalid/token',429,'private-secret',None,None),'google_rate_limit'),
+               (HTTPError('https://private.invalid/token',500,'private-secret',None,None),'google_http_error'),
+               (TimeoutError('private-secret'),'google_timeout'),
+               (URLError('private-secret'),'google_connection_failed')]
+        receipt=drive.direct_receipt(self.user,self.file,self.since,self.key)
+        for error,code in cases:
+            with self.subTest(code=code),patch.object(drive,'urlopen',side_effect=error):
+                with self.assertRaises(drive.DriveUploadError) as caught:
+                    drive.send_to_drive(self.config,receipt,self.data)
+                self.assertEqual(caught.exception.code,code)
+                self.assertNotIn('private-secret',str(caught.exception))
+                self.assertNotIn('private.invalid',str(caught.exception))
+
+    def test_google_html_busy_and_rejection_have_actionable_errors(self):
+        response=Mock();response.__enter__=Mock(return_value=response);response.__exit__=Mock(return_value=False)
+        cases=[(b'<html>private-secret</html>','google_invalid_response'),
+               (b'{"ok":false,"retry":true}','google_busy'),(b'{"ok":false}','google_upload_rejected')]
+        receipt=drive.direct_receipt(self.user,self.file,self.since,self.key)
+        for raw,code in cases:
+            response.read.return_value=raw
+            with self.subTest(code=code),patch.object(drive,'urlopen',return_value=response):
+                with self.assertRaises(drive.DriveUploadError) as caught: drive.send_to_drive(self.config,receipt,self.data)
+                self.assertEqual(caught.exception.code,code)
+                self.assertNotIn('private-secret',str(caught.exception))
+
+    def test_two_photos_three_csv_are_accepted_sequentially_without_database(self):
+        client,ns,remote=self.routes()
+        for i,name in enumerate(['foto.png','foto.jpg','um.csv','dois.csv','tres.csv']):
+            response=client.post('/direct',data={'context':'signed-test','uploadId':f'{i:032x}',
+                                'file':(io.BytesIO(b'local-fixture'),name)})
+            self.assertEqual(response.status_code,200)
+        self.assertEqual(remote.send_to_drive.call_count,5)
+        ns['engine'].begin.assert_not_called()
+
+    def test_direct_rejects_oversize_body_with_413(self):
+        client,ns,remote=self.routes()
+        payload=self.payload();payload.pop('ticketId')
+        response=client.post('/direct',data=payload,environ_overrides={'CONTENT_LENGTH':str(drive.MAX_BYTES+256*1024+1)})
+        self.assertEqual(response.status_code,413)
+        remote.send_to_drive.assert_not_called()
+
+    def test_direct_returns_safe_google_reason(self):
+        client,ns,remote=self.routes()
+        remote.send_to_drive.side_effect=drive.DriveUploadError('google_access_denied','O Google negou acesso ao serviço.')
+        payload=self.payload();payload.pop('ticketId')
+        response=client.post('/direct',data=payload)
+        self.assertEqual((response.status_code,response.json['errorCode']),(503,'google_access_denied'))
+        ns['engine'].begin.assert_not_called()
+
+    def test_stream_limit_handles_upload_without_content_length(self):
+        streams=[]
+        class RecordingRequest(FlaskRequest):
+            def _get_file_stream(self,*args,**kwargs):
+                stream=super()._get_file_stream(*args,**kwargs)
+                streams.append(stream)
+                return stream
+        client,ns,remote=self.routes(RecordingRequest)
+        payload=self.payload();payload.pop('ticketId')
+        response=client.post('/direct',data=payload,environ_overrides={'CONTENT_LENGTH':None,'wsgi.input_terminated':True})
+        self.assertEqual(response.status_code,200)
+        remote.send_to_drive.reset_mock()
+        remote.MAX_BYTES=16
+        response=client.post('/direct',data={'context':'signed-test','uploadId':self.key,
+                            'file':(io.BytesIO(b'x'*(256*1024+1024)),'grande.csv')},
+                            environ_overrides={'CONTENT_LENGTH':None,'wsgi.input_terminated':True})
+        self.assertEqual(response.status_code,413)
+        remote.send_to_drive.assert_not_called()
+        self.assertTrue(streams and all(s.closed for s in streams))
 
 
 if __name__ == '__main__': unittest.main()
