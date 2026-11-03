@@ -90,3 +90,14 @@ Validação local: 113 testes do Zootécnico/carga/pacote, 15 de regressão come
 (128 no total) e 31 verificações Chrome com HTTP bloqueado. O Chrome usa o helper
 real do Comercial e o catálogo local exportado; os testes de backend usam banco
 simulado. Nada foi testado como se fosse login real, SQL real ou deploy em produção.
+
+## Cadastro em lote de usuários
+
+Por preferência do usuário, executar manualmente no SQL Editor do Neon o arquivo
+`carga-local/cadastro-usuarios/06_cadastrar_usuarios_integracao.sql`. Ele utiliza
+hashes bcrypt compatíveis com o backend e não altera contas existentes. Não exige
+Python, terminal ou instalação. O lote permanece ignorado pelo Git. O procedimento
+de execução, conferência e entrega de senhas individuais está em
+[`tools/CADASTRO_TECNICOS.md`](../../tools/CADASTRO_TECNICOS.md).
+Não executar o cadastro sem autorização. Não requer publicação de novos arquivos
+do frontend, Worker ou API especializada.
