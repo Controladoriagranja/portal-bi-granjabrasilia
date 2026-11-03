@@ -6,6 +6,7 @@ import subprocess
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.support.ui import WebDriverWait
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -28,29 +29,55 @@ def main():
         driver.execute_cdp_cmd('Network.setBlockedURLs',{'urls':['http://*','https://*']})
         driver.get('about:blank')
         driver.execute_script("""
-          document.body.innerHTML=['eu','newUser'].map(p=>`<select id="${p==='eu'?'euRole':'newUserRole'}"><option value="sector">Setor</option><option value="admin">Admin</option><option value="director">Diretor</option></select><div id="${p}OperationPermissions"></div>`).join('');
-          window.fixtureRole='sector';window.pending=[];
-          window.portalApiRequest=path=>new Promise(resolve=>pending.push({path,resolve}));
+          document.body.innerHTML=['eu','newUser'].map(p=>`<input id="${p==='eu'?'euName':'newUserName'}" value="Joelmir Divino dos Santos"><input id="${p==='eu'?'euEmail':'newUserEmail'}" value="offline@example.invalid"><select id="${p==='eu'?'euRole':'newUserRole'}"><option value="sector">Setor</option><option value="admin">Admin</option><option value="director">Diretor</option></select><div id="${p}OperationPermissions"></div>`).join('');
+          window.pending=[];window.previews=[];
+          window.previewResult={ok:true,ready:true,persons:[],options:{}};
+          window.portalApiRequest=(path,options)=>{
+            if(options?.method==='POST'){previews.push(JSON.parse(options.body));return Promise.resolve(previewResult);}
+            return new Promise(resolve=>pending.push({path,resolve}));
+          };
+          window.users=[{id:41,name:'Joelmir Divino dos Santos',email:'offline@example.invalid',active:true},{id:42,name:'Outro técnico',email:'other@example.invalid',active:true},{id:43,name:'Bloqueado',email:'blocked@example.invalid',active:false}];
         """)
         driver.execute_script((ROOT/'assets/js/zootecnico-access.js').read_text(encoding='utf-8'))
         js=driver.execute_script
         check(js("return !!document.getElementById('euZooMode')"),'Modal montado')
         js("loadZootecnicoAccessForm('eu',41)")
         check(js("return pending[0].path.endsWith('/41/zootecnico-access')"),'ID permanente no cadastro')
-        js("pending.shift().resolve({ok:true,access:{mode:'proprio',technicianIds:['t1']},technicians:[{id:'t1',nome:'Técnico A',ativo:true},{id:'t2',nome:'Técnico B',ativo:true}]})")
-        check(js("return readZootecnicoAccessForm('eu').technicianIds.join()==='t1'"),'Vínculo próprio carregado')
-        js("document.getElementById('euZooMode').value='equipe';document.getElementById('euZooMode').dispatchEvent(new Event('change'));for(const o of document.getElementById('euZooIds').options)o.selected=!!o.value")
-        check(js("return readZootecnicoAccessForm('eu').technicianIds.length===2"),'Equipe com dois técnicos')
+        js("pending.shift().resolve({ok:true,access:{mode:'todos',userIds:[]},users})")
+        check(js("return readZootecnicoAccessForm('eu')===undefined && document.getElementById('euZooMode').value==='todos'"),'Permissão anterior geral preservada ao editar outros campos')
+        js("document.getElementById('euZooMode').value='proprio';document.getElementById('euZooMode').dispatchEvent(new Event('change'))")
+        check(js("try{readZootecnicoAccessForm('eu');return false}catch(e){return true}"),'Novo vínculo pendente bloqueia salvamento parcial')
+        WebDriverWait(driver,3).until(lambda d:d.execute_script("try{return readZootecnicoAccessForm('eu')?.mode==='proprio'}catch(e){return false}"))
+        check(js("return !document.getElementById('euZooIds') && !('technicianIds' in readZootecnicoAccessForm('eu'))"),'Próprio sem segundo cadastro nem seleção do técnico')
+        check(js("return previews.at(-1).name==='Joelmir Divino dos Santos'"),'Identificação utiliza o nome do próprio cadastro')
+        js("document.getElementById('euZooMode').value='equipe';document.getElementById('euZooMode').dispatchEvent(new Event('change'));document.querySelector('#euZooUsers input[value=\"41\"]').click();document.querySelector('#euZooUsers input[value=\"42\"]').click()")
+        WebDriverWait(driver,3).until(lambda d:d.execute_script("try{return readZootecnicoAccessForm('eu')?.userIds.length===2}catch(e){return false}"))
+        check(js("return readZootecnicoAccessForm('eu').userIds.join()==='41,42'"),'Equipe seleciona dois usuários do portal')
+        check(js("return document.querySelector('#euZooUsers input[value=\"43\"]').disabled"),'Bloqueado não é selecionável')
         js("document.getElementById('euRole').value='director';document.getElementById('euRole').dispatchEvent(new Event('change'))")
         check(js("return document.getElementById('euZooMode').disabled && readZootecnicoAccessForm('eu').mode==='todos'"),'Gestor visão geral')
         js("document.getElementById('euRole').value='sector';document.getElementById('euRole').dispatchEvent(new Event('change'))")
         check(js("return readZootecnicoAccessForm('eu').mode==='none'"),'Rebaixamento não herda acesso geral')
         js("loadZootecnicoAccessForm('eu',42);loadZootecnicoAccessForm('eu',43)")
-        js("pending[1].resolve({ok:true,access:{mode:'proprio',technicianIds:['t2']},technicians:[{id:'t2',nome:'Técnico B',ativo:true}]})")
-        js("pending[0].resolve({ok:true,access:{mode:'todos',technicianIds:[]},technicians:[]});pending=[]")
-        check(js("return readZootecnicoAccessForm('eu').technicianIds.join()==='t2'"),'Resposta antiga não troca usuário')
+        js("pending[1].resolve({ok:true,access:{mode:'proprio',userIds:[]},users})")
+        js("pending[0].resolve({ok:true,access:{mode:'todos',userIds:[]},users});pending=[]")
+        check(js("return readZootecnicoAccessForm('eu')===undefined && document.getElementById('euZooMode').value==='proprio'"),'Resposta antiga não troca usuário nem sobrescreve acesso')
         js("loadZootecnicoAccessForm('eu',44);pending.shift().resolve({ok:false})")
         check(js("return readZootecnicoAccessForm('eu')===undefined"),'Falha preserva permissão existente')
+        js("""
+          previewResult={ok:true,ready:false,persons:[{key:'self',userId:0,name:'Joelmir Divino dos Santos',ready:false,labels:{base_dinamica:[]}}],options:{base_dinamica:['JOELMIR DIVINO DOS SANTOS']}};
+          loadZootecnicoAccessForm('newUser',0);pending.shift().resolve({ok:true,access:{mode:'none',userIds:[]},users});
+        """)
+        js("document.getElementById('newUserZooMode').value='proprio';document.getElementById('newUserZooMode').dispatchEvent(new Event('change'))")
+        WebDriverWait(driver,3).until(lambda d:d.execute_script("return !!document.querySelector('#newUserZooMatches select')"))
+        check(js("try{readZootecnicoAccessForm('newUser');return false}catch(e){return true}"),'Correspondência ambígua não é declarada concluída')
+        js("""
+          const select=document.querySelector('#newUserZooMatches select[data-source="base_dinamica"]');select.options[0].selected=true;select.dispatchEvent(new Event('change',{bubbles:true}));
+        """)
+        check(js("try{readZootecnicoAccessForm('newUser');return false}catch(e){return true}"),'Seleção manual ainda exige confirmação explícita')
+        js("previewResult={ok:true,ready:true,persons:[],options:{}};document.querySelector('#newUserZooMatches input[data-confirm]').click()")
+        WebDriverWait(driver,3).until(lambda d:d.execute_script("try{return readZootecnicoAccessForm('newUser')?.mode==='proprio'}catch(e){return false}"))
+        check(js("return readZootecnicoAccessForm('newUser').resolutions.self.selections.base_dinamica[0]==='JOELMIR DIVINO DOS SANTOS'"),'Resolver no formulário envia somente o valor exato conferido')
         # Layout real dos dois grupos nas larguras de telefone/tablet/PC.
         for width in (390,768,1366):
             driver.set_window_size(width,900)
@@ -99,6 +126,9 @@ def main():
         errors=[item['message'] for item in driver.get_log('browser') if item['level']=='SEVERE']
         check(not errors,'Sem erro de console: '+json.dumps(errors,ensure_ascii=False))
         print(json.dumps({'checks':checks,'network':'blocked','live_services':False},ensure_ascii=False))
+    except Exception as error:
+        detail=driver.execute_script("return {status:[...document.querySelectorAll('[id$=ZooStatus]')].map(e=>e.textContent),previews:window.previews,checked:[...document.querySelectorAll('#euZooUsers input:checked')].map(e=>e.value)}")
+        raise AssertionError(json.dumps(detail,ensure_ascii=False)) from error
     finally:
         driver.quit()
 

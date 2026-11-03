@@ -1,7 +1,8 @@
 from commercial_access import normalize_commercial_access, effective_commercial_access
 from zootecnico_access import (register_routes as register_zootecnico_routes,
-                              normalize_access as normalize_zootecnico_access,
-                              replace_access as replace_zootecnico_access)
+                              normalize_form_access as normalize_zootecnico_access,
+                              replace_form_access as replace_zootecnico_access,
+                              lock_form_access as lock_zootecnico_access)
 from operation_permissions import (operation_permissions_from_payload,
                                    replace_operation_permissions, effective_operation_permissions)
 from forms_import import (reader_config as forms_reader_config, new_context as forms_new_context,
@@ -3177,6 +3178,8 @@ def api_admin_usuario_patch(usuario_id):
 
     try:
         with engine.begin() as conn:
+            if zootecnico_access is not None:
+                lock_zootecnico_access(conn)
             existente = conn.execute(text("""
                 SELECT id, email
                 FROM public.usuarios
@@ -3289,6 +3292,8 @@ def api_admin_usuario_patch(usuario_id):
         )
         return jsonify({"ok": True, "data": salvo})
 
+    except ValueError as e:
+        return jsonify({"ok": False, "erro": str(e)}), 400
     except Exception as e:
         log(f"Erro ao editar usuário {usuario_id}: {e}", "ERRO")
         return jsonify({"ok": False, "erro": "Erro interno ao atualizar o usuário."}), 500
@@ -3397,6 +3402,8 @@ def api_admin_usuario_create():
 
     try:
         with engine.begin() as conn:
+            if zootecnico_access is not None:
+                lock_zootecnico_access(conn)
             conflito = conn.execute(text("""
                 SELECT id FROM public.usuarios WHERE LOWER(email) = :email LIMIT 1
             """), {"email": email}).scalar()

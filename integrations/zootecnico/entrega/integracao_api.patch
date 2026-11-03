@@ -4,7 +4,7 @@
  # Router genérico dos BIs.
  from bi_generic.router import criar_router
  from portal_router import criar_router_portal
-+from zootecnico_acesso import dispatch as zootecnico_dispatch, scoped_connection
++from zootecnico_acesso import dispatch as zootecnico_dispatch, scoped_connection, create_access_router
  
  
  def validar_acesso(usuario, senha):
@@ -17,7 +17,7 @@
          response.headers["Cache-Control"] = "no-store"
  
          return response
-@@ -194,7 +195,7 @@
+@@ -194,10 +195,11 @@
              "REPEATABLE READ READ ONLY"
          )
  
@@ -26,6 +26,10 @@
  
  
  app.include_router(criar_router(banco))
++app.include_router(create_access_router(banco))
+ app.include_router(criar_router_portal(banco))
+ 
+ 
 --- a/API/api_zootecnico/portal_router.py
 +++ b/API/api_zootecnico/portal_router.py
 @@ -19,6 +19,7 @@

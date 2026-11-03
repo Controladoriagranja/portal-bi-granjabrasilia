@@ -5,8 +5,10 @@ continua sendo validada pelo middleware original; ela NÃO substitui a sessão.
 """
 from contextvars import ContextVar
 from dataclasses import dataclass
+from collections import defaultdict
 import json
 import re
+import unicodedata
 from urllib.error import HTTPError
 from urllib.request import Request as HttpRequest, build_opener, ProxyHandler
 
@@ -83,6 +85,8 @@ def validate_access(data):
 
 def route_policy(path):
     parts = path.strip("/").split("/")
+    if parts == ['api','zootecnico','acesso','opcoes']:
+        return 'admin-options'
     if len(parts) >= 3 and parts[:2] == ["api", "bi"]:
         if parts[2] in PROTECTED_BIS:
             return "scoped"
@@ -107,7 +111,14 @@ async def dispatch(request, call_next):
     policy = route_policy(request.url.path)
     try:
         access = Access(0, 'none')
-        if policy == 'catalog':
+        if policy == 'admin-options':
+            # Mesma validação de admin usada pelo catálogo de vendedores Comercial.
+            from comercial_acesso import identity
+            user = await run_in_threadpool(identity, request)
+            if user.get('isAdmin') is not True:
+                raise HTTPException(403, 'Somente administradores podem identificar técnicos.')
+            access = Access(int(user['id']), 'todos')
+        elif policy == 'catalog':
             # Preservar os outros módulos, inclusive o uso administrativo Basic.
             # Sem autorização geral, o catálogo omite somente o Zootécnico.
             if request.headers.get('x-portal-authorization'):
@@ -259,3 +270,113 @@ def scoped_connection(connection):
 def catalog_general():
     access = CURRENT.get()
     return access is None or access.mode == 'todos'
+
+
+def name_key(value):
+    # Nome completo: só caixa/espaçamento. Sem iniciais, prefixos ou aproximação.
+    return ' '.join(unicodedata.normalize('NFC',str(value or '')).split()).casefold()
+
+
+def full_name(value):
+    return len(str(value).split()) >= 2 and ' - ' not in str(value) and '.' not in str(value)
+
+
+def build_technician_catalog(rows):
+    """Agrupa valores exatos apenas com identidade completa ou chave inequívoca.
+
+    Nunca exporta as chaves de lote. Um valor abreviado só recebe grupo automático
+    se as provas observadas levarem a UM nome completo, sem conflito global.
+    """
+    labels={source:set() for source in SOURCES}
+    graph=defaultdict(set);by_key=defaultdict(lambda:defaultdict(set))
+    def node(source,value):
+        value=str(value or '').strip()
+        if not value or len(value)>500:return None
+        result=(source,value);labels[source].add(value);graph[result]
+        return result
+    def edge(a,b):
+        if a and b:graph[a].add(b);graph[b].add(a)
+    for row in rows:
+        source=row['fonte'];primary=node(source,row.get('tecnico'))
+        display=node(source,row.get('exibicao')) if source=='vw_desempenho_acerto_portal' else None
+        if row.get('ambiguo'):continue
+        # Mesma linha oficial: não une dois nomes completos diferentes.
+        if primary and display and (name_key(primary[1])==name_key(display[1]) or not(full_name(primary[1]) and full_name(display[1]))):
+            edge(primary,display)
+        for kind,key in (('lote',row.get('chaves')),('acerto',row.get('chave_lote'))):
+            if key and (not isinstance(key,list) or all(v is not None and str(v).strip() for v in key)) and primary:
+                by_key[(kind,json.dumps(key,ensure_ascii=False,sort_keys=True))][source].add(primary)
+    exact=defaultdict(list)
+    for entry in graph:
+        if full_name(entry[1]):exact[name_key(entry[1])].append(entry)
+    for entries in exact.values():
+        for entry in entries[1:]:edge(entries[0],entry)
+    for sources in by_key.values():
+        # Nenhuma prova a partir de snapshots conflitantes na mesma fonte/chave.
+        if any(len(values)!=1 for values in sources.values()):continue
+        entries=[next(iter(values)) for values in sources.values()]
+        for i,a in enumerate(entries):
+            for b in entries[i+1:]:
+                if name_key(a[1])==name_key(b[1]) or not(full_name(a[1]) and full_name(b[1])):edge(a,b)
+    seen=set();groups=[]
+    for start in graph:
+        if start in seen:continue
+        stack=[start];component=set()
+        while stack:
+            entry=stack.pop()
+            if entry in component:continue
+            component.add(entry);stack.extend(graph[entry]-component)
+        seen.update(component)
+        names={name_key(value) for source,value in component if full_name(value)}
+        if len(names)!=1:continue
+        grouped=defaultdict(list)
+        for source,value in sorted(component):grouped[source].append(value)
+        groups.append({'nameKey':next(iter(names)),'labels':dict(grouped)})
+    return {'ok':True,'sources':{source:sorted(values) for source,values in labels.items()},'groups':groups}
+
+
+def create_access_router(banco):
+    from fastapi import APIRouter
+    router=APIRouter(prefix='/api/zootecnico/acesso',tags=['Acesso Integração'])
+    @router.get('/opcoes')
+    def options():
+        # dispatch já exigiu Basic + admin verificado na CENTRAL.
+        if CURRENT.get() is None or CURRENT.get().mode!='todos':raise HTTPException(403,'Admin obrigatório.')
+        from bi_generic.sql_utils import texto,date_texto
+        branches=[]
+        for source in sorted(SOURCES):
+            if source=='vw_desempenho_acerto_portal':
+                keys=[texto(c) for c in ('codigo','gal','lote')]+[date_texto('dt_aloj')]
+                key=sql.SQL('jsonb_build_array({})').format(sql.SQL(', ').join(keys))
+            elif source=='acerto_lote_resultado_geral':key=sql.SQL('NULL::jsonb')
+            else:
+                fields=('cod_prod','galpao','lote','data_de_alojamento') if source=='base_dinamica' else ('codigo_granja','galp','num_lote','recepcao_dia_cache' if source.startswith('vw_') else 'data_recepcao')
+                key=sql.SQL('jsonb_build_array({})').format(sql.SQL(', ').join([*[texto(c) for c in fields[:3]],date_texto(fields[3])]))
+            branches.append(sql.SQL('SELECT {source} AS fonte, tecnico, {display} AS exibicao, '
+                '{key} AS chaves, {lot} AS chave_lote, {ambiguous} AS ambiguo '
+                'FROM {table} s LIMIT 50001').format(source=sql.Literal(source),key=key,
+                display=sql.SQL("to_jsonb(s)->>'tecnico_exibicao'") if source.startswith('vw_desempenho') else sql.SQL('NULL::text'),
+                lot=sql.Identifier('chave_lote') if source in {'vw_desempenho_acerto_portal','acerto_lote_resultado_geral'} else sql.SQL('NULL::text'),
+                ambiguous=sql.SQL("COALESCE(to_jsonb(s)->>'candidatos_tecnico','1') ~ '^(?:[2-9]|[1-9][0-9]+)$'") if source.startswith('vw_desempenho') else sql.SQL('FALSE'),
+                table=sql.Identifier('zootecnico',source)))
+        with banco() as conn:
+            rows=conn.execute(sql.SQL(' UNION ALL ').join(sql.SQL('({})').format(q) for q in branches)).fetchall()
+        counts=defaultdict(int)
+        for row in rows:counts[row['fonte']]+=1
+        if any(value>50000 for value in counts.values()):
+            # Amostra incompleta não prova identidade. Ainda oferecer os valores
+            # reais no mesmo formulário, sem usar chaves truncadas como prova.
+            with banco() as conn:
+                rows=conn.execute(sql.SQL(' UNION ALL ').join(sql.SQL(
+                    '(SELECT DISTINCT {} AS fonte, BTRIM(tecnico) AS tecnico FROM {} '
+                    "WHERE NULLIF(BTRIM(tecnico),'') IS NOT NULL LIMIT 5001)").format(
+                        sql.Literal(source),sql.Identifier('zootecnico',source)) for source in sorted(SOURCES))).fetchall()
+                # O nome de exibição também é um alias real da view.
+                rows+=conn.execute(sql.SQL("SELECT DISTINCT 'vw_desempenho_acerto_portal' AS fonte, "
+                    "BTRIM(tecnico_exibicao) AS tecnico FROM zootecnico.vw_desempenho_acerto_portal "
+                    "WHERE NULLIF(BTRIM(tecnico_exibicao),'') IS NOT NULL LIMIT 5001")).fetchall()
+            counts=defaultdict(int)
+            for row in rows:counts[row['fonte']]+=1
+            if any(value>5000 for value in counts.values()):raise HTTPException(503,'Valores técnicos excedem o limite seguro; cadastro não validado.')
+        return build_technician_catalog(rows)
+    return router

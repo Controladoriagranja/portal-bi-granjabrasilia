@@ -318,6 +318,7 @@ class Engine:
         if 'SELECT v.entidade_id' in query:return Result(self.ids)
         if 'SELECT a.fonte' in query:return Result(payload()['aliases'])
         if 'SELECT role,perfil' in query:return Result(dict(role='sector',perfil='setor'))
+        if 'SELECT id,nome,email,ativo,role,perfil' in query:return Result([dict(id=41,nome='Técnico fictício',email='offline@example.invalid',ativo=True,role='sector',perfil='setor')])
         if 'SELECT identificador AS id' in query:return Result([dict(id='t1',nome='Técnico fictício',ativo=True)])
         raise AssertionError(query)
 
@@ -346,6 +347,18 @@ class PortalTests(unittest.TestCase):
             self.user=dict(usuario_id=41,role=role,ativo=True)
             data=self.client.get('/api/auth/zootecnico-access').json
             self.assertEqual(data['mode'],'todos');self.assertEqual(data['aliases'],[])
+
+    def test_managers_remain_general_even_before_auxiliary_migration(self):
+        self.engine.ready=False
+        for role in ('admin','director'):
+            self.user=dict(usuario_id=41,role=role,ativo=True)
+            result=self.client.get('/api/auth/zootecnico-access')
+            self.assertEqual(result.status_code,200)
+            self.assertEqual(result.json['mode'],'todos')
+
+    def test_existing_general_scope_does_not_require_any_technician(self):
+        self.engine.mode='todos';self.engine.ids=[]
+        self.assertEqual(self.client.get('/api/auth/zootecnico-access').json['mode'],'todos')
 
     def test_commercial_general_does_not_authorize_integration(self):
         self.user['commercial_access']={'mode':'general'}

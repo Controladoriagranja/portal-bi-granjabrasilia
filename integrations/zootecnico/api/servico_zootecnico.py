@@ -22,7 +22,7 @@ from starlette.concurrency import run_in_threadpool
 # Router genérico dos BIs.
 from bi_generic.router import criar_router
 from portal_router import criar_router_portal
-from zootecnico_acesso import dispatch as zootecnico_dispatch, scoped_connection
+from zootecnico_acesso import dispatch as zootecnico_dispatch, scoped_connection, create_access_router
 
 
 def validar_acesso(usuario, senha):
@@ -199,6 +199,7 @@ def banco():
 
 
 app.include_router(criar_router(banco))
+app.include_router(create_access_router(banco))
 app.include_router(criar_router_portal(banco))
 
 

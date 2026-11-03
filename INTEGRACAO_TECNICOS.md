@@ -1,10 +1,25 @@
 # Acesso por técnico — Integração / BI Zootécnico
 
 **Entrega para implantação:** ver [integrations/zootecnico/IMPLANTAR.md](integrations/zootecnico/IMPLANTAR.md).
+
+**Estado atual — cadastro único e compatibilidade (03/11/2026):** técnicos e equipes
+são configurados na mesma tela de Usuários; não usar o seed SQL de técnicos abaixo.
+O backend resolve nomes exatos/provas por lote e administra as tabelas auxiliares.
+Ambiguidades ficam no próprio formulário; nenhuma gravação parcial é concluída.
+Admin/Diretor continuam gerais mesmo sem a estrutura auxiliar nova. Para preservar
+os usuários anteriores sem escopo configurado, foi preparado (não executado)
+`api/migrations/20261103_zootecnico_preservar_existentes.sql`, uma única transição
+que não sobrescreve restrições existentes e não libera usuários futuros.
+Comercial e consultas gerais permanecem iguais. RxP continua geral, sem filtro
+por técnico. Publicação coordenada e conferência real seguem pendentes.
+Testes locais: 93 unitários/regressão/pacote, 27 verificações Chrome offline e
+94 verificações do Worker em VM. Detalhes e arquivos exatos em IMPLANTAR.md.
+
+## Histórico das entregas anteriores (não são as instruções atuais de cadastro)
 Em 03/11/2026, o usuário confirmou a execução de `01_metadados.sql` no PostgreSQL
 real e a existência dos campos obrigatórios; `candidatos_tecnico` está ausente e
 é opcional. Não foi solicitada nova auditoria. Módulo/Worker e pacote de integração
-estão preparados; o cadastro de teste aguarda e-mail/nome e aliases exatos.
+estavam preparados; naquela etapa o cadastro de teste aguardava aliases exatos.
 Os registros de auditoria abaixo são o histórico das etapas anteriores.
 
 Atualização após confirmação do usuário em 03/11/2026: `api_zootecnico(3).zip` é
