@@ -2,6 +2,24 @@
 
 **Entrega para implantação:** ver [integrations/zootecnico/IMPLANTAR.md](integrations/zootecnico/IMPLANTAR.md).
 
+**Revisão atual — seletor igual ao Comercial:** o usuário confirmou a carga dos
+35 técnicos e 177 aliases no Neon. Não repetir a carga inicial ou migrações antigas.
+O formulário usa o próprio `filterAccessLinks` do Comercial, com pesquisa e um
+dropdown de identidades, sem listas de aliases por fonte. A seleção explícita
+permite conta de teste com nome diferente; salvar altera apenas o vínculo, não
+recria/renomeia técnico nem reescreve aliases. Catálogo, salvamento e reabertura
+usam somente o backend do Portal/Neon, sem depender da API especializada.
+Admin/Diretor, Leandro e demais acessos gerais existentes são preservados.
+Fonte sem alias continua sem registros. Equipe resolve usuários, não herda o
+acesso geral deles. Não há migração necessária ao formulário; há somente o
+incremento opcional `carga-local/05_aliases_jjc.sql` com dois aliases de Janio
+agora explicitamente confirmados, sem execução automática ou sobrescrita.
+Republicar `index.html`, `assets/js/zootecnico-access.js` e
+`api/zootecnico_access.py`. API do Anderson/Worker/Docker permanecem iguais.
+Validação: 128 testes locais e 31 verificações Chrome com rede bloqueada.
+
+## Histórico das implementações anteriores
+
 **Estado atual — cadastro único e compatibilidade (03/11/2026):** técnicos e equipes
 são configurados na mesma tela de Usuários; não usar o seed SQL de técnicos abaixo.
 O backend resolve nomes exatos/provas por lote e administra as tabelas auxiliares.

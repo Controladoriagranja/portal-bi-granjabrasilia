@@ -28,12 +28,19 @@ def normalize_form_access(value):
         raise ValueError('Informe o acesso à Integração.')
     if value.get('technicianIds'):
         raise ValueError('Atualize o portal: o vínculo agora é pelo usuário, sem catálogo separado.')
+    version=value.get('formVersion',2)
+    if type(version) is not int or version not in (2,3):raise ValueError('Versão do formulário inválida.')
+    identity=value.get('identityId') or None
+    if identity is not None and (not isinstance(identity,str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,80}',identity)):
+        raise ValueError('Selecione uma identidade técnica válida.')
+    if identity and (version!=3 or value['mode']!='proprio'):raise ValueError('A identidade individual só é usada no acesso próprio.')
     mode=value['mode'];ids=value.get('userIds',[]);resolutions=value.get('resolutions',{})
     if not isinstance(ids,list) or len(ids)>100 or any(type(uid) is not int or uid<1 for uid in ids) or len(set(ids))!=len(ids):
         raise ValueError('Selecione usuários válidos da equipe.')
     if mode=='equipe' and not ids:raise ValueError('Selecione os usuários da equipe.')
     if mode!='equipe' and ids:raise ValueError('Usuários da equipe só são usados no acesso Equipe.')
     if not isinstance(resolutions,dict) or len(resolutions)>100:raise ValueError('Correspondências inválidas.')
+    if version==3 and resolutions:raise ValueError('Selecione a identidade consolidada, sem enviar aliases por fonte.')
     allowed={'self'} if mode=='proprio' else {str(uid) for uid in ids}
     for key,choice in resolutions.items():
         if key not in allowed or not isinstance(choice,dict):raise ValueError('Correspondência fora dos usuários selecionados.')
@@ -45,7 +52,7 @@ def normalize_form_access(value):
                 raise ValueError('Selecione somente valores técnicos exatos.')
         if type(choice.get('confirmed',False)) is not bool:raise ValueError('Confirmação inválida.')
     if type(value.get('allowPending',False)) is not bool:raise ValueError('Opção de vínculo pendente inválida.')
-    return {'formVersion':2,'mode':mode,'userIds':sorted(ids),'resolutions':resolutions,'allowPending':value.get('allowPending',False)}
+    return {'formVersion':version,'mode':mode,'identityId':identity,'userIds':sorted(ids),'resolutions':resolutions,'allowPending':value.get('allowPending',False)}
 
 
 def lock_form_access(conn):
@@ -88,10 +95,69 @@ def catalog_from_neon(conn):
     sources={s:[] for s in SOURCES};groups={}
     for row in rows:
         if row['fonte'] not in sources:continue
-        group=groups.setdefault(row['identificador'],{'identifier':row['identificador'],'nameKey':name_key(row['nome']),'labels':{}})
+        group=groups.setdefault(row['identificador'],{'identifier':row['identificador'],'name':row['nome'],'nameKey':name_key(row['nome']),'labels':{}})
         group['labels'].setdefault(row['fonte'],[]).append(row['valor']);sources[row['fonte']].append(row['valor'])
     if not groups:return None
     return {'ok':True,'sources':{s:sorted(set(v)) for s,v in sources.items()},'groups':list(groups.values()),'knownOnly':True}
+
+
+def canonical_identities(conn):
+    catalog=catalog_from_neon(conn)
+    return sorted([{'id':g['identifier'],'name':g['name'],
+                    'aliases':g['labels'],'aliasCount':sum(len(v) for v in g['labels'].values()),
+                    'missingSources':[s for s in PRIMARY_SOURCES if not g['labels'].get(s)]}
+                   for g in (catalog or {}).get('groups',[])],key=lambda g:name_key(g['name']))
+
+
+def canonical_user_links(conn):
+    rows=conn.execute(text("""SELECT DISTINCT v.usuario_id,e.identificador FROM public.usuario_vinculos_dados v
+        JOIN public.usuario_escopos_acesso s ON s.usuario_id=v.usuario_id AND s.recurso=v.recurso AND s.ativo
+        JOIN public.entidades_acesso_dados e ON e.tipo=v.tipo_entidade AND e.identificador=v.entidade_id AND e.ativo
+        WHERE v.ativo AND v.tipo_entidade='tecnico' AND
+          (v.recurso='zootecnico_identidade' OR (v.recurso='zootecnico' AND s.escopo='proprio'))""")).mappings()
+    grouped={}
+    for row in rows:grouped.setdefault(int(row['usuario_id']),set()).add(row['identificador'])
+    return {uid:next(iter(ids)) for uid,ids in grouped.items() if len(ids)==1}
+
+
+def canonical_selection(conn,uid,value):
+    identities={g['id']:g for g in canonical_identities(conn)}
+    if value['mode']=='proprio':
+        identifier=value.get('identityId')
+        if identifier and identifier not in identities:raise ValueError('Identidade técnica inexistente, inativa ou sem aliases confirmados.')
+        return [(uid,identities.get(identifier))]
+    users={int(u['id']):u for u in portal_users(conn)}
+    if any(member not in users or not users[member]['ativo'] for member in value['userIds']):
+        raise ValueError('Selecione somente usuários ativos para a equipe.')
+    links=canonical_user_links(conn)
+    return [(member,identities.get(links.get(member))) for member in value['userIds']]
+
+
+def bind_canonical_identity(conn,uid,identifier,actor):
+    # Uma identidade canônica pode ser autorizada a contas diferentes (inclusive
+    # conta de teste). O vínculo do usuário muda, a identidade e seus aliases não.
+    write_scope(conn,uid,'zootecnico_identidade','proprio',actor)
+    conn.execute(text("UPDATE public.usuario_vinculos_dados SET ativo=FALSE,atualizado_em=NOW(),atualizado_por=:actor WHERE usuario_id=:uid AND recurso='zootecnico_identidade'"),{'uid':uid,'actor':actor})
+    write_link(conn,uid,'zootecnico_identidade','tecnico',identifier,actor)
+
+
+def replace_canonical_access(conn,uid,value,actor):
+    selected=canonical_selection(conn,uid,value)
+    if any(identity is None for member,identity in selected):
+        if value['allowPending']:return save_pending(conn,uid,value,actor)
+        raise ValueError('Selecione uma identidade confirmada para o usuário e confira os vínculos da equipe.')
+    for member,identity in selected:bind_canonical_identity(conn,member,identity['id'],actor)
+    write_scope(conn,uid,RESOURCE,value['mode'],actor)
+    conn.execute(text('UPDATE public.usuario_vinculos_dados SET ativo=FALSE,atualizado_em=NOW(),atualizado_por=:actor WHERE usuario_id=:uid AND recurso=:resource'),{'uid':uid,'resource':RESOURCE,'actor':actor})
+    for member,identity in selected:
+        if value['mode']=='proprio':write_link(conn,uid,RESOURCE,'tecnico',identity['id'],actor)
+        else:
+            conn.execute(text("""INSERT INTO public.entidades_acesso_dados(tipo,identificador,nome,ativo)
+                SELECT 'usuario_portal',id::text,nome,TRUE FROM public.usuarios WHERE id=:member
+                ON CONFLICT(tipo,identificador) DO UPDATE SET nome=EXCLUDED.nome,ativo=TRUE,atualizado_em=NOW()"""),{'member':member})
+            write_link(conn,uid,RESOURCE,'usuario_portal',str(member),actor)
+    clear_pending(conn,uid,actor)
+    return {'pending':False,'mode':value['mode']}
 
 
 def resolve_person(person,catalog,stored,choice=None,duplicate=False):
@@ -224,6 +290,8 @@ def replace_form_access(conn,uid,value,actor):
         replace_access(conn,uid,{'mode':mode,'technicianIds':[]},actor)
         clear_pending(conn,uid,actor)
         return {'pending':False,'mode':mode}
+    if value['formVersion']==3:
+        return replace_canonical_access(conn,uid,value,actor)
     catalog=catalog_peek() or catalog_from_neon(conn)
     if catalog is None:
         if value['allowPending']:return save_pending(conn,uid,value,actor)
@@ -330,6 +398,19 @@ def read_access(conn, uid):
         return {"mode": "none", "technicianIds": []}
 
 
+def read_configured_access(conn,uid):
+    """Editor mostra a configuração salva; autorização efetiva usa read_access.
+
+    Equipe com membros bloqueados não perde sua seleção ao reabrir o cadastro.
+    Identidade inativa pode ser exibida como indisponível, mas nunca autorizada.
+    """
+    row=conn.execute(text('SELECT escopo, ativo FROM public.usuario_escopos_acesso WHERE usuario_id=:uid AND recurso=:resource'),{'uid':uid,'resource':RESOURCE}).mappings().first()
+    if not row or not row['ativo'] or row['escopo'] not in {'none','proprio','equipe','todos'}:
+        return {'mode':'none','technicianIds':[]}
+    ids=list(conn.execute(text("SELECT v.entidade_id FROM public.usuario_vinculos_dados v WHERE v.usuario_id=:uid AND v.recurso=:resource AND v.ativo AND v.tipo_entidade='tecnico' ORDER BY v.entidade_id"),{'uid':uid,'resource':RESOURCE}).scalars()) if row['escopo']=='proprio' else []
+    return {'mode':row['escopo'],'technicianIds':ids if len(ids)==1 else []}
+
+
 def replace_access(conn, uid, value, actor):
     """Somente depois da autorização administrativa, na transação do usuário."""
     access = normalize_access(value)
@@ -400,6 +481,16 @@ def register_routes(app, engine, authenticate, is_admin):
             uid=body.get('uid',0)
             if type(uid) is not int or uid<0:raise ValueError('Usuário inválido.')
             if value['mode'] in {'none','todos'}:return response({'ok':True,'ready':True,'persons':[]})
+            if value['formVersion']==3:
+                with engine.connect() as conn:
+                    if not schema_ready(conn):raise ValueError('A estrutura de permissões da Integração ainda não está instalada.')
+                    selected=canonical_selection(conn,uid,value)
+                return response({'ok':True,'ready':all(identity is not None for member,identity in selected),
+                                 'canSavePending':True,'source':'neon','persons':[
+                                     {'userId':member,'identityId':identity['id'] if identity else None,
+                                      'name':identity['name'] if identity else None,
+                                      'missingSources':identity['missingSources'] if identity else list(PRIMARY_SOURCES)}
+                                     for member,identity in selected]})
             name=str(body.get('name') or '').strip()
             if value['mode']=='proprio' and not name:raise ValueError('Informe o nome completo para identificar os dados.')
             with engine.connect() as conn:
@@ -475,7 +566,7 @@ def register_routes(app, engine, authenticate, is_admin):
                 if uid and not target:
                     return response({"ok": False}, 404)
                 users=portal_users(conn)
-                access = read_access(conn, uid) if uid else {"mode": "none", "technicianIds": []}
+                access = read_configured_access(conn, uid) if uid else {"mode": "none", "technicianIds": []}
                 members=[]
                 if uid and access['mode']=='equipe':
                     members=list(conn.execute(text("""SELECT DISTINCT member.id FROM public.usuario_vinculos_dados v
@@ -490,8 +581,13 @@ def register_routes(app, engine, authenticate, is_admin):
                 if pending and access['mode']=='none':
                     access['mode']=pending['requested_mode']
                     members=list(conn.execute(text("SELECT entidade_id::bigint FROM public.usuario_vinculos_dados WHERE usuario_id=:uid AND recurso='zootecnico_pendente' AND tipo_entidade='usuario_portal' AND ativo ORDER BY entidade_id"),{'uid':uid}).scalars())
-                access={'formVersion':2,'mode':access['mode'],'userIds':members,'pending':bool(pending)}
-                if general_role(target):access={'formVersion':2,'mode':'todos','userIds':[]}
-            return response({'ok':True,'access':access,'users':[{'id':int(row['id']),'name':row['nome'],'email':row['email'],'active':bool(row['ativo'])} for row in users]})
+                links=canonical_user_links(conn)
+                access={'formVersion':3,'mode':access['mode'],'userIds':members,'pending':bool(pending),
+                        'identityId':access.get('technicianIds',[None])[0] if access['mode']=='proprio' and access.get('technicianIds') else None}
+                identities=canonical_identities(conn)
+                if general_role(target):access={'formVersion':3,'mode':'todos','userIds':[],'identityId':None,'pending':False}
+            return response({'ok':True,'access':access,'identities':identities,
+                             'users':[{'id':int(row['id']),'name':row['nome'],'email':row['email'],
+                                       'active':bool(row['ativo']),'identityId':links.get(int(row['id']))} for row in users]})
         except Exception:
             return response({"ok": False, "erro": "Não foi possível carregar o acesso da Integração."}, 503)

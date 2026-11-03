@@ -1,147 +1,92 @@
-﻿# Implantação — cadastro único da Integração
+﻿# Implantação do seletor de técnico da Integração
 
-Alterações locais, sem deploy e sem executar SQL ou consultar produção.
-Usar a mesma sessão do Portal, o mesmo Worker e o serviço atual do Anderson.
-Comercial, quatro telas, fórmulas, views, ETL e Docker original preservados.
+A carga de 35 identidades e 177 aliases já foi executada pelo usuário no Neon.
+Não repetir a carga inicial, as migrações de estrutura/compatibilidade ou o rollback.
+Nada foi executado em produção pelo Codex nesta correção.
 
-## Preservar a publicação anterior
+## Correção do cadastro
 
-**Estado após os resultados reais:** a estrutura já existe e há 16 escopos gerais.
-Não repetir as migrações abaixo nessa base. A carga inicial atual é somente
-`carga-local/03_carga_inicial_neon.sql`, depois da conferência. Ela preserva os
-escopos gerais existentes e o perfil Diretor de Lucas. Leandro da Costa Elias
-(id 35) já está em `todos`, e continua assim. Não há promoção de perfil nem
-restrição automática de quem já tem acesso hoje.
+O formulário anterior tentava reconstruir correspondências pelo nome da conta e
+mostrava listas por fonte. Agora usa uma identidade canônica já validada no Neon.
+O próprio helper `filterAccessLinks` do Comercial foi reaproveitado, mantendo os
+parâmetros e comportamento padrão do Comercial. Zootécnico utiliza o mesmo campo
+de pesquisa, dropdown simples, seleção automática de resultado único e indicação
+do vínculo selecionado. A pesquisa usa os aliases confirmados como texto de busca;
+o dropdown exibe somente o nome consolidado, uma vez por identidade.
 
-Antes de ativar a nova autorização na API, executar manualmente no Neon:
+- Somente seus dados: escolher o técnico uma única vez e salvar.
+- Equipe: marcar os usuários do Portal que possuem uma identidade técnica vinculada.
+- Todos os dados: manter a autorização geral existente ou concedê-la explicitamente.
+- Admin/Diretor continuam gerais. Leandro da Costa Elias (35) e demais contas que
+  já têm escopo `todos` continuam com seus acessos; abrir o cadastro não os modifica.
 
-1. `api/migrations/20261103_zootecnico_access.sql` SOMENTE se a estrutura ainda
-   não foi instalada. Não repetir a criação das tabelas existentes.
-2. `api/migrations/20261103_zootecnico_preservar_existentes.sql`.
+Uma conta chamada Conta de Teste pode selecionar Cristiano. A seleção é explícita:
+não precisa ter o mesmo nome do técnico. Contas autorizadas diferentes podem usar
+a mesma identidade canônica, sem duplicar o técnico ou seus aliases. Trocar a
+seleção altera somente os vínculos dessa conta, nunca renomeia a identidade nem
+reescreve seus aliases. O resumo de aliases é recolhível e somente leitura.
 
-O segundo arquivo mantém visão geral para quem já tinha o relatório Integração
-liberado por setor/relatório e ainda não tem escopo zootécnico configurado.
-Não altera escopos existentes (nem `none`, bloqueios, próprio ou equipe).
-Um marcador impede que repetir o arquivo libere usuários cadastrados depois.
-Admin/Diretor têm visão geral pelo perfil, mesmo sem as tabelas auxiliares novas.
-Não há fallback que dê todos os dados quando ocorrer erro ou faltar um técnico.
+## Backend e segurança
 
-Se uma conta antiga já tem `none` ou restrição explícita e deve continuar geral,
-o admin deve escolher **Todos os dados** na edição dessa conta. Não é necessário
-SQL por usuário. Retirar o relatório ou bloquear a conta continua impedindo acesso.
-RxP mantém o funcionamento anterior para acesso geral; não foi ampliado para
-usuários restritos por técnico, pois isso exporia registros de outros técnicos.
+O novo payload do formulário (`formVersion: 3`) envia `identityId` ou `userIds`.
+O backend verifica se o administrador está autenticado e se a identidade existe,
+está ativa e possui aliases confirmados no Neon. Não aceita aliases livres do
+navegador nesse fluxo. A versão anterior permanece compatível para não interromper
+clientes já publicados, mas não é usada pela nova interface.
 
-## Arquivos para publicar
+Listar, salvar e reabrir não dependem da API especializada ou do Worker. Não há
+polling do catálogo nesse formulário. A consulta aos dados do BI continua passando
+pela mesma autenticação e pela autorização no servidor, com todos os filtros atuais.
+Fonte sem alias validado continua bloqueada, mesmo quando outras fontes da mesma
+identidade estão confirmadas. Faltando uma identidade para o usuário/membro da
+equipe, pode-se salvar como pendente, sem acesso efetivo a registros.
 
-- Render (Portal): `api/app.py`, `api/zootecnico_access.py` e o novo
-  `api/zootecnico_catalog.py`, junto do restante do backend atual.
-- GitHub Pages (Portal): `assets/js/zootecnico-access.js` (index.html já o inclui).
-- Republicar também `index.html`, que agora informa quando o usuário foi salvo
-  com vínculo pendente, sem declarar a identificação como concluída.
-- Cloudflare: manter/publicar `integrations/zootecnico/worker/worker.js` se a ponte
-  preparada anteriormente ainda não está publicada. Mesmo binding PRIVATE_API,
-  secrets API_USER/API_PASSWORD e encaminhamento X-Portal-Authorization.
-- Anderson: `entrega/api_zootecnico_atualizada.zip`, no formato completo original.
-  Ajustados `servico_zootecnico.py`, `portal_router.py`, `Dockerfile.zootecnico`;
-  adicionado `zootecnico_acesso.py`. Dockerfile principal intacto; no especializado
-  somente um COPY adicional. Não trocar configurações locais nem a arquitetura.
-- bi-zootecnico: manter/publicar a versão de `assets/js/api.js` já preparada no
-  projeto e em `frontend/assets/js/api.js`, se ainda estiver pendente.
+Equipe utiliza as identidades pessoais dos usuários selecionados; não herda o
+acesso geral de um membro Admin/Diretor. Trocas de identidade e bloqueios de membros
+são considerados novamente nas requisições. O Comercial e as fórmulas não mudaram.
 
-Ordem para a base já levantada: conferir/executar `03_carga_inicial_neon.sql` →
-backend Portal → conferir a ponte do Worker → API Anderson → index.html e
-JavaScript do cadastro. As migrações antigas já aplicadas não precisam ser repetidas.
-Nenhuma nova variável de ambiente, dependência, serviço ou login é necessária.
+## SQL incremental
 
-## Cadastro e edição
+Nenhuma migração é necessária para o seletor ou para vincular usuários.
+Cristiano, Joelmir e Mariana já possuem aliases nas seis fontes do catálogo carregado.
 
-Entrega da carga, somente local e ignorada pelo Git:
+Foi preparado apenas o incremento opcional `carga-local/05_aliases_jjc.sql`, com
+os dois valores `JJC - JANIO JOSE` em acerto/view, conforme a associação explícita
+confirmada pelo usuário nesta solicitação. Usa a identidade existente de Janio,
+recusa qualquer alias pertencente a outro técnico ou desativado e não sobrescreve
+usuários, vínculos, perfis ou escopos. É transacional e idempotente; não foi executado.
+Sem esse incremento, fontes sem o alias de Janio continuam bloqueadas para seu escopo.
 
-- `carga-local/catalogo_tecnicos.json`: valores, contagens, fontes, evidências,
-  35 identidades e os 15 valores pendentes; 177 aliases prontos para carga.
-- `carga-local/conferencia_carga.md`: cruzamento dos 14 registros do Word com
-  as 65 contas existentes; só Lucas já tem conta por e-mail exato.
-- `carga-local/03_carga_inicial_neon.sql`: único SQL da carga inicial,
-  idempotente e transacional, com diário das linhas realmente inseridas nas
-  próprias estruturas auxiliares. Não cria tabelas nem contas.
-- `carga-local/04_rollback_carga_neon.sql`: usar somente se precisar reverter;
-  verifica alterações posteriores e referências novas antes de remover linhas.
-  Não executar o rollback junto da implantação.
+A sigla CVB já é pesquisável pelo alias confirmado CVB - CRISTIANO. Não foram
+criadas identidades a partir de códigos históricos de galpoes. Essa tabela não é
+fonte das quatro consultas protegidas atuais: não foi incluída no filtro nem foi
+ampliada a lista de fontes/colunas autorizadas sem necessidade. Os 35 técnicos e
+177 aliases existentes foram reaproveitados, sem refazer a carga.
 
-Se a primeira tentativa retornou `mismatched parentheses`, clicar no botão
-ROLLBACK do SQL Editor para encerrar a transação abortada, substituir todo o SQL
-pelo arquivo 03 atualizado e executá-lo novamente. O arquivo 04 não é usado para
-limpar esse erro. Foi corrigida a aspa da chave JSON `nome` no teste da conta;
-carga e rollback foram regenerados, sem alterar as identidades/permissões.
+## Arquivos para republicar
 
-Nenhum alias pendente é carregado. Os nomes completos confirmados permanecem
-separados mesmo quando uma sigla pode indicar mais de uma pessoa. As divergências
-da base dinâmica não são usadas para juntar nomes: a responsabilidade histórica
-é conferida nas fontes de mortalidade/histórico e na chave de acerto. Não há
-regra de maioria, iniciais ou aproximação para conceder dados.
+- GitHub Pages do Portal: `index.html` e `assets/js/zootecnico-access.js`.
+- Render do Portal: `api/zootecnico_access.py`, junto do backend atual.
+- API do Anderson, Docker, Worker e frontend dos gráficos: sem alterações nesta etapa.
 
-**Não usar `20261103_zootecnico_tecnico_teste.sql` no fluxo novo.**
-Técnicos, identidades e aliases são gerenciados internamente pelo formulário.
+Publicar o backend do Portal antes dos dois arquivos de frontend. Não trocar
+configurações, autenticação, Docker ou variáveis de ambiente.
 
-- Joelmir: Usuários → cadastrar/editar → perfil Setor → Integração → Dados da
-  Integração: Somente seus dados. O nome do cadastro identifica a pessoa.
-- Gerente com equipe específica: perfil Setor → Integração → Equipe → marcar
-  usuários do Portal. Não selecionar IDs de técnicos nem repetir cadastros.
-- Admin/Diretor: visão geral automática; demais perfis recebem geral somente
-  com autorização explícita do administrador.
-- Se a correspondência não for inequívoca, Resolver aqui apresenta valores reais
-  por fonte. O admin confere e confirma ali. Pode marcar uma fonte sem registros
-  para mantê-la SEM acesso. Não se deduz vínculo por iniciais ou nome parcial.
-- Um nome completo exato, único no cadastro, pode ser associado às variantes
-  comprovadas por chave completa de lote. Siglas com mais de um dono não são
-  associadas automaticamente. Catálogo legado sem dono pode ser reaproveitado;
-  uma identidade que já pertence a outro usuário não é transferida.
+## Testar depois de publicar
 
-O backend usa primeiro os aliases confirmados no Neon: um usuário identificado
-não depende da disponibilidade da API especializada a cada cadastro/salvamento.
-Quando falta uma correspondência, o catálogo da API só é consultado sob demanda
-administrativa. A busca é assíncrona para
-não prender o worker do Render enquanto o Worker valida a sessão na CENTRAL.
-O cache efêmero de 5 minutos contém só nomes/provas, sem tokens, chaves de lotes
-ou permissões. Sem polling permanente. Se o limite de provas for excedido,
-usa somente nomes reais e exige resolução manual de variantes não comprovadas.
-Salvar refaz a validação no servidor dentro da mesma transação do usuário.
-API indisponível ou correspondência não resolvida permite salvar o usuário com
-vínculo explicitamente pendente. O recurso `zootecnico_pendente` guarda a intenção
-e a equipe selecionada; a autorização efetiva fica `none`, sem aliases novos.
-O formulário e o aviso de salvamento mostram que não foram liberados registros.
-Não há ativação automática posterior: o admin confere e salva novamente quando
-a correspondência puder ser validada. Falha SQL ou conflito durante uma gravação
-validada desfaz toda a transação. Edição de outros campos sem alterar o acesso
-zootécnico preserva a configuração anterior.
+1. Admin → Usuários → criar/editar uma conta comum → perfil Setor → Integração.
+2. Dados da Integração → Somente seus dados → pesquisar CVB ou Cristiano e salvar.
+3. Reabrir: Cristiano precisa continuar selecionado. Testar também Conta de Teste
+   com nome diferente; não é necessário criar uma identidade técnica nova.
+4. Entrar nessa conta em outra janela: quatro telas devem consultar somente seus
+   registros. Filtros alterados para outro técnico não podem ampliar o acesso.
+5. Repetir com Joelmir/JDS e Mariana/MLC. Trocar a identidade e salvar, verificando
+   que a autorização mudou sem modificar os aliases ou o nome do técnico.
+6. Gerente Setor → Equipe → selecionar os usuários técnicos. Conferir somente a
+   união deles; não incluir dados gerais de um membro Diretor/Admin.
+7. Admin/Diretor e Leandro: visão geral preservada. Comercial deve continuar igual.
 
-O erro genérico do catálogo ganhou motivos específicos para 401/403/404/5xx e
-falha de conexão. Não foram consultados logs/endpoints reais nesta etapa; não
-afirmar qual status o servidor publicado retornou. O pacote da API precisa conter
-o endpoint de opções e o Worker precisa manter a ponte já preparada.
-
-## Testar após publicação
-
-1. Conta antiga geral: conferir RxP, quatro telas e relatórios comerciais.
-2. Joelmir, janela separada: conferir filtros, indicadores, detalhes e galpões nas
-   quatro telas. Alterar filtros para outro técnico não pode ampliar o acesso.
-   Antes, criar a conta comum pelo portal, com senha inicial pelo fluxo atual,
-   perfil Setor, Integração e Somente seus dados. Confirmar o e-mail: o Word traz
-   domínio `.com`, sem `.br`; a carga não corrige esse valor por suposição.
-   Repetir com Mariana; ela também não tem conta no resultado recebido.
-3. Gerente Setor/Equipe: ver somente a união dos usuários marcados; bloquear ou
-   remover um membro deve retirar seus dados na próxima requisição.
-4. Admin/Diretor: visão geral, inclusive RxP. Configurar um técnico não pode
-   restringir esses perfis nem mudar o Comercial.
-5. Abrir um usuário antigo e alterar outro campo: seu acesso deve continuar igual.
-6. Simular catálogo indisponível em ambiente de teste: salvar uma correspondência
-   pendente e conferir que a conta existe, mas não consulta registros. Reabrir a
-   edição deve mostrar o modo solicitado e a equipe, com estado pendente.
-
-Testes locais: 40 de autorização, 25 de cadastro/compatibilidade, 21 da carga,
-pendências e aliases reais fornecidos, 10 dos builders originais/middleware,
-15 de regressão comercial e 3 do pacote; 27 verificações Chrome com rede bloqueada.
-Os 94 testes do Worker são da etapa anterior, cujo código foi preservado.
-Não são testes em PostgreSQL real, Cloudflare real ou produção. Nenhum acesso
-real de Joelmir foi confirmado antes da publicação e validação no formulário.
+Validação local: 113 testes do Zootécnico/carga/pacote, 15 de regressão comercial
+(128 no total) e 31 verificações Chrome com HTTP bloqueado. O Chrome usa o helper
+real do Comercial e o catálogo local exportado; os testes de backend usam banco
+simulado. Nada foi testado como se fosse login real, SQL real ou deploy em produção.

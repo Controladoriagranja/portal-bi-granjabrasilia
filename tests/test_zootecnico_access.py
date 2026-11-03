@@ -314,6 +314,8 @@ class Engine:
         query=str(query)
         if 'to_regclass' in query:return Result(self.ready)
         if 'SELECT EXISTS' in query:return Result(self.allowed)
+        if 'SELECT DISTINCT v.usuario_id,e.identificador' in query:return Result([])
+        if 'SELECT e.identificador,e.nome,a.fonte,a.valor' in query:return Result([])
         if 'AS requested_mode' in query:return Result(None)
         if 'SELECT escopo' in query:return Result(dict(escopo=self.mode,ativo=True))
         if 'SELECT v.entidade_id' in query:return Result(self.ids)

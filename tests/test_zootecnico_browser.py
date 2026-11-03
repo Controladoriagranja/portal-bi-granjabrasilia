@@ -28,59 +28,61 @@ def main():
         driver.execute_cdp_cmd('Network.enable',{})
         driver.execute_cdp_cmd('Network.setBlockedURLs',{'urls':['http://*','https://*']})
         driver.get('about:blank')
+        from test_zootecnico_canonical import seed_catalog
+        seed=seed_catalog();identities=[]
+        for entity in seed['entidades']:
+            aliases={}
+            for alias in seed['aliases']:
+                if alias['entidade_id']==entity['id']:aliases.setdefault(alias['fonte'],[]).append(alias['valor'])
+            identities.append(dict(id=entity['id'],name=entity['nome'],aliases=aliases,aliasCount=sum(map(len,aliases.values())),missingSources=[]))
+        ids={i['name']:i['id'] for i in identities}
+        html=(ROOT/'index.html').read_text(encoding='utf-8')
+        helpers='\n'.join(re.search(r'(?m)^function '+name+r'\([^\n]*(?:[\s\S]*?^\}|$)',html).group() for name in ('normalizeAccessSearch','filterAccessLinks'))
         driver.execute_script("""
-          document.body.innerHTML=['eu','newUser'].map(p=>`<input id="${p==='eu'?'euName':'newUserName'}" value="Joelmir Divino dos Santos"><input id="${p==='eu'?'euEmail':'newUserEmail'}" value="offline@example.invalid"><select id="${p==='eu'?'euRole':'newUserRole'}"><option value="sector">Setor</option><option value="admin">Admin</option><option value="director">Diretor</option></select><div id="${p}OperationPermissions"></div>`).join('');
-          window.pending=[];window.previews=[];
-          window.previewResult={ok:true,ready:true,persons:[],options:{}};
-          window.portalApiRequest=(path,options)=>{
-            if(options?.method==='POST'){previews.push(JSON.parse(options.body));return Promise.resolve(previewResult);}
-            return new Promise(resolve=>pending.push({path,resolve}));
-          };
-          window.users=[{id:41,name:'Joelmir Divino dos Santos',email:'offline@example.invalid',active:true},{id:42,name:'Outro técnico',email:'other@example.invalid',active:true},{id:43,name:'Bloqueado',email:'blocked@example.invalid',active:false}];
-        """)
+          document.body.innerHTML=['eu','newUser'].map(p=>`<input id="${p==='eu'?'euName':'newUserName'}" value="Conta de teste"><input id="${p==='eu'?'euEmail':'newUserEmail'}" value="offline@example.invalid"><select id="${p==='eu'?'euRole':'newUserRole'}"><option value="sector">Setor</option><option value="admin">Admin</option><option value="director">Diretor</option></select><div id="${p}OperationPermissions"></div>`).join('');
+          window.pending=[];window.requests=[];window.accessLinkRows={};
+          window.portalApiRequest=(path,options)=>{requests.push({path,options});return new Promise(resolve=>pending.push({path,resolve}));};
+        """+helpers+"""
+          window.normalizeAccessSearch=normalizeAccessSearch;window.filterAccessLinks=filterAccessLinks;
+          window.identities=arguments[0];window.ids=arguments[1];
+          window.users=[{id:41,name:'Pessoa Um',email:'one@example.invalid',active:true,identityId:ids['CRISTIANO VALADARES BARRETO']},{id:42,name:'Pessoa Dois',email:'two@example.invalid',active:true,identityId:ids['MARIANA LEMAR CARDOSO']},{id:43,name:'Bloqueado',email:'blocked@example.invalid',active:false,identityId:null}];
+        """,identities,ids)
         driver.execute_script((ROOT/'assets/js/zootecnico-access.js').read_text(encoding='utf-8'))
         js=driver.execute_script
         check(js("return !!document.getElementById('euZooMode')"),'Modal montado')
-        js("loadZootecnicoAccessForm('eu',41)")
-        check(js("return pending[0].path.endsWith('/41/zootecnico-access')"),'ID permanente no cadastro')
-        js("pending.shift().resolve({ok:true,access:{mode:'todos',userIds:[]},users})")
-        check(js("return readZootecnicoAccessForm('eu')===undefined && document.getElementById('euZooMode').value==='todos'"),'Permissão anterior geral preservada ao editar outros campos')
-        js("document.getElementById('euZooMode').value='proprio';document.getElementById('euZooMode').dispatchEvent(new Event('change'))")
-        check(js("return readZootecnicoAccessForm('eu').allowPending===true"),'Novo vínculo permite cadastro pendente sem conceder registros')
-        WebDriverWait(driver,3).until(lambda d:d.execute_script("return previews.length>0 && document.getElementById('euZooStatus').textContent.includes('validada')"))
-        check(js("return !document.getElementById('euZooIds') && !('technicianIds' in readZootecnicoAccessForm('eu'))"),'Próprio sem segundo cadastro nem seleção do técnico')
-        check(js("return previews.at(-1).name==='Joelmir Divino dos Santos'"),'Identificação utiliza o nome do próprio cadastro')
+        js("loadZootecnicoAccessForm('eu',41);pending.shift().resolve({ok:true,access:{mode:'todos',userIds:[],identityId:null},identities,users})")
+        check(js("return readZootecnicoAccessForm('eu')===undefined && document.getElementById('euZooMode').value==='todos'"),'Acesso geral anterior preservado ao editar outros campos')
+        js("document.getElementById('euZooMode').value='proprio';document.getElementById('euZooMode').dispatchEvent(new Event('change'));document.getElementById('euZooSearch').value='CVB';document.getElementById('euZooSearch').dispatchEvent(new Event('input'))")
+        check(js("return readZootecnicoAccessForm('eu').identityId===ids['CRISTIANO VALADARES BARRETO']"),'Cristiano selecionado uma vez por código confirmado')
+        check(js("return document.getElementById('euZooCode').hidden && document.getElementById('euZooMatches').textContent.includes('Selecionado automaticamente')"),'Pesquisa reutiliza o comportamento do Comercial')
+        check(js("return !document.querySelector('select[multiple]') && !document.querySelector('[data-source]')"),'Sem listas múltiplas por fonte')
+        check(js("return !('resolutions' in readZootecnicoAccessForm('eu')) && !('technicianIds' in readZootecnicoAccessForm('eu'))"),'Payload contém somente a identidade canônica')
+        check(js("return document.getElementById('euZooAliases').textContent.includes('CVB - CRISTIANO')"),'Resumo recupera aliases confirmados')
+        js("document.getElementById('euZooSearch').value='JDS';document.getElementById('euZooSearch').dispatchEvent(new Event('input'))")
+        check(js("return readZootecnicoAccessForm('eu').identityId===ids['JOELMIR DIVINO DOS SANTOS']"),'Troca por Joelmir sem alterar nome da conta')
+        js("document.getElementById('euZooSearch').value='MLC';document.getElementById('euZooSearch').dispatchEvent(new Event('input'))")
+        check(js("return readZootecnicoAccessForm('eu').identityId===ids['MARIANA LEMAR CARDOSO']"),'Mariana selecionada por sigla validada')
+        check(js("return requests.every(r=>!r.options?.method || r.options.method==='GET')"),'Cadastro não depende da API especializada ou de polling')
+        js("loadZootecnicoAccessForm('eu',41);pending.shift().resolve({ok:true,access:{mode:'proprio',identityId:ids['CRISTIANO VALADARES BARRETO'],userIds:[]},identities,users})")
+        check(js("return document.getElementById('euZooCode').value===ids['CRISTIANO VALADARES BARRETO'] && readZootecnicoAccessForm('eu')===undefined"),'Reabrir recupera o vínculo salvo')
         js("document.getElementById('euZooMode').value='equipe';document.getElementById('euZooMode').dispatchEvent(new Event('change'));document.querySelector('#euZooUsers input[value=\"41\"]').click();document.querySelector('#euZooUsers input[value=\"42\"]').click()")
-        WebDriverWait(driver,3).until(lambda d:d.execute_script("try{return readZootecnicoAccessForm('eu')?.userIds.length===2}catch(e){return false}"))
-        check(js("return readZootecnicoAccessForm('eu').userIds.join()==='41,42'"),'Equipe seleciona dois usuários do portal')
-        check(js("return document.querySelector('#euZooUsers input[value=\"43\"]').disabled"),'Bloqueado não é selecionável')
+        check(js("return readZootecnicoAccessForm('eu').userIds.join()==='41,42'"),'Equipe usa usuários do portal')
+        check(js("return document.querySelector('#euZooUsers input[value=\"43\"]').disabled"),'Usuário inativo não é selecionável')
         js("document.getElementById('euRole').value='director';document.getElementById('euRole').dispatchEvent(new Event('change'))")
-        check(js("return document.getElementById('euZooMode').disabled && readZootecnicoAccessForm('eu').mode==='todos'"),'Gestor visão geral')
+        check(js("return document.getElementById('euZooMode').disabled && readZootecnicoAccessForm('eu').mode==='todos'"),'Diretor mantém visão geral')
         js("document.getElementById('euRole').value='sector';document.getElementById('euRole').dispatchEvent(new Event('change'))")
-        check(js("return readZootecnicoAccessForm('eu').mode==='none'"),'Rebaixamento não herda acesso geral')
-        js("loadZootecnicoAccessForm('eu',42);loadZootecnicoAccessForm('eu',43)")
-        js("pending[1].resolve({ok:true,access:{mode:'proprio',userIds:[]},users})")
-        js("pending[0].resolve({ok:true,access:{mode:'todos',userIds:[]},users});pending=[]")
-        check(js("return readZootecnicoAccessForm('eu')===undefined && document.getElementById('euZooMode').value==='proprio'"),'Resposta antiga não troca usuário nem sobrescreve acesso')
+        check(js("return readZootecnicoAccessForm('eu').mode==='none'"),'Rebaixamento não herda geral')
+        js("loadZootecnicoAccessForm('eu',42);loadZootecnicoAccessForm('eu',43);pending[1].resolve({ok:true,access:{mode:'proprio',identityId:ids['MARIANA LEMAR CARDOSO'],userIds:[]},identities,users});pending[0].resolve({ok:true,access:{mode:'todos',userIds:[]},identities,users});pending=[]")
+        check(js("return document.getElementById('euZooCode').value===ids['MARIANA LEMAR CARDOSO']"),'Resposta atrasada não troca vínculo')
         js("loadZootecnicoAccessForm('eu',44);pending.shift().resolve({ok:false})")
-        check(js("return readZootecnicoAccessForm('eu')===undefined"),'Falha preserva permissão existente')
-        js("""
-          previewResult={ok:true,ready:false,persons:[{key:'self',userId:0,name:'Joelmir Divino dos Santos',ready:false,labels:{base_dinamica:[]}}],options:{base_dinamica:['JOELMIR DIVINO DOS SANTOS']}};
-          loadZootecnicoAccessForm('newUser',0);pending.shift().resolve({ok:true,access:{mode:'none',userIds:[]},users});
-        """)
+        check(js("return readZootecnicoAccessForm('eu')===undefined"),'Falha mantém permissões atuais')
+        js("loadZootecnicoAccessForm('newUser',0);pending.shift().resolve({ok:true,access:{mode:'none',userIds:[]},identities,users})")
         js("document.getElementById('newUserZooMode').value='proprio';document.getElementById('newUserZooMode').dispatchEvent(new Event('change'))")
-        WebDriverWait(driver,3).until(lambda d:d.execute_script("return !!document.querySelector('#newUserZooMatches select')"))
-        check(js("return readZootecnicoAccessForm('newUser').allowPending===true && document.getElementById('newUserZooStatus').textContent.includes('pendente')"),'Correspondência ambígua permite salvar mas continua pendente')
-        js("""
-          const select=document.querySelector('#newUserZooMatches select[data-source="base_dinamica"]');select.options[0].selected=true;select.dispatchEvent(new Event('change',{bubbles:true}));
-        """)
-        check(js("return readZootecnicoAccessForm('newUser').resolutions.self.confirmed===false"),'Seleção manual não é declarada confirmada')
-        js("previewResult={ok:true,ready:true,persons:[],options:{}};document.querySelector('#newUserZooMatches input[data-confirm]').click()")
-        WebDriverWait(driver,3).until(lambda d:d.execute_script("try{return readZootecnicoAccessForm('newUser')?.mode==='proprio'}catch(e){return false}"))
-        check(js("return readZootecnicoAccessForm('newUser').resolutions.self.selections.base_dinamica[0]==='JOELMIR DIVINO DOS SANTOS'"),'Resolver no formulário envia somente o valor exato conferido')
-        # Layout real dos dois grupos nas larguras de telefone/tablet/PC.
+        check(js("return readZootecnicoAccessForm('newUser').identityId===null && readZootecnicoAccessForm('newUser').allowPending"),'Ausência de seleção fica pendente, sem inferir por nome')
+        js("document.body.insertAdjacentHTML('beforeend','<input id=fixtureCommercialSearch><select id=fixtureCommercialCode></select><small id=fixtureCommercialMatches></small>');accessLinkRows.fixture=[{code:'7',label:'7 - Pessoa Um'},{code:'8',label:'8 - Pessoa Dois'}];document.getElementById('fixtureCommercialSearch').value='7';filterAccessLinks('fixture')")
+        check(js("return document.getElementById('fixtureCommercialCode').value==='7' && document.getElementById('fixtureCommercialCode').hidden"),'Comercial conserva os mesmos IDs e seleção automática')
         for width in (390,768,1366):
-            driver.set_window_size(width,900)
+            driver.execute_cdp_cmd('Emulation.setDeviceMetricsOverride',{'width':width,'height':900,'deviceScaleFactor':1,'mobile':False})
             check(js("return document.documentElement.scrollWidth<=innerWidth"),f'Sem rolagem horizontal em {width}px')
         api_source=(ROOT/'integrations/zootecnico/frontend/assets/js/api.js').read_text(encoding='utf-8')
         bootstrap="""

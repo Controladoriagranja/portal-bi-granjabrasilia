@@ -6372,13 +6372,13 @@ async function loadCommercialAccessOptions(){
 }
 const accessLinkRows={};
 function normalizeAccessSearch(value){return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR');}
-function filterAccessLinks(prefix,selection){
-  const search=document.getElementById(prefix+'CommercialSearch');
-  const select=document.getElementById(prefix+'CommercialCode');
-  const rows=accessLinkRows[prefix]||[];
+function filterAccessLinks(prefix,selection,kind='Commercial'){
+  const search=document.getElementById(prefix+kind+'Search');
+  const select=document.getElementById(prefix+kind+'Code');
+  const rows=accessLinkRows[kind==='Commercial'?prefix:prefix+kind]||[];
   let selected=selection===undefined?select.value:selection;
   const terms=normalizeAccessSearch(search.value).trim().split(/\s+/).filter(Boolean);
-  const filtered=rows.filter(row=>terms.every(term=>normalizeAccessSearch(row.label).includes(term)));
+  const filtered=rows.filter(row=>terms.every(term=>normalizeAccessSearch(row.searchText||row.label).includes(term)));
   const automatic=terms.length>0&&filtered.length===1;
   if(automatic)selected=filtered[0].code;
   select.replaceChildren(new Option(filtered.length?'Selecione...':'Nenhum resultado encontrado',''));
@@ -6387,7 +6387,7 @@ function filterAccessLinks(prefix,selection){
   if(pinned){const row=rows.find(row=>row.code===selected);select.add(new Option('Selecionado: '+row.label,row.code));}
   select.value=selected||'';select.hidden=automatic;
   select.size=terms.length&&filtered.length?Math.min(6,filtered.length+1):1;
-  document.getElementById(prefix+'CommercialMatches').textContent=automatic?'Selecionado automaticamente: '+filtered[0].label:(filtered.length===1?'1 resultado':filtered.length+' resultados')+(pinned?' · Vínculo selecionado mantido.':terms.length&&filtered.length>1?' · Escolha o nome na lista.':'');
+  document.getElementById(prefix+kind+'Matches').textContent=automatic?'Selecionado automaticamente: '+filtered[0].label:(filtered.length===1?'1 resultado':filtered.length+' resultados')+(pinned?' · Vínculo selecionado mantido.':terms.length&&filtered.length>1?' · Escolha o nome na lista.':'');
 }
 async function toggleCommercialAccess(prefix,selected=''){
   const mode=document.getElementById(prefix+'CommercialMode').value;
