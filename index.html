@@ -13,6 +13,7 @@
 <link rel="apple-touch-icon" sizes="180x180" href="./assets/pwa/apple-touch-icon.png">
 <link rel="stylesheet" href="./assets/pwa/install.css">
 <script src="./assets/pwa/install.js" defer></script>
+<script src="./assets/js/zootecnico-access.js" defer></script>
 
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="shortcut icon" type="image/png" href="favicon.png">
@@ -4122,7 +4123,7 @@
 
 
 <div class="form-group" style="border-top:1px solid var(--border);padding-top:14px">
-  <label for="euCommercialMode">Acesso aos dados dos relatórios</label>
+  <label for="euCommercialMode">Acesso aos dados do Comercial</label>
   <select id="euCommercialMode" onchange="toggleCommercialAccess('eu')">
     <option value="none">Sem acesso aos dados</option>
     <option value="general">Geral — todos os dados</option>
@@ -4240,7 +4241,7 @@
             <div id="newUserReportWarn" style="font-size:12px;color:var(--orange);margin-top:6px;display:none">⚠️ Selecione pelo menos um relatório.</div>
           </div>
 <div class="form-group" style="border-top:1px solid var(--border);padding-top:14px">
-  <label for="newUserCommercialMode">Acesso aos dados dos relatórios</label>
+  <label for="newUserCommercialMode">Acesso aos dados do Comercial</label>
   <select id="newUserCommercialMode" onchange="toggleCommercialAccess('newUser')">
     <option value="none">Sem acesso aos dados</option>
     <option value="general">Geral — todos os dados</option>
@@ -5093,6 +5094,12 @@ function setPortalToken(token) {
 }
 
 function clearPortalToken() {
+  void exitReportFullscreen();
+  // Descartar o documento autenticado ao sair/perder a sessão.
+  const reportFrame = document.getElementById('reportIframe');
+  if (reportFrame) reportFrame.src = 'about:blank';
+  document.getElementById('modalOverlay')?.classList.remove('open');
+  document.body.classList.remove('report-viewer-open');
   stopTicketFormsImport(true);
   portalSessionGeneration++;
   stopCentralTicketSync();
@@ -6100,6 +6107,7 @@ function configureReportDownloads(iframe, reportUrl) {
 }
 
 async function openReport(id, pageId = '') {
+  const openingSession = portalSessionGeneration;
   const r = db.reports.find(x => Number(x.id) === Number(id));
   if (!r || !canOpenReportPage(id, pageId)) {
     showToast('Você não possui acesso a esta tela.', 'error');
@@ -6150,6 +6158,7 @@ async function openReport(id, pageId = '') {
   }
   iframe.style.display = 'block';
   setTimeout(() => {
+    if (openingSession !== portalSessionGeneration || !currentUser) return;
     configureReportDownloads(iframe, currentReportUrl); iframe.src = currentReportUrl;
     iframe.onload = () => { document.getElementById('iframeLoader').style.display = 'none'; };
     iframe.onerror = () => {
@@ -6165,11 +6174,15 @@ async function openReport(id, pageId = '') {
 }
 
 function retryIframe() {
+  const retrySession = portalSessionGeneration;
   document.getElementById('iframeError').style.display = 'none';
   document.getElementById('iframeLoader').style.display = 'flex';
   const iframe = document.getElementById('reportIframe');
   iframe.src = '';
-  setTimeout(() => { configureReportDownloads(iframe, currentReportUrl); iframe.src = currentReportUrl; }, 300);
+  setTimeout(() => {
+    if (retrySession !== portalSessionGeneration || !currentUser) return;
+    configureReportDownloads(iframe, currentReportUrl); iframe.src = currentReportUrl;
+  }, 300);
   setTimeout(() => {
     document.getElementById('iframeLoader').style.display = 'none';
   }, 10000);
@@ -6456,6 +6469,7 @@ function adminUserPayload(u, overrides={}) {
     ticketPanelAccess: overrides.ticketPanelAccess ?? (u.ticketPanelAccess === true),
     dataAccess: overrides.dataAccess ?? overrides.commercialAccess ?? u.dataAccess ?? u.commercialAccess ?? {mode:'none'},
     commercialAccess: overrides.dataAccess ?? overrides.commercialAccess ?? u.dataAccess ?? u.commercialAccess ?? {mode:'none'},
+    ...(overrides.zootecnicoAccess !== undefined ? {zootecnicoAccess: overrides.zootecnicoAccess} : {}),
     ...(Object.prototype.hasOwnProperty.call(overrides, 'operationPermissions')
       ? {operationPermissions: overrides.operationPermissions} : {}),
     password: overrides.password ?? ''
@@ -6646,7 +6660,7 @@ async function addUser(button=null) {
       body:JSON.stringify({
         name, email, role, status:'active', sectors,
         reportAccessMode, reportIds, ticketPanelAccess:false, dataAccess:commercialAccess, commercialAccess, operationPermissions,
-        password:initialPwd
+        password:initialPwd, zootecnicoAccess:readZootecnicoAccessForm('newUser')
       })
     });
     if (resposta?.data) applyPortalDataResponse(resposta.data);
@@ -6656,6 +6670,7 @@ async function addUser(button=null) {
     document.getElementById('newUserPwd').value = '';
     document.getElementById('newUserRole').value = '';
     setCommercialAccessForm('newUser',{mode:'none'});
+    resetZootecnicoAccessForm('newUser');
     setOperationPermissionsForm('newUser');
     document.getElementById('newUserReportMode').value = 'sector';
     document.getElementById('sectorField').style.display = 'none';
@@ -10221,6 +10236,7 @@ function openEditUser(id) {
   document.getElementById('euEmail').value = u.email;
   document.getElementById('euRole').value = u.role;
   setCommercialAccessForm('eu',u.dataAccess || u.commercialAccess || {mode:'none'});
+  void loadZootecnicoAccessForm('eu',Number(u.dbId || u.id));
   setOperationPermissionsForm('eu',u.operationPermissions);
   document.getElementById('euNewPwd').value = '';
   document.getElementById('euAvatar').textContent = u.name[0].toUpperCase();
@@ -10334,7 +10350,7 @@ async function saveEditUser(button=null) {
     const commercialAccess=readCommercialAccessForm('eu');
     const operationPermissions=readOperationPermissionsForm('eu');
     await patchAdminUser(u, {
-      commercialAccess, operationPermissions, name, email, role, status, sectors, reportAccessMode,
+      commercialAccess, operationPermissions, zootecnicoAccess:readZootecnicoAccessForm('eu'), name, email, role, status, sectors, reportAccessMode,
       reportIds, ticketPanelAccess, password:newPwd || ''
     });
 

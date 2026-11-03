@@ -1,4 +1,7 @@
 from commercial_access import normalize_commercial_access, effective_commercial_access
+from zootecnico_access import (register_routes as register_zootecnico_routes,
+                              normalize_access as normalize_zootecnico_access,
+                              replace_access as replace_zootecnico_access)
 from operation_permissions import (operation_permissions_from_payload,
                                    replace_operation_permissions, effective_operation_permissions)
 from forms_import import (reader_config as forms_reader_config, new_context as forms_new_context,
@@ -2869,6 +2872,9 @@ def _usuario_e_admin(usuario):
     return perfil == "admin" or role == "admin"
 
 
+register_zootecnico_routes(app, engine, _usuario_autenticado, _usuario_e_admin)
+
+
 def _usuario_publico(usuario):
     if not usuario:
         return None
@@ -3142,6 +3148,7 @@ def api_admin_usuario_patch(usuario_id):
     try:
         operation_permissions = operation_permissions_from_payload(body)
         commercial_access = {'mode':'general'} if str(body.get('role') or '').strip().lower() in {'admin','director'} else (normalize_commercial_access(body['commercialAccess']) if 'commercialAccess' in body else None)
+        zootecnico_access = normalize_zootecnico_access(body['zootecnicoAccess']) if 'zootecnicoAccess' in body else None
     except ValueError as error:
         return jsonify({"ok":False,"erro":str(error)}),400
 
@@ -3216,6 +3223,9 @@ def api_admin_usuario_patch(usuario_id):
             """), params)
 
             replace_operation_permissions(conn, usuario_id, operation_permissions)
+
+            if zootecnico_access is not None:
+                replace_zootecnico_access(conn, usuario_id, zootecnico_access, usuario_atual['usuario_id'])
 
             if senha:
                 conn.execute(text("""
@@ -3361,6 +3371,7 @@ def api_admin_usuario_create():
     try:
         operation_permissions = operation_permissions_from_payload(body)
         commercial_access = {'mode':'general'} if str(body.get('role') or '').strip().lower() in {'admin','director'} else normalize_commercial_access(body.get('commercialAccess', {'mode':'none'}))
+        zootecnico_access = normalize_zootecnico_access(body['zootecnicoAccess']) if 'zootecnicoAccess' in body else None
     except ValueError as error:
         return jsonify({"ok":False,"erro":str(error)}),400
     nome = str(body.get("name") or "").strip()
@@ -3415,6 +3426,8 @@ def api_admin_usuario_create():
 
             _sincronizar_usuario_relacoes(conn, usuario_id, sectors, report_ids)
             replace_operation_permissions(conn, usuario_id, operation_permissions)
+            if zootecnico_access is not None:
+                replace_zootecnico_access(conn, usuario_id, zootecnico_access, usuario_atual['usuario_id'])
 
         log(f"Usuário criado por {usuario_atual.get('email')}: {email}", "INFO")
         return jsonify({"ok": True, "data": carregar_portal_data_neon()}), 201

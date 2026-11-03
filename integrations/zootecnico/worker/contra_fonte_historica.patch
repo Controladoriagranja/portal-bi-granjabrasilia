@@ -1,0 +1,172 @@
+--- a/worker_historico_20261008.js
++++ b/worker.js
+@@ -27,8 +27,10 @@
+       "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+     );
+ 
+-    headers.set("Vary", "Origin");
+   }
++
++  headers.set("Vary", "Origin, Authorization");
++  headers.set("Cache-Control", "no-store");
+ 
+   return headers;
+ }
+@@ -87,7 +89,8 @@
+ 
+       if (origin !== PORTAL_ORIGIN) {
+         return new Response(null, {
+-          status: 403
++          status: 403,
++          headers: {"Cache-Control": "no-store", "Vary": "Origin"}
+         });
+       }
+ 
+@@ -127,6 +130,10 @@
+       );
+     }
+ 
++    if ([...url.searchParams.keys()].some(key => /^(authorization|access_token|token|x-portal-authorization)$/i.test(key))) {
++      return json({detail: "Credenciais não são aceitas na URL"}, 400, origin);
++    }
++
+ 
+     // --------------------------------
+     // TOKEN DO PORTAL
+@@ -137,7 +144,7 @@
+ 
+ 
+     if (
+-      !authorization.startsWith("Bearer ")
++      !authorization.startsWith("Bearer ") || authorization.length > 4096 || !authorization.slice(7).trim()
+     ) {
+       return json(
+         {
+@@ -162,8 +169,11 @@
+         {
+           method: "GET",
+ 
++          cache: "no-store",
++          redirect: "manual",
+           headers: {
+             "Accept": "application/json",
++            "Cache-Control": "no-store",
+             "Authorization": authorization
+           }
+         }
+@@ -182,13 +192,13 @@
+     }
+ 
+ 
+-    if (authResponse.status === 401) {
++    if (authResponse.status === 401 || authResponse.status === 403) {
+       return json(
+         {
+           detail:
+             "Sessão inválida ou expirada"
+         },
+-        401,
++        authResponse.status,
+         origin
+       );
+     }
+@@ -207,13 +217,20 @@
+     }
+ 
+ 
+-    const authData =
+-      await authResponse.json();
++    let authData;
++    try {
++      authData = await authResponse.json();
++    } catch (_) {
++      return json({ detail: "Resposta de autenticação inválida" }, 503, origin);
++    }
+ 
+ 
+     if (
+       !authData?.ok ||
+-      !authData?.user?.email
++      !authData?.user?.email ||
++      !Number.isSafeInteger(authData?.user?.id) ||
++      authData.user.id < 1 ||
++      authData.user.ativo !== true
+     ) {
+       return json(
+         {
+@@ -246,6 +263,11 @@
+ 
+     const headers =
+       new Headers(request.headers);
++
++    // Sobrescrever qualquer identidade enviada pelo cliente com o Bearer validado.
++    // Basic autentica a infraestrutura; o Bearer autoriza o usuário na API.
++    headers.set("X-Portal-Authorization", authorization);
++    headers.set("Cache-Control", "no-store");
+ 
+ 
+     headers.set(
+@@ -262,6 +284,7 @@
+     // desnecessárias do navegador.
+     headers.delete("Origin");
+     headers.delete("Referer");
++    headers.delete("Cookie");
+ 
+ 
+     // --------------------------------
+@@ -280,6 +303,7 @@
+         targetUrl.toString(),
+         {
+           method: request.method,
++          cache: "no-store",
+           headers: headers,
+ 
+           body:
+@@ -319,6 +343,13 @@
+       );
+     }
+ 
++    if (upstream.status >= 300 && upstream.status < 400) {
++      return json({ detail: "Redirecionamento inesperado da API interna" }, 502, origin);
++    }
++    if (upstream.status >= 500) {
++      return json({ detail: "Serviço de dados temporariamente indisponível" }, upstream.status, origin);
++    }
++
+ 
+     // --------------------------------
+     // RETORNO
+@@ -331,6 +362,13 @@
+     responseHeaders.delete(
+       "WWW-Authenticate"
+     );
++    responseHeaders.delete("Authorization");
++    responseHeaders.delete("X-Portal-Authorization");
++    responseHeaders.delete("Set-Cookie");
++    responseHeaders.delete("Access-Control-Allow-Origin");
++    responseHeaders.delete("Access-Control-Allow-Credentials");
++
++    const vary = new Set((responseHeaders.get("Vary") || "").split(",").map(x => x.trim()).filter(Boolean));
+ 
+ 
+     const cors =
+@@ -341,11 +379,14 @@
+       const [key, value]
+       of cors.entries()
+     ) {
++      if (key.toLowerCase() === "vary") continue;
+       responseHeaders.set(
+         key,
+         value
+       );
+     }
++    for (const key of ["Origin", "Authorization", "X-Portal-Authorization"]) vary.add(key);
++    responseHeaders.set("Vary", [...vary].join(", "));
+ 
+ 
+     responseHeaders.set(
+@@ -362,4 +403,4 @@
+       }
+     );
+   }
+-};+};

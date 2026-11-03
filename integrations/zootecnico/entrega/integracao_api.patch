@@ -1,0 +1,99 @@
+--- a/API/api_zootecnico/servico_zootecnico.py
++++ b/API/api_zootecnico/servico_zootecnico.py
+@@ -22,6 +22,7 @@
+ # Router genérico dos BIs.
+ from bi_generic.router import criar_router
+ from portal_router import criar_router_portal
++from zootecnico_acesso import dispatch as zootecnico_dispatch, scoped_connection
+ 
+ 
+ def validar_acesso(usuario, senha):
+@@ -98,7 +99,7 @@
+                 },
+             )
+ 
+-        response = await call_next(request)
++        response = await zootecnico_dispatch(request, call_next)
+         response.headers["Cache-Control"] = "no-store"
+ 
+         return response
+@@ -194,7 +195,7 @@
+             "REPEATABLE READ READ ONLY"
+         )
+ 
+-        yield conn
++        yield scoped_connection(conn)
+ 
+ 
+ app.include_router(criar_router(banco))
+--- a/API/api_zootecnico/portal_router.py
++++ b/API/api_zootecnico/portal_router.py
+@@ -19,6 +19,7 @@
+ from threading import Lock, Thread
+ from time import monotonic
+ from copy import deepcopy
++from contextvars import copy_context
+ from pathlib import Path
+ import json
+ 
+@@ -44,7 +45,7 @@
+             entry=self.values.get(key)
+             future=self.pending.get(key)
+             if (entry is None or monotonic()-entry[0]>=self.ttl) and future is None and monotonic()>=self.retry_after.get(key,0):
+-                future=self.pool.submit(self._load,key,loader)
++                future=self.pool.submit(copy_context().run,self._load,key,loader)
+                 self.pending[key]=future
+         if entry is not None:
+             return deepcopy(entry[1])
+@@ -161,6 +162,9 @@
+     "bd_eclosao": {"eclosao", "eclosao_cargas"},
+     "bd_embrio": {"embrio", "embrio_cargas"},
+ }
++
++
++from zootecnico_acesso import catalog_general
+ 
+ 
+ def criar_router_portal(banco):
+@@ -334,9 +338,13 @@
+         with banco() as conn:
+             result = []
+             existentes=descobrir_schemas(conn)
++            if not catalog_general():
++                existentes = [s for s in existentes if s != 'zootecnico']
+             agrupados={s for grupo in ESQUEMAS_POR_MODULO.values() for s in grupo}
+             nomes={**ESQUEMAS, **{s:s.replace('_',' ').title() for s in existentes if s not in agrupados}}
+             for modulo, nome in nomes.items():
++                if not catalog_general() and 'zootecnico' in ESQUEMAS_POR_MODULO.get(modulo, (modulo,)):
++                    continue
+                 tables = []
+                 for schema in schemas_do_modulo(modulo, conn):
+                     tables.extend(resumo_schema(conn, schema))
+@@ -360,7 +368,7 @@
+ 
+     @router.get("/modulos")
+     def modulos():
+-        return resumo_cache.get('modulos',carregar_modulos)
++        return resumo_cache.get(('modulos', catalog_general()),carregar_modulos)
+ 
+     @router.get("/catalogo-esperado")
+     def catalogo_esperado():
+@@ -478,7 +486,7 @@
+     async def preparar_resumo():
+         def warm():
+             try:
+-                resumo_cache.get('modulos',carregar_modulos)
++                resumo_cache.get(('modulos', catalog_general()),carregar_modulos)
+             except Exception:
+                 pass  # O próximo acesso tentará novamente; não bloqueia a inicialização.
+         Thread(target=warm,daemon=True,name='portal-resumo-inicial').start()
+--- a/API/api_zootecnico/Dockerfile.zootecnico
++++ b/API/api_zootecnico/Dockerfile.zootecnico
+@@ -3,6 +3,7 @@
+ COPY API/api_zootecnico/requirements.txt .
+ RUN pip install --no-cache-dir -r requirements.txt
+ COPY API/api_zootecnico/servico_zootecnico.py .
++COPY API/api_zootecnico/zootecnico_acesso.py .
+ COPY API/api_zootecnico/portal_router.py .
+ COPY API/api_zootecnico/comercial_html.py .
+ COPY API/api_zootecnico/suprimentos_html.py .

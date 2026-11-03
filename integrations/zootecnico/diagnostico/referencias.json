@@ -1,0 +1,28 @@
+{
+  "reference": "C:\\Users\\vchaves\\Downloads\\api_zootecnico(3).zip",
+  "reference_is_official": false,
+  "reference_archive_sha256": "3e8110d7b9855e9cb521b857f57ae6b195e26c73bfeba1f0a6ad4da91bbd9300",
+  "file_hashes_normalized_lf": true,
+  "sql_executed": false,
+  "production_accessed": false,
+  "expected_columns": 169,
+  "route_cases": 19,
+  "auxiliary_plan_cases": 1,
+  "files": [
+    {
+      "file": "servico_zootecnico.py",
+      "reference_sha256": "7b20e9add85ea4ffeb0a6b947a280613629fbe5c4b2f362963d8246163ce9fba",
+      "prepared_sha256": "00ffca7e50e754029fb75e7532bca2bf43f632c8c6cc5e2d01f4e18b58fceffd"
+    },
+    {
+      "file": "portal_router.py",
+      "reference_sha256": "0c1d887762e7703d35b9b68e2655e05a72bd3400eba9f6cf04663cc32725d97d",
+      "prepared_sha256": "33dab0136d750af9b4b36da78e4acbeaa8f7e5af784623f65d31d894da50ea1f"
+    },
+    {
+      "file": "Dockerfile.zootecnico",
+      "reference_sha256": "62478b0e69f757d64ecd0659d97bcb29d19116e04ba4b6da9ea6f300bf60aa34",
+      "prepared_sha256": "ce3f53b0eab217d437db35d420f255f5d1e9e4ce65914fdee9bcae80ee571966"
+    }
+  ]
+}

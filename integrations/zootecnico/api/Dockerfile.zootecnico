@@ -1,0 +1,30 @@
+FROM python:3.12-slim
+WORKDIR /app
+COPY API/api_zootecnico/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY API/api_zootecnico/servico_zootecnico.py .
+COPY API/api_zootecnico/zootecnico_acesso.py .
+COPY API/api_zootecnico/portal_router.py .
+COPY API/api_zootecnico/comercial_html.py .
+COPY API/api_zootecnico/suprimentos_html.py .
+COPY API/api_zootecnico/suprimentos_saving.py .
+COPY API/api_zootecnico/suprimentos_conformidade.py .
+COPY API/api_zootecnico/suprimentos_pagamento_grupos.py .
+COPY API/api_zootecnico/comercial_acesso.py .
+COPY API/api_zootecnico/frete_manual.py .
+COPY API/api_zootecnico/frete_manual_auth.py .
+COPY API/api_zootecnico/comercial_relatorios.py .
+COPY API/api_zootecnico/pcp_painel.py .
+COPY API/api_zootecnico/pcp_comparativo.py .
+COPY API/api_zootecnico/pcp_classificacao.json .
+COPY API/api_zootecnico/pcp_dados ./pcp_dados
+COPY API/api_zootecnico/logo_granja.png .
+COPY API/api_zootecnico/bi_generic ./bi_generic
+COPY API/api_zootecnico/documentacao_zootecnico.html .
+COPY Portal/zootecnico_teste/index.html .
+CMD ["uvicorn","servico_zootecnico:app","--host","0.0.0.0","--port","8010"]
+
+
+COPY API/api_zootecnico/suprimentos_cte.py .
+
+COPY API/api_zootecnico/logistica_html.py .

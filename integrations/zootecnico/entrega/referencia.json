@@ -1,0 +1,17 @@
+{
+  "base": "api_zootecnico(3).zip",
+  "base_sha256": "3e8110d7b9855e9cb521b857f57ae6b195e26c73bfeba1f0a6ad4da91bbd9300",
+  "versao_oficial_confirmada": true,
+  "confirmacao": "usuario, 2026-11-03",
+  "servidor_inspecionado": false,
+  "metadados_obrigatorios_confirmados_pelo_usuario": true,
+  "candidatos_tecnico_obrigatorio": false,
+  "publicado": false,
+  "formato": "mesma estrutura completa do ZIP original",
+  "alterados": [
+    "api_zootecnico/servico_zootecnico.py",
+    "api_zootecnico/portal_router.py",
+    "api_zootecnico/Dockerfile.zootecnico"
+  ],
+  "adicionado": "api_zootecnico/zootecnico_acesso.py"
+}
