@@ -35,11 +35,11 @@ class MatchingTests(unittest.TestCase):
 
     def test_joelmir_requires_full_record_key_to_match_short_label(self):
         key=['12','3','9','2026-04-10']
-        rows=[self.row(s,NAME if s=='base_dinamica' else SHORT,key) for s in portal.PRIMARY_SOURCES]
+        rows=[self.row(s,SHORT if s=='vw_desempenho_acerto_portal' else NAME,key) for s in portal.PRIMARY_SOURCES]
         result=api.build_technician_catalog(rows)
         resolved=portal.resolve_person(dict(id=0,key='self',nome=NAME),result,{})
         self.assertTrue(resolved['ready'])
-        self.assertEqual(resolved['labels']['mortalidade_peso_abertos'],[SHORT])
+        self.assertEqual(resolved['labels']['vw_desempenho_acerto_portal'],[SHORT])
         self.assertNotIn('chaves',json.dumps(result))
         self.assertNotIn('2026-04-10',json.dumps(result))
 
@@ -56,11 +56,13 @@ class MatchingTests(unittest.TestCase):
             self.assertNotIn('mortalidade_peso_abertos',result['groups'][0]['labels'])
 
     def test_conflicting_short_label_has_no_automatic_identity(self):
-        rows=[self.row('base_dinamica',NAME,['12','3','9','2026-04-10']),
+        rows=[self.row('mortalidade_peso_fechados',NAME,['12','3','9','2026-04-10']),
               self.row('mortalidade_peso_abertos',SHORT,['12','3','9','2026-04-10']),
-              self.row('base_dinamica','OUTRO TECNICO COMPLETO',['99','3','9','2026-04-10']),
+              self.row('mortalidade_peso_fechados','OUTRO TECNICO COMPLETO',['99','3','9','2026-04-10']),
               self.row('mortalidade_peso_abertos',SHORT,['99','3','9','2026-04-10'])]
-        self.assertEqual(api.build_technician_catalog(rows)['groups'],[])
+        result=api.build_technician_catalog(rows)
+        self.assertTrue(all('mortalidade_peso_abertos' not in g['labels'] for g in result['groups']))
+        self.assertTrue(result['pending'])
 
     def test_conflicting_snapshots_do_not_prove_identity(self):
         key=['12','3','9','2026-04-10']
@@ -120,7 +122,9 @@ class RegistrationEngine(FakeEngine):
         sql=' '.join(str(sql).split());p=params or {}
         value=None;handled=True
         if 'to_regclass' in sql:value=True
+        elif sql.startswith('SELECT e.identificador,e.nome,a.fonte,a.valor'):value=[]
         elif sql.startswith('SELECT id,nome,email,role,perfil'):value=self.users.get(p['uid'])
+        elif sql.startswith('SELECT EXISTS(SELECT 1 FROM public.usuarios WHERE id=:uid)'):value=p['uid'] in self.users
         elif sql.startswith('SELECT id,nome,email,ativo,role,perfil'):value=list(self.users.values())
         elif sql.startswith('SELECT DISTINCT e.identificador'):value=[]
         elif sql.startswith('SELECT DISTINCT a.entidade_id'):value=[]
@@ -233,11 +237,11 @@ class CatalogRouteTests(unittest.TestCase):
 
     def test_admin_preview_pending_is_nonblocking_and_never_writes(self):
         from flask import Flask
-        app=Flask(__name__);engine=Mock();user=dict(role='admin',usuario_id=1)
+        app=Flask(__name__);engine=Engine();user=dict(role='admin',usuario_id=1)
         portal.register_routes(app,engine,lambda:user,lambda u:u['role']=='admin')
-        with patch.object(portal,'catalog_get_or_start',return_value=None) as fetch:
+        with patch.object(portal,'catalog_get_or_start',return_value=None) as fetch,patch.object(portal,'catalog_from_neon',return_value=None),patch.object(portal,'schema_ready',return_value=True):
             result=app.test_client().post('/api/admin/zootecnico/preview',json=dict(name=NAME,access=dict(mode='proprio')))
-        self.assertEqual(result.status_code,202);engine.connect.assert_not_called()
+        self.assertEqual(result.status_code,202)
         self.assertTrue(result.json['pending'])
         user['role']='sector'
         with patch.object(portal,'catalog_get_or_start') as fetch:

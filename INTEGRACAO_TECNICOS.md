@@ -5,15 +5,29 @@
 **Estado atual — cadastro único e compatibilidade (03/11/2026):** técnicos e equipes
 são configurados na mesma tela de Usuários; não usar o seed SQL de técnicos abaixo.
 O backend resolve nomes exatos/provas por lote e administra as tabelas auxiliares.
-Ambiguidades ficam no próprio formulário; nenhuma gravação parcial é concluída.
+Ambiguidades ficam no próprio formulário. A conta pode ser salva com vínculo
+explicitamente pendente e autorização efetiva `none`; não há liberação automática.
 Admin/Diretor continuam gerais mesmo sem a estrutura auxiliar nova. Para preservar
 os usuários anteriores sem escopo configurado, foi preparado (não executado)
 `api/migrations/20261103_zootecnico_preservar_existentes.sql`, uma única transição
 que não sobrescreve restrições existentes e não libera usuários futuros.
 Comercial e consultas gerais permanecem iguais. RxP continua geral, sem filtro
 por técnico. Publicação coordenada e conferência real seguem pendentes.
-Testes locais: 93 unitários/regressão/pacote, 27 verificações Chrome offline e
-94 verificações do Worker em VM. Detalhes e arquivos exatos em IMPLANTAR.md.
+Resultados reais fornecidos posteriormente: 65 contas, 35 identidades confirmadas,
+177 aliases confirmados e 15 valores pendentes. A carga preparada preserva todos
+os acessos gerais atuais, inclusive Leandro da Costa Elias (35) e Lucas (42).
+Somente Lucas já tem conta entre as 14 pessoas do Word; nenhum usuário é criado
+pelo SQL. Joelmir e Mariana têm aliases nas seis fontes, mas não têm conta.
+O e-mail de Joelmir no Word termina em `.com`, sem `.br`; confirmar no cadastro.
+Catálogo, conferência, carga única e rollback estão na pasta local
+`integrations/zootecnico/carga-local/`, ignorada pelo Git. Nada foi executado.
+Correção posterior da carga: fechada a aspa da chave JSON `nome` no teste da
+conta; blocos DO finalizados explicitamente com `END;`. Gerador agora rejeita
+aspas/parênteses incompletos antes de gravar arquivos. Carga e rollback regenerados
+com o mesmo payload/identificador, sem execução no Neon.
+Testes locais: 114 unitários/regressão/pacote e 27 verificações Chrome offline.
+Os 94 testes anteriores do Worker permanecem no histórico; o Worker não mudou.
+Detalhes e arquivos exatos em IMPLANTAR.md.
 
 ## Histórico das entregas anteriores (não são as instruções atuais de cadastro)
 Em 03/11/2026, o usuário confirmou a execução de `01_metadados.sql` no PostgreSQL

@@ -18,3 +18,5 @@ _backup*/
 # Entrega completa local: conserva configurações opacas recebidas no ZIP original.
 integrations/zootecnico/entrega/api_zootecnico_atualizada.zip
 integrations/zootecnico/entrega/Acesso_Tecnico_Zootecnico_Anderson.zip
+# Relatórios de conferência de identidades: somente entrega local, sem publicação.
+integrations/zootecnico/carga-local/

@@ -15,6 +15,9 @@ Somente estas alterações foram incorporadas:
   linhas originais preservados.
 - `api_zootecnico/zootecnico_acesso.py`: único arquivo novo; autorização e catálogo
   de nomes/provas por chave de lote, restrito a admin pela identidade do Comercial.
+  Os nomes da base dinâmica não são prova para associar siglas históricas: os
+  resultados reais mostraram responsáveis diferentes na mesma chave de lote.
+  Equivalências ambíguas ficam pendentes; não há correspondência por maioria.
 
 O `api_zootecnico/Dockerfile` principal permanece byte a byte igual ao original.
 Todos os demais arquivos, inclusive configurações e backups, permanecem iguais.

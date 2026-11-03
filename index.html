@@ -6678,7 +6678,7 @@ async function addUser(button=null) {
     document.getElementById('newUserReportsField').style.display = 'none';
     document.getElementById('newUserReportWarn').style.display = 'none';
     refreshAdminCrudViews();
-    showToast(`Usuário ${name} criado com sucesso!`, 'success');
+    showToast(resposta?.zootecnicoAccess?.pending ? `Usuário ${name} criado. Vínculo da Integração pendente; nenhum registro liberado.` : `Usuário ${name} criado com sucesso!`, 'success');
   } catch (erro) {
     showToast(erro?.message || 'Não foi possível criar o usuário.', 'error');
   } finally {
@@ -10349,7 +10349,7 @@ async function saveEditUser(button=null) {
   try {
     const commercialAccess=readCommercialAccessForm('eu');
     const operationPermissions=readOperationPermissionsForm('eu');
-    await patchAdminUser(u, {
+    const resposta = await patchAdminUser(u, {
       commercialAccess, operationPermissions, zootecnicoAccess:readZootecnicoAccessForm('eu'), name, email, role, status, sectors, reportAccessMode,
       reportIds, ticketPanelAccess, password:newPwd || ''
     });
@@ -10357,7 +10357,7 @@ async function saveEditUser(button=null) {
     document.getElementById('euNewPwd').value = '';
     closeEditUser();
     refreshAdminCrudViews();
-    showToast(`Usuário ${name} atualizado no Neon!`, 'success');
+    showToast(resposta?.zootecnicoAccess?.pending ? `Usuário ${name} salvo. Vínculo da Integração pendente; nenhum registro liberado.` : `Usuário ${name} atualizado no Neon!`, 'success');
   } catch (erro) {
     console.error('Falha ao atualizar usuário:', erro);
     showToast(erro?.message || 'Não foi possível salvar o usuário.', 'error');

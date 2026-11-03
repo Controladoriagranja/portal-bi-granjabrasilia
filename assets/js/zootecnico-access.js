@@ -15,7 +15,7 @@
   function status(p,text) {field(p,'Status').textContent=text;}
   function raw(p) {
     const s=state(p),mode=manager(p)?'todos':field(p,'Mode').value;
-    return {formVersion:2,mode,userIds:mode==='equipe'?[...s.userIds]:[],resolutions:['proprio','equipe'].includes(mode)?s.resolutions:{}};
+    return {formVersion:2,mode,userIds:mode==='equipe'?[...s.userIds]:[],resolutions:['proprio','equipe'].includes(mode)?s.resolutions:{},allowPending:true};
   }
   function sync(p) {
     const s=state(p),select=field(p,'Mode');
@@ -102,7 +102,7 @@
     if(field(p,'Mode').value==='proprio'&&!name(p)){status(p,'Informe o nome completo do usuário.');return;}
     if(field(p,'Mode').value==='equipe'&&!s.userIds.length){status(p,'Selecione os usuários da equipe.');return;}
     const generation=s.generation,signature=fingerprint(p);let attempts=0;
-    status(p,'Conferindo a identificação nas fontes da Integração…');
+    status(p,'Conferindo a identificação. Você pode salvar o usuário com vínculo pendente, sem acesso a registros.');
     async function run(){
       if(states.get(p)!==s||generation!==s.generation||signature!==fingerprint(p)||document.visibilityState==='hidden'||field(p,'Mode').offsetParent===null)return;
       try{
@@ -114,8 +114,8 @@
         }
         if(data.ok!==true)throw new Error(data.erro||'Não foi possível validar.');
         s.valid=data.ready===true;s.signature=signature;s.validatedAt=Date.now();matches(p,data);
-        status(p,s.valid?'Correspondência validada. Os vínculos serão gravados ao salvar o usuário.':'Há correspondências pendentes. Resolva os valores abaixo; o vínculo ainda não foi concluído.');
-      }catch(error){s.valid=false;status(p,error.message||'Não foi possível validar os técnicos.');}
+        status(p,s.valid?'Correspondência validada. Os vínculos serão gravados ao salvar o usuário.':(data.warning?data.warning+' ':'')+'Correspondência pendente. Resolva aqui ou salve o usuário sem liberar registros.');
+      }catch(error){if(states.get(p)===s&&generation===s.generation){s.valid=false;status(p,(error.message||'Não foi possível consultar o catálogo.')+' Você pode salvar com vínculo pendente, sem acesso a registros.');}}
     }
     s.timer=setTimeout(run,delay);
   }
@@ -130,6 +130,7 @@
       s.loaded=true;s.users=data.users;
       if(!preserve&&!s.dirty){field(p,'Mode').value=data.access.mode;s.userIds=data.access.userIds || [];}
       team(p);sync(p);schedule(p);
+      if(data.access.pending)status(p,'Usuário salvo com vínculo pendente. Nenhum registro foi liberado. Confira a correspondência para concluir.');
     }catch(error){if(states.get(p)===s){status(p,(error.message||'Não foi possível carregar.')+' As permissões atuais serão preservadas.');}}
   }
   function mount(p){
@@ -150,10 +151,7 @@
   window.readZootecnicoAccessForm=p=>{
     const s=state(p);if(!s.dirty)return undefined;
     const value=raw(p);
-    if(['proprio','equipe'].includes(value.mode)&&(!s.valid||s.signature!==fingerprint(p)||Date.now()-s.validatedAt>240000)){
-      if(s.valid)schedule(p,0);
-      throw new Error('A identificação da Integração está pendente. Confira o próprio formulário antes de salvar.');
-    }
+    if(value.mode==='equipe'&&!value.userIds.length)throw new Error('Selecione os usuários da equipe.');
     return value;
   };
   window.resetZootecnicoAccessForm=p=>{const s=state(p);stop(s);states.delete(p);field(p,'Mode').disabled=false;field(p,'Mode').value='none';field(p,'Matches').replaceChildren();field(p,'Users').replaceChildren();state(p);sync(p);};

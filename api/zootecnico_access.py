@@ -44,7 +44,8 @@ def normalize_form_access(value):
             if not isinstance(values,list) or len(values)>50 or any(not isinstance(v,str) or not v or v!=v.strip() or len(v)>500 for v in values):
                 raise ValueError('Selecione somente valores técnicos exatos.')
         if type(choice.get('confirmed',False)) is not bool:raise ValueError('Confirmação inválida.')
-    return {'formVersion':2,'mode':mode,'userIds':sorted(ids),'resolutions':resolutions}
+    if type(value.get('allowPending',False)) is not bool:raise ValueError('Opção de vínculo pendente inválida.')
+    return {'formVersion':2,'mode':mode,'userIds':sorted(ids),'resolutions':resolutions,'allowPending':value.get('allowPending',False)}
 
 
 def lock_form_access(conn):
@@ -77,6 +78,22 @@ def stored_aliases(conn,entity):
     return result
 
 
+def catalog_from_neon(conn):
+    """Somente identidades já confirmadas; nunca infere alias da lista de usuários."""
+    rows=conn.execute(text("""SELECT e.identificador,e.nome,a.fonte,a.valor
+        FROM public.entidades_acesso_dados e JOIN public.entidade_aliases_dados a
+          ON a.tipo_entidade=e.tipo AND a.entidade_id=e.identificador
+        WHERE e.tipo='tecnico' AND e.ativo AND a.ativo AND a.recurso='zootecnico'
+        ORDER BY e.identificador,a.fonte,a.valor""")).mappings()
+    sources={s:[] for s in SOURCES};groups={}
+    for row in rows:
+        if row['fonte'] not in sources:continue
+        group=groups.setdefault(row['identificador'],{'identifier':row['identificador'],'nameKey':name_key(row['nome']),'labels':{}})
+        group['labels'].setdefault(row['fonte'],[]).append(row['valor']);sources[row['fonte']].append(row['valor'])
+    if not groups:return None
+    return {'ok':True,'sources':{s:sorted(set(v)) for s,v in sources.items()},'groups':list(groups.values()),'knownOnly':True}
+
+
 def resolve_person(person,catalog,stored,choice=None,duplicate=False):
     choice=choice or {};proposed={source:list(stored.get(source,[])) for source in SOURCES}
     groups=[g for g in catalog['groups'] if g['nameKey']==name_key(person['nome'])]
@@ -91,7 +108,7 @@ def resolve_person(person,catalog,stored,choice=None,duplicate=False):
                 raise ValueError('Valor técnico não existe na fonte validada. Atualize a correspondência.')
             if confirmed and (values or source in without):proposed[source]=sorted(set(values)) if source not in without else []
             else:unresolved.append(source)
-        elif not proposed[source] and catalog['sources'][source] and source in PRIMARY_SOURCES:
+        elif not proposed[source] and (catalog['sources'][source] or catalog.get('knownOnly')) and source in PRIMARY_SOURCES:
             unresolved.append(source)
     if not any(proposed[source] for source in PRIMARY_SOURCES) and not confirmed:
         unresolved.extend(PRIMARY_SOURCES)
@@ -204,11 +221,17 @@ def replace_form_access(conn,uid,value,actor):
         if general_role(target):return  # A autorização geral já é dada pelo perfil.
         raise ValueError('A estrutura de permissões da Integração ainda não está instalada.')
     if mode in {'none','todos'}:
-        return replace_access(conn,uid,{'mode':mode,'technicianIds':[]},actor)
-    catalog=catalog_peek()
-    if catalog is None:raise ValueError('Valide a identificação dos técnicos no formulário antes de salvar. Nenhum cadastro foi concluído.')
+        replace_access(conn,uid,{'mode':mode,'technicianIds':[]},actor)
+        clear_pending(conn,uid,actor)
+        return {'pending':False,'mode':mode}
+    catalog=catalog_peek() or catalog_from_neon(conn)
+    if catalog is None:
+        if value['allowPending']:return save_pending(conn,uid,value,actor)
+        raise ValueError('Valide a identificação dos técnicos no formulário antes de salvar. Nenhum cadastro foi concluído.')
     people=resolve_form(conn,uid,target['nome'],target['email'],value,catalog)
-    if any(not person['ready'] for person in people):raise ValueError('Há correspondências pendentes. Resolva os campos da Integração antes de salvar.')
+    if any(not person['ready'] for person in people):
+        if value['allowPending']:return save_pending(conn,uid,value,actor)
+        raise ValueError('Há correspondências pendentes. Resolva os campos da Integração antes de salvar.')
     identities={person['userId']:save_identity(conn,person,actor) for person in people}
     write_scope(conn,uid,RESOURCE,mode,actor)
     conn.execute(text('UPDATE public.usuario_vinculos_dados SET ativo=FALSE,atualizado_em=NOW(),atualizado_por=:actor WHERE usuario_id=:uid AND recurso=:resource'),{'uid':uid,'resource':RESOURCE,'actor':actor})
@@ -218,6 +241,30 @@ def replace_form_access(conn,uid,value,actor):
             conn.execute(text("""INSERT INTO public.entidades_acesso_dados(tipo,identificador,nome,ativo)
                 VALUES ('usuario_portal',:id,:name,TRUE) ON CONFLICT(tipo,identificador) DO UPDATE SET nome=EXCLUDED.nome,ativo=TRUE,atualizado_em=NOW()"""),{'id':str(person['userId']),'name':person['name']})
             write_link(conn,uid,RESOURCE,'usuario_portal',str(person['userId']),actor)
+    clear_pending(conn,uid,actor)
+    return {'pending':False,'mode':mode}
+
+
+def clear_pending(conn,uid,actor):
+    for table in ('usuario_vinculos_dados','usuario_escopos_acesso'):
+        conn.execute(text('UPDATE public.'+table+" SET ativo=FALSE,atualizado_em=NOW(),atualizado_por=:actor WHERE usuario_id=:uid AND recurso='zootecnico_pendente'"),{'uid':uid,'actor':actor})
+
+
+def save_pending(conn,uid,value,actor):
+    users={int(u['id']):u for u in portal_users(conn)}
+    if any(member not in users or not users[member]['ativo'] for member in value['userIds']):
+        raise ValueError('Selecione somente usuários ativos para a equipe.')
+    # A intenção fica separada da autorização efetiva. Nenhum alias é criado,
+    # nenhuma identidade é reassociada, e a conta recebe zero registros.
+    replace_access(conn,uid,{'mode':'none','technicianIds':[]},actor)
+    clear_pending(conn,uid,actor)
+    write_scope(conn,uid,'zootecnico_pendente',value['mode'],actor)
+    for member in value['userIds']:
+        conn.execute(text("""INSERT INTO public.entidades_acesso_dados(tipo,identificador,nome,ativo)
+            VALUES ('usuario_portal',:id,:name,TRUE) ON CONFLICT(tipo,identificador) DO NOTHING"""),
+            {'id':str(member),'name':users[member]['nome']})
+        write_link(conn,uid,'zootecnico_pendente','usuario_portal',str(member),actor)
+    return {'pending':True,'mode':value['mode']}
 
 
 def general_role(user):
@@ -355,14 +402,25 @@ def register_routes(app, engine, authenticate, is_admin):
             if value['mode'] in {'none','todos'}:return response({'ok':True,'ready':True,'persons':[]})
             name=str(body.get('name') or '').strip()
             if value['mode']=='proprio' and not name:raise ValueError('Informe o nome completo para identificar os dados.')
-            catalog=catalog_get_or_start(request.headers.get('Authorization',''),body.get('retry') is True)
-            if catalog is None:return response({'ok':True,'pending':True},202)
             with engine.connect() as conn:
                 if not schema_ready(conn):raise ValueError('A estrutura de permissões da Integração ainda não está instalada.')
                 if uid and not conn.execute(text('SELECT EXISTS(SELECT 1 FROM public.usuarios WHERE id=:uid)'),{'uid':uid}).scalar():raise ValueError('Usuário não encontrado.')
-                people=resolve_form(conn,uid,name,str(body.get('email') or ''),value,catalog)
+                local=catalog_from_neon(conn)
+                people=resolve_form(conn,uid,name,str(body.get('email') or ''),value,local) if local else []
+            ready=bool(people) and all(person['ready'] for person in people)
+            warning=None
+            if not ready:
+                try:catalog=catalog_get_or_start(request.headers.get('Authorization',''),body.get('retry') is True)
+                except ValueError as error:catalog=None;warning=str(error)
+                if catalog:
+                    with engine.connect() as conn:
+                        people=resolve_form(conn,uid,name,str(body.get('email') or ''),value,catalog)
+                    local=catalog;ready=all(person['ready'] for person in people)
+                elif not warning:
+                    return response({'ok':True,'pending':True,'canSavePending':True},202)
             public=[{key:value for key,value in person.items() if key!='entity'} for person in people]
-            return response({'ok':True,'ready':all(person['ready'] for person in people),'persons':public,'options':catalog['sources']})
+            return response({'ok':True,'ready':ready,'canSavePending':True,'warning':warning,
+                             'persons':public,'options':local['sources'] if local else {s:[] for s in SOURCES}})
         except ValueError as error:return response({'ok':False,'erro':str(error)},400)
         except Exception:return response({'ok':False,'erro':'Não foi possível conferir a correspondência. Nenhum cadastro foi concluído.'},503)
 
@@ -428,7 +486,11 @@ def register_routes(app, engine, authenticate, is_admin):
                           WHERE p.usuario_id=member.id AND p.ativo AND p.tipo_entidade='tecnico' AND p.entidade_id=v.entidade_id
                             AND (p.recurso='zootecnico_identidade' OR (p.recurso='zootecnico' AND s.escopo='proprio'))))
                         WHERE v.usuario_id=:uid AND v.recurso='zootecnico' AND v.ativo ORDER BY member.id"""),{'uid':uid}).scalars())
-                access={'formVersion':2,'mode':access['mode'],'userIds':members}
+                pending=conn.execute(text("SELECT escopo AS requested_mode FROM public.usuario_escopos_acesso WHERE usuario_id=:uid AND recurso='zootecnico_pendente' AND ativo"),{'uid':uid}).mappings().first() if uid else None
+                if pending and access['mode']=='none':
+                    access['mode']=pending['requested_mode']
+                    members=list(conn.execute(text("SELECT entidade_id::bigint FROM public.usuario_vinculos_dados WHERE usuario_id=:uid AND recurso='zootecnico_pendente' AND tipo_entidade='usuario_portal' AND ativo ORDER BY entidade_id"),{'uid':uid}).scalars())
+                access={'formVersion':2,'mode':access['mode'],'userIds':members,'pending':bool(pending)}
                 if general_role(target):access={'formVersion':2,'mode':'todos','userIds':[]}
             return response({'ok':True,'access':access,'users':[{'id':int(row['id']),'name':row['nome'],'email':row['email'],'active':bool(row['ativo'])} for row in users]})
         except Exception:

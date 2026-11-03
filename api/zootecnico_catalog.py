@@ -10,6 +10,7 @@ import tempfile
 from threading import Thread
 import time
 from urllib.request import Request,build_opener,ProxyHandler
+from urllib.error import HTTPError,URLError
 import uuid
 
 URL='https://api-bi-granja.controladoriagb05.workers.dev/api/zootecnico/acesso/opcoes'
@@ -59,9 +60,17 @@ def fetch_catalog(token):
         data=validate(json.loads(raw))
         atomic('ready.json',{'time':time.time(),'data':data})
         (CACHE/'error.json').unlink(missing_ok=True)
-    except Exception:
+    except Exception as error:
         # Nunca armazenar corpo HTTP, token, URL privada ou mensagem de exceção.
-        atomic('error.json',{'time':time.time(),'message':'Não foi possível validar os técnicos na API. Confira a publicação da API/Worker e tente novamente.'})
+        messages={401:'Sessão ou autenticação da API recusada. Entre novamente no portal.',
+                  403:'O catálogo exige administrador e a ponte X-Portal-Authorization no Worker.',
+                  404:'O endpoint /api/zootecnico/acesso/opcoes ainda não está disponível na API publicada.',
+                  502:'O Worker não conseguiu alcançar a API privada.',503:'O serviço de catálogo está temporariamente indisponível.'}
+        status=error.code if isinstance(error,HTTPError) else None
+        message=messages.get(status,'A API não retornou um catálogo válido. Confira a publicação do serviço atualizado.')
+        if isinstance(error,(TimeoutError,URLError)) and not isinstance(error,HTTPError):message='A conexão com o catálogo não respondeu. O usuário pode ser salvo com vínculo pendente.'
+        if isinstance(error,HTTPError):error.close()
+        atomic('error.json',{'time':time.time(),'status':status,'message':message})
     finally:
         (CACHE/'pending.lock').unlink(missing_ok=True)
 

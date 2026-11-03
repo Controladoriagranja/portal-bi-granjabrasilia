@@ -6,6 +6,7 @@ continua sendo validada pelo middleware original; ela NÃO substitui a sessão.
 from contextvars import ContextVar
 from dataclasses import dataclass
 from collections import defaultdict
+import hashlib
 import json
 import re
 import unicodedata
@@ -314,11 +315,23 @@ def build_technician_catalog(rows):
     for sources in by_key.values():
         # Nenhuma prova a partir de snapshots conflitantes na mesma fonte/chave.
         if any(len(values)!=1 for values in sources.values()):continue
-        entries=[next(iter(values)) for values in sources.values()]
+        # Resultado real: a base dinâmica diverge do técnico histórico do lote.
+        # Seus nomes completos entram por igualdade exata, nunca como prova de
+        # equivalência de siglas com o responsável histórico de outra fonte.
+        entries=[next(iter(values)) for source,values in sources.items() if source!='base_dinamica']
         for i,a in enumerate(entries):
             for b in entries[i+1:]:
                 if name_key(a[1])==name_key(b[1]) or not(full_name(a[1]) and full_name(b[1])):edge(a,b)
-    seen=set();groups=[]
+    return finish_catalog(graph,labels)
+
+
+def finish_catalog(graph,labels):
+    exact=defaultdict(list)
+    for entry in graph:
+        if full_name(entry[1]):exact[name_key(entry[1])].append(entry)
+    for entries in exact.values():
+        for entry in entries[1:]:graph[entries[0]].add(entry);graph[entry].add(entries[0])
+    seen=set();groups=[];pending=[]
     for start in graph:
         if start in seen:continue
         stack=[start];component=set()
@@ -328,11 +341,43 @@ def build_technician_catalog(rows):
             component.add(entry);stack.extend(graph[entry]-component)
         seen.update(component)
         names={name_key(value) for source,value in component if full_name(value)}
-        if len(names)!=1:continue
-        grouped=defaultdict(list)
-        for source,value in sorted(component):grouped[source].append(value)
-        groups.append({'nameKey':next(iter(names)),'labels':dict(grouped)})
-    return {'ok':True,'sources':{source:sorted(values) for source,values in labels.items()},'groups':groups}
+        if len(names)!=1:
+            # Uma sigla conflitante não invalida a igualdade exata dos nomes
+            # completos. Preservar essas identidades; só a sigla fica pendente.
+            pending.extend({'fonte':source,'valor':value,'candidates':sorted(names)}
+                           for source,value in sorted(component) if not full_name(value))
+        for key in sorted(names):
+            selected=component if len(names)==1 else {(s,v) for s,v in component if full_name(v) and name_key(v)==key}
+            grouped=defaultdict(list)
+            for source,value in sorted(selected):grouped[source].append(value)
+            canonical=sorted({v for s,v in selected if full_name(v)})[0]
+            groups.append({'identifier':'tec_'+hashlib.sha256(key.encode('utf-8')).hexdigest()[:24],
+                           'name':canonical,'nameKey':key,'labels':dict(grouped)})
+    return {'ok':True,'sources':{source:sorted(values) for source,values in labels.items()},
+            'groups':sorted(groups,key=lambda g:g['nameKey']),'pending':pending}
+
+
+def catalog_from_evidence(values,evidences):
+    """Mesmo critério do endpoint, aplicado ao levantamento completo retornado.
+
+    Contagens/pares reais não são aprovação por maioria. Qualquer identidade
+    conflitante nas fontes históricas impede a união automática do componente.
+    """
+    labels={source:set() for source in SOURCES};graph=defaultdict(set)
+    for row in values:
+        source,value=row['fonte'],row['valor']
+        if source not in SOURCES or not isinstance(value,str) or not value or value!=value.strip():
+            raise ValueError('Valor fora das seis fontes confirmadas.')
+        labels[source].add(value);graph[source,value]
+    for proof in evidences:
+        a=(proof['fonte_a'],proof['valor_a']);b=(proof['fonte_b'],proof['valor_b'])
+        if a not in graph or b not in graph:raise ValueError('Evidência sem valor de origem.')
+        if proof['origem'] not in {'produtor_galpao_lote_alojamento','chave_lote','mesma_linha_tecnico_exibicao'}:
+            raise ValueError('Origem de evidência desconhecida.')
+        if 'base_dinamica' in {a[0],b[0]}:continue
+        if name_key(a[1])==name_key(b[1]) or not(full_name(a[1]) and full_name(b[1])):
+            graph[a].add(b);graph[b].add(a)
+    return finish_catalog(graph,labels)
 
 
 def create_access_router(banco):

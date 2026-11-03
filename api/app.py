@@ -3228,7 +3228,7 @@ def api_admin_usuario_patch(usuario_id):
             replace_operation_permissions(conn, usuario_id, operation_permissions)
 
             if zootecnico_access is not None:
-                replace_zootecnico_access(conn, usuario_id, zootecnico_access, usuario_atual['usuario_id'])
+                zootecnico_result = replace_zootecnico_access(conn, usuario_id, zootecnico_access, usuario_atual['usuario_id'])
 
             if senha:
                 conn.execute(text("""
@@ -3290,7 +3290,7 @@ def api_admin_usuario_patch(usuario_id):
             f"(painel_chamados={ticket_panel_access}, senha={'sim' if senha else 'não'}).",
             "INFO",
         )
-        return jsonify({"ok": True, "data": salvo})
+        return jsonify({"ok": True, "data": salvo, "zootecnicoAccess": zootecnico_result if zootecnico_access is not None else None})
 
     except ValueError as e:
         return jsonify({"ok": False, "erro": str(e)}), 400
@@ -3434,10 +3434,10 @@ def api_admin_usuario_create():
             _sincronizar_usuario_relacoes(conn, usuario_id, sectors, report_ids)
             replace_operation_permissions(conn, usuario_id, operation_permissions)
             if zootecnico_access is not None:
-                replace_zootecnico_access(conn, usuario_id, zootecnico_access, usuario_atual['usuario_id'])
+                zootecnico_result = replace_zootecnico_access(conn, usuario_id, zootecnico_access, usuario_atual['usuario_id'])
 
         log(f"Usuário criado por {usuario_atual.get('email')}: {email}", "INFO")
-        return jsonify({"ok": True, "data": carregar_portal_data_neon()}), 201
+        return jsonify({"ok": True, "data": carregar_portal_data_neon(), "zootecnicoAccess": zootecnico_result if zootecnico_access is not None else None}), 201
     except ValueError as e:
         return jsonify({"ok": False, "erro": str(e)}), 400
     except Exception as e:
