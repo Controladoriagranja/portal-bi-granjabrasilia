@@ -365,6 +365,10 @@ export default {
     responseHeaders.delete("Authorization");
     responseHeaders.delete("X-Portal-Authorization");
     responseHeaders.delete("Set-Cookie");
+    // Metadado de apresentação; a autorização continua obrigatória na API.
+    const exposed = new Set((responseHeaders.get("Access-Control-Expose-Headers") || "").split(",").map(x => x.trim()).filter(Boolean));
+    exposed.add("X-Zootecnico-Status-Acerto");
+    responseHeaders.set("Access-Control-Expose-Headers", [...exposed].join(", "));
     responseHeaders.delete("Access-Control-Allow-Origin");
     responseHeaders.delete("Access-Control-Allow-Credentials");
 

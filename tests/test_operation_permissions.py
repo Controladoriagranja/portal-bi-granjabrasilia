@@ -1,5 +1,6 @@
 """Testes curtos, somente AST e banco em memoria simulado; nao importa app/.env."""
 import ast
+import importlib.util
 import copy
 import json
 import unittest
@@ -9,6 +10,9 @@ from unittest.mock import Mock
 
 ROOT = Path(__file__).resolve().parents[1]
 PERMISSION = "comercial.frete.editar"
+_management_spec = importlib.util.spec_from_file_location('user_management', ROOT / 'api/user_management.py')
+management = importlib.util.module_from_spec(_management_spec)
+_management_spec.loader.exec_module(management)
 
 
 def functions(path, namespace):
@@ -56,7 +60,7 @@ class FakeEngine:
         return False
 
     def execute(self, sql, params=None):
-        sql = " ".join(sql.split())
+        sql = " ".join(str(sql).split())
         p = params or {}
         self.calls.append((sql, p))
         if "FROM public.usuario_operacoes" in sql and sql.startswith("DELETE"):
@@ -70,7 +74,7 @@ class FakeEngine:
             if not user or not user["ativo"]:
                 return Result()
             return Result({**user, "operation_permissions": sorted(self.permissions.get(p["usuario_id"], set()))})
-        elif sql.startswith("SELECT id, email FROM public.usuarios"):
+        elif sql.startswith("SELECT id, email") and "FROM public.usuarios" in sql:
             return Result(self.users.get(p["id"]))
         elif sql.startswith("SELECT id FROM public.usuarios WHERE id"):
             uid = p.get("id", p.get("uid"))
@@ -94,7 +98,7 @@ class Response(dict):
 
 class OperationTests(unittest.TestCase):
     def setUp(self):
-        self.ns = {"text": lambda sql: sql, "OPERATION_PERMISSIONS": frozenset({PERMISSION})}
+        self.ns = {"text": lambda sql: sql, "OPERATION_PERMISSIONS": frozenset({PERMISSION}), "user_management": management}
         functions(ROOT / "api/operation_permissions.py", self.ns)
         functions(ROOT / "api/commercial_access.py", self.ns)
         self.ns["effective_commercial_access"] = self.ns["effective_data_access"]

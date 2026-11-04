@@ -10,6 +10,7 @@ import hashlib
 import json
 import re
 import unicodedata
+from urllib.parse import parse_qsl, urlencode
 from urllib.error import HTTPError
 from urllib.request import Request as HttpRequest, build_opener, ProxyHandler
 
@@ -131,9 +132,21 @@ async def dispatch(request, call_next):
             access = await run_in_threadpool(resolve_access, request)
         if policy == "general" and access.mode != "todos":
             raise HTTPException(403, "Esta consulta exige acesso geral à Integração.")
+        fixed_status = access.mode == 'proprio' and request.url.path.startswith('/api/bi/zootecnico/')
+        if fixed_status:
+            # 04/11/2026: escolha obrigatória, independente dos parâmetros enviados.
+            pairs = [(k, v) for k, v in parse_qsl(request.scope.get('query_string', b'').decode('utf-8'), keep_blank_values=True)
+                     if k != 'status_acerto']
+            pairs.append(('status_acerto', 'Não Manual'))
+            request.scope['query_string'] = urlencode(pairs).encode('utf-8')
+            # Starlette pode já ter materializado a versão anterior dos parâmetros.
+            if hasattr(request, '_query_params'):
+                del request._query_params
         marker = CURRENT.set(access)
         try:
             response = await call_next(request)
+            if fixed_status:
+                response.headers['X-Zootecnico-Status-Acerto'] = 'nao_manual'
         finally:
             CURRENT.reset(marker)
     except HTTPException as error:
@@ -188,6 +201,9 @@ def _source_cte(source, access):
     owner = _identity(source, "s", access.aliases)
     guards = [sql.SQL("{} IS NOT NULL").format(owner)]
     if source == "vw_desempenho_acerto_portal":
+        if access.mode == 'proprio':
+            # Restringe a fonte antes de filtros, totais, rankings e exportações.
+            guards.append(sql.SQL("BTRIM(to_jsonb(s)->>'status_acerto') = {} ").format(sql.Literal('Não Manual')))
         # A view do portal não possui candidatos_tecnico. JSON ->> retorna NULL
         # para a chave ausente; o COALESCE mantém a coluna realmente opcional.
         guards.append(sql.SQL("COALESCE(to_jsonb(s)->>'candidatos_tecnico','1') !~ '^(?:[2-9]|[1-9][0-9]+)$'"))

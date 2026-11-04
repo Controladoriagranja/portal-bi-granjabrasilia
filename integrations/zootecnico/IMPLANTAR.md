@@ -101,3 +101,11 @@ de execução, conferência e entrega de senhas individuais está em
 [`tools/CADASTRO_TECNICOS.md`](../../tools/CADASTRO_TECNICOS.md).
 Não executar o cadastro sem autorização. Não requer publicação de novos arquivos
 do frontend, Worker ou API especializada.
+
+## Nova modificação de 04/11/2026 — Status Acerto
+
+O acesso próprio agora fixa Não Manual. Esta etapa exige atualização da API no
+Anderson, do Worker e do frontend BI Zootécnico. Ver
+[STATUS_ACERTO_PROPRIO.md](STATUS_ACERTO_PROPRIO.md). Não exige SQL nem atualização
+do backend Render do Portal. A indicação anterior de componentes sem alterações
+referia-se somente à etapa do seletor de identidade.

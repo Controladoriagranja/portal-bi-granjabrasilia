@@ -204,6 +204,11 @@ async function requestApi(endpoint, params = {}, options = {}) {
   if (getPortalToken() !== token) {
     throw new ApiError("A sessão foi alterada. Abra o relatório novamente pela CENTRAL.", 401, "SESSION_CHANGED");
   }
+  // A API informa a trava da sessão; nunca deduzir acesso pelo nome ou pelo JWT.
+  if (normalizedEndpoint === APP_CONFIG.endpoints.filtros && data && typeof data === 'object') {
+    data.filtros_fixos = response.headers?.get('X-Zootecnico-Status-Acerto') === 'nao_manual'
+      ? {status_acerto: ['Não Manual']} : {};
+  }
   // Nova modificação de 26/10/2026: contrato exclusivo da evolução de mortalidade.
   // As demais respostas continuam com a validação oficial do Desempenho abaixo.
   const isMortalityEvolution = normalizedEndpoint === APP_CONFIG.endpoints.detalhes

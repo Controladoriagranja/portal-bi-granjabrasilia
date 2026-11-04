@@ -2,7 +2,7 @@
 from sqlalchemy import text
 
 
-OPERATION_PERMISSIONS = frozenset({"comercial.frete.editar"})
+OPERATION_PERMISSIONS = frozenset({"comercial.frete.editar", "usuarios.gerenciar"})
 
 
 def normalize_operation_permissions(value):

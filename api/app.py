@@ -9,6 +9,7 @@ from forms_import import (reader_config as forms_reader_config, new_context as f
                           read_context as forms_read_context, fetch_rows as forms_fetch_rows,
                           prepare_rows as forms_prepare_rows, persist_rows as forms_persist_rows)
 import drive_attachments as forms_drive
+import user_management as user_management
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.wsgi import LimitedStream
 import json
@@ -2344,6 +2345,7 @@ def carregar_portal_data_neon():
                 u.ticket_panel_access,
                 u.supervisor_code,
                 u.commercial_access,
+                to_jsonb(u)->>'excluido_em' AS deleted_at,
                 ARRAY(
                     SELECT op.permissao FROM public.usuario_operacoes op
                     WHERE op.usuario_id = u.id ORDER BY op.permissao
@@ -2388,7 +2390,8 @@ def carregar_portal_data_neon():
                 "email": r["email"],
                 "role": r["role"] or "sector",
                 "sectors": setores_por_usuario.get(uid, []),
-                "status": "active" if r["ativo"] else "blocked",
+                "status": "active" if r["ativo"] and not r.get("deleted_at") else "blocked",
+                "deletedAt": r.get("deleted_at"),
                 "reportAccessMode": r["report_access_mode"] or "sector",
                 "pageIds": paginas_por_usuario.get(uid, []),
                 "reportIds": relatorios_por_usuario.get(uid, []),
@@ -2433,7 +2436,7 @@ def carregar_portal_data_neon():
         }
 
 
-def salvar_portal_data_neon(payload):
+def salvar_portal_data_neon(payload, actor=None):
     if not isinstance(payload, dict):
         raise ValueError("Payload inválido.")
 
@@ -2453,6 +2456,7 @@ def salvar_portal_data_neon(payload):
         raise ValueError("passwordUpdates inválido.")
 
     with engine.begin() as conn:
+        user_management.actor_context(conn, actor)
         # ------------------------------------------------------------------
         # SETORES — cria/atualiza por código estável; remoção é soft-delete.
         # ------------------------------------------------------------------
@@ -2855,6 +2859,7 @@ def _usuario_por_token(token):
             FROM public.usuarios u
             WHERE u.id = :usuario_id
               AND u.ativo = TRUE
+              AND (to_jsonb(u)->>'excluido_em') IS NULL
             LIMIT 1
         """), {"usuario_id": usuario_id}).mappings().first()
 
@@ -2862,7 +2867,10 @@ def _usuario_por_token(token):
 
 
 def _usuario_autenticado():
-    return _usuario_por_token(_extrair_bearer_token())
+    usuario = _usuario_por_token(_extrair_bearer_token())
+    if not user_management.allowed_request(usuario, request.path, request.method):
+        return None
+    return usuario
 
 
 def _usuario_e_admin(usuario):
@@ -2874,6 +2882,7 @@ def _usuario_e_admin(usuario):
 
 
 register_zootecnico_routes(app, engine, _usuario_autenticado, _usuario_e_admin)
+user_management.register_routes(app, engine, _usuario_autenticado, carregar_portal_data_neon)
 
 
 def _usuario_publico(usuario):
@@ -2884,13 +2893,14 @@ def _usuario_publico(usuario):
         "name": usuario.get("nome"),
         "nome": usuario.get("nome"),
         "email": usuario.get("email"),
-        "perfil": usuario.get("perfil"),
-        "role": usuario.get("role"),
+        "perfil": "usuario" if user_management.management_only(usuario) else usuario.get("perfil"),
+        "role": "sector" if user_management.management_only(usuario) else usuario.get("role"),
         "ativo": bool(usuario.get("ativo")),
         "isAdmin": _usuario_e_admin(usuario),
-        "dataAccess": effective_commercial_access(usuario),
-        "commercialAccess": effective_commercial_access(usuario),
-        "operationPermissions": effective_operation_permissions(usuario),
+        "userManagementOnly": user_management.management_only(usuario),
+        "dataAccess": {"mode":"none"} if user_management.management_only(usuario) else effective_commercial_access(usuario),
+        "commercialAccess": {"mode":"none"} if user_management.management_only(usuario) else effective_commercial_access(usuario),
+        "operationPermissions": [user_management.PERMISSION] if user_management.management_only(usuario) else effective_operation_permissions(usuario),
     }
 
 
@@ -2931,6 +2941,7 @@ def api_auth_login():
                 FROM public.usuarios u
                 WHERE lower(u.email) = :email
                   AND u.ativo = TRUE
+                  AND (to_jsonb(u)->>'excluido_em') IS NULL
                   AND u.senha_hash IS NOT NULL
                   AND crypt(:senha, u.senha_hash) = u.senha_hash
                 LIMIT 1
@@ -2956,7 +2967,7 @@ def api_auth_login():
         # requisição logo após autenticar. Isso reduz o tempo percebido.
         portal_data = None
         try:
-            portal_data = carregar_portal_data_neon()
+            portal_data = user_management.portal_data(carregar_portal_data_neon(), usuario)
         except Exception as portal_error:
             log(f"Login realizado, mas falhou bootstrap do Portal: {portal_error}", "ERRO")
 
@@ -2975,7 +2986,7 @@ def api_auth_login():
             "erro": "Serviço de autenticação não configurado."
         }), 503
     except Exception as e:
-        log(f"Erro em /api/auth/login: {e}", "ERRO")
+        log(f"Erro em /api/auth/login ({type(e).__name__})", "ERRO")
         return jsonify({
             "ok": False,
             "erro": "Erro interno ao realizar login."
@@ -3069,7 +3080,7 @@ def api_auth_bootstrap():
         return jsonify({
             "ok": True,
             "user": _usuario_publico(usuario),
-            "portalData": carregar_portal_data_neon(),
+            "portalData": user_management.portal_data(carregar_portal_data_neon(), usuario),
         })
     except RuntimeError as e:
         log(f"Configuração de autenticação inválida no bootstrap: {e}", "ERRO")
@@ -3101,6 +3112,7 @@ def api_auth_change_password():
 
     try:
         with engine.begin() as conn:
+            user_management.actor_context(conn, usuario)
             atualizado = conn.execute(text("""
                 UPDATE public.usuarios
                 SET senha_hash = crypt(:nova_senha, gen_salt('bf', 12)),
@@ -3121,7 +3133,7 @@ def api_auth_change_password():
         log(f"Senha alterada pelo próprio usuário: {usuario.get('email')}", "INFO")
         return jsonify({"ok": True})
     except Exception as e:
-        log(f"Erro ao trocar senha do usuário {usuario.get('email')}: {e}", "ERRO")
+        log(f"Erro ao trocar senha do usuário {usuario.get('email')} ({type(e).__name__})", "ERRO")
         return jsonify({"ok": False, "erro": "Erro interno ao alterar a senha."}), 500
 
 
@@ -3178,16 +3190,24 @@ def api_admin_usuario_patch(usuario_id):
 
     try:
         with engine.begin() as conn:
+            user_management.actor_context(conn, usuario_atual)
+            if operation_permissions and user_management.PERMISSION in operation_permissions:
+                user_management.require_ready(conn)
             if zootecnico_access is not None:
                 lock_zootecnico_access(conn)
             existente = conn.execute(text("""
-                SELECT id, email
+                SELECT id, email, role, perfil, ativo,
+                       to_jsonb(usuarios)->>'excluido_em' AS deleted_at
                 FROM public.usuarios
                 WHERE id = :id
                 LIMIT 1
+                FOR UPDATE
             """), {"id": usuario_id}).mappings().first()
             if not existente:
                 return jsonify({"ok": False, "erro": "Usuário não encontrado."}), 404
+            if existente.get('deleted_at'):
+                return jsonify({"ok":False,"erro":"Restaure a conta excluída antes de editar."}), 400
+            user_management.confirm_admin_block(existente, status == 'active', body)
 
             conflito = conn.execute(text("""
                 SELECT id
@@ -3295,7 +3315,7 @@ def api_admin_usuario_patch(usuario_id):
     except ValueError as e:
         return jsonify({"ok": False, "erro": str(e)}), 400
     except Exception as e:
-        log(f"Erro ao editar usuário {usuario_id}: {e}", "ERRO")
+        log(f"Erro ao editar usuário {usuario_id} ({type(e).__name__})", "ERRO")
         return jsonify({"ok": False, "erro": "Erro interno ao atualizar o usuário."}), 500
 
 
@@ -3363,9 +3383,11 @@ def _sincronizar_usuario_relacoes(conn, usuario_id, sectors, report_ids):
 
 @app.route("/api/admin/usuarios", methods=["POST"])
 def api_admin_usuario_create():
-    usuario_atual, erro = _admin_atual_ou_resposta()
-    if erro:
-        return erro
+    usuario_atual = _usuario_autenticado()
+    if not usuario_atual:
+        return _resposta_nao_autorizado()
+    if not user_management.can_manage(usuario_atual):
+        return jsonify({"ok":False,"erro":"Sem permissão para cadastrar usuários."}), 403
 
     body = request.get_json(silent=True) or {}
     if not isinstance(body, dict):
@@ -3374,6 +3396,8 @@ def api_admin_usuario_create():
         body = {**body, 'commercialAccess': body['dataAccess']}
 
     try:
+        if user_management.management_only(usuario_atual):
+            user_management.validate_delegated_create(body)
         operation_permissions = operation_permissions_from_payload(body)
         commercial_access = {'mode':'general'} if str(body.get('role') or '').strip().lower() in {'admin','director'} else normalize_commercial_access(body.get('commercialAccess', {'mode':'none'}))
         zootecnico_access = normalize_zootecnico_access(body['zootecnicoAccess']) if 'zootecnicoAccess' in body else None
@@ -3402,8 +3426,12 @@ def api_admin_usuario_create():
 
     try:
         with engine.begin() as conn:
-            if zootecnico_access is not None:
-                lock_zootecnico_access(conn)
+            user_management.actor_context(conn, usuario_atual)
+            if user_management.management_only(usuario_atual) or (operation_permissions and user_management.PERMISSION in operation_permissions):
+                user_management.require_ready(conn)
+            # Serializa todo cadastro, inclusive gestores e processos distintos,
+            # antes da conferência case-insensitive de e-mail.
+            conn.execute(text("SELECT pg_advisory_xact_lock(71811203)"))
             conflito = conn.execute(text("""
                 SELECT id FROM public.usuarios WHERE LOWER(email) = :email LIMIT 1
             """), {"email": email}).scalar()
@@ -3437,11 +3465,11 @@ def api_admin_usuario_create():
                 zootecnico_result = replace_zootecnico_access(conn, usuario_id, zootecnico_access, usuario_atual['usuario_id'])
 
         log(f"Usuário criado por {usuario_atual.get('email')}: {email}", "INFO")
-        return jsonify({"ok": True, "data": carregar_portal_data_neon(), "zootecnicoAccess": zootecnico_result if zootecnico_access is not None else None}), 201
+        return jsonify({"ok": True, "data": user_management.portal_data(carregar_portal_data_neon(), usuario_atual), "zootecnicoAccess": zootecnico_result if zootecnico_access is not None else None}), 201
     except ValueError as e:
         return jsonify({"ok": False, "erro": str(e)}), 400
     except Exception as e:
-        log(f"Erro ao criar usuário {email}: {e}", "ERRO")
+        log(f"Erro ao criar usuário {email} ({type(e).__name__})", "ERRO")
         return jsonify({"ok": False, "erro": "Erro interno ao criar o usuário."}), 500
 
 
@@ -3458,6 +3486,7 @@ def api_admin_usuario_password(usuario_id):
         return jsonify({"ok": False, "erro": "A senha excede o limite permitido."}), 400
     try:
         with engine.begin() as conn:
+            user_management.actor_context(conn, usuario_atual)
             atualizado = conn.execute(text("""
                 UPDATE public.usuarios
                 SET senha_hash = crypt(:senha, gen_salt('bf', 12)),
@@ -3470,7 +3499,7 @@ def api_admin_usuario_password(usuario_id):
         log(f"Senha do usuário {usuario_id} redefinida por {usuario_atual.get('email')}", "INFO")
         return jsonify({"ok": True})
     except Exception as e:
-        log(f"Erro ao redefinir senha do usuário {usuario_id}: {e}", "ERRO")
+        log(f"Erro ao redefinir senha do usuário {usuario_id} ({type(e).__name__})", "ERRO")
         return jsonify({"ok": False, "erro": "Erro interno ao redefinir a senha."}), 500
 
 
@@ -3653,7 +3682,7 @@ def api_portal_data():
             return _resposta_nao_autorizado()
 
         if request.method == "GET":
-            return jsonify(carregar_portal_data_neon())
+            return jsonify(user_management.portal_data(carregar_portal_data_neon(), usuario))
 
         # Alterações de usuários, setores, relatórios e permissões
         # continuam restritas ao administrador do Portal.
@@ -3664,7 +3693,7 @@ def api_portal_data():
             }), 403
 
         payload = request.get_json(silent=True) or {}
-        salvo = salvar_portal_data_neon(payload)
+        salvo = salvar_portal_data_neon(payload, actor=usuario)
 
         log(
             f"Portal-data atualizado por {usuario.get('email')}",
@@ -3682,7 +3711,7 @@ def api_portal_data():
             "erro": "Serviço de autenticação não configurado."
         }), 503
     except Exception as e:
-        log(f"Erro em /api/portal-data: {e}", "ERRO")
+        log(f"Erro em /api/portal-data ({type(e).__name__})", "ERRO")
         return jsonify({
             "ok": False,
             "erro": "Erro interno ao processar os dados do portal."

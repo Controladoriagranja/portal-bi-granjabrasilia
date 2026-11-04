@@ -14,6 +14,7 @@
 <link rel="stylesheet" href="./assets/pwa/install.css">
 <script src="./assets/pwa/install.js" defer></script>
 <script src="./assets/js/zootecnico-access.js" defer></script>
+<script src="./assets/js/user-management.js" defer></script>
 
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="shortcut icon" type="image/png" href="favicon.png">
@@ -4041,6 +4042,26 @@
 
       <!-- VIEW: USERS (admin) -->
       <div class="view" id="view-users">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+          <button type="button" class="btn-sm accent" onclick="toggleManagedUserCreate()">+ Criar usuário</button>
+          <button type="button" class="btn-sm" id="userAuditButton" onclick="loadUserAudit(this)">Consultar logs</button>
+          <label id="usersArchivedLabel" style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="usersArchived" onchange="renderUsersTable()"> Mostrar excluídos</label>
+        </div>
+        <div id="managedUserCreate" hidden style="padding:18px;border:1px solid var(--border);border-radius:12px;margin-bottom:16px;background:var(--bg)">
+          <form id="managedUserForm" onsubmit="createManagedUser(event)">
+            <h3 style="margin-bottom:12px">Criar usuário comum</h3>
+            <div class="form-row">
+              <div class="form-group"><label for="managedUserName">Nome completo</label><input id="managedUserName" required maxlength="200" autocomplete="name"></div>
+              <div class="form-group"><label for="managedUserEmail">E-mail</label><input id="managedUserEmail" type="email" required autocomplete="off"></div>
+            </div>
+            <div class="form-group"><label for="managedUserPassword">Senha inicial</label><input id="managedUserPassword" type="password" required minlength="8" maxlength="128" autocomplete="new-password"></div>
+            <div class="form-group"><label>Setores permitidos</label><div class="checkgroup" id="managedUserSectors"></div></div>
+            <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Perfil Setor. O Admin configura os vínculos de dados do Comercial/Integração e permissões adicionais.</p>
+            <button type="submit" class="btn-sm accent" id="managedUserSubmit">Criar usuário</button>
+            <button type="button" class="btn-sm" onclick="toggleManagedUserCreate()">Cancelar</button>
+          </form>
+        </div>
+        <div id="userAuditPanel" class="table-wrapper" hidden style="margin-bottom:16px"></div>
         <div class="section-header" style="margin-bottom:16px">
           <div>
             <div class="section-title">Todos os Usuários</div>
@@ -4141,6 +4162,10 @@
 </div>
 <div class="form-group" id="euOperationPermissions" style="border-top:1px solid var(--border);padding-top:14px">
   <label>Permissões de operações</label>
+  <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;margin:10px 0">
+    <input type="checkbox" data-operation-permission="usuarios.gerenciar"> Gerenciar usuários
+  </label>
+  <small>Para quem não é Admin, libera somente gestão de usuários. Pode bloquear qualquer Admin, mas não excluí-lo.</small>
   <div style="font-size:12px;font-weight:700;margin:8px 0">Comercial</div>
   <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer">
     <input type="checkbox" data-operation-permission="comercial.frete.editar" style="width:16px;height:16px;accent-color:#e54837"> Editar fretes
@@ -4259,6 +4284,10 @@
 </div>
 <div class="form-group" id="newUserOperationPermissions" style="border-top:1px solid var(--border);padding-top:14px">
   <label>Permissões de operações</label>
+  <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;margin:10px 0">
+    <input type="checkbox" data-operation-permission="usuarios.gerenciar"> Gerenciar usuários
+  </label>
+  <small>Para quem não é Admin, libera somente gestão de usuários. Pode bloquear qualquer Admin, mas não excluí-lo.</small>
   <div style="font-size:12px;font-weight:700;margin:8px 0">Comercial</div>
   <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer">
     <input type="checkbox" data-operation-permission="comercial.frete.editar" style="width:16px;height:16px;accent-color:#e54837"> Editar fretes
@@ -5401,6 +5430,7 @@ function applyPortalDataResponse(data) {
 }
 
 function refreshAdminCrudViews() {
+  if (isUserManagementOnly()) { initManagementPortal(); return; }
   renderUsersTable();
   renderReportsMgr();
   renderSectorsList();
@@ -5696,6 +5726,8 @@ function showScreen(id) {
 // PORTAL INIT
 // ═══════════════════════════════════════
 function initPortal() {
+  restoreManagementNavigation();
+  document.getElementById('mnAdmin')?.querySelector('span')?.replaceChildren('Admin');
   const u = currentUser;
   // Sidebar user
   document.getElementById('userAvatarSidebar').textContent = u.name[0].toUpperCase();
@@ -5704,6 +5736,7 @@ function initPortal() {
   if (u.role === 'admin')     { badge.textContent = 'Admin';    badge.className = 'user-role-badge role-admin'; }
   if (u.role === 'director')  { badge.textContent = 'Diretor';  badge.className = 'user-role-badge role-director'; }
   if (u.role === 'sector')    { badge.textContent = 'Setor';    badge.className = 'user-role-badge role-sector'; }
+  if (isUserManagementOnly()) { initManagementPortal(); return; }
 
   // Administração + permissão específica para o Painel de Chamados
   const isAdmin = (u.role === 'admin');
@@ -5770,6 +5803,7 @@ function initPortal() {
 }
 
 function getUserReports() {
+  if (isUserManagementOnly()) return [];
   const u = currentUser;
   if (!u) return [];
   if (u.role === 'admin' || u.role === 'director') return db.reports;
@@ -6202,7 +6236,10 @@ function closeModal(e) {
 // USERS
 // ═══════════════════════════════════════
 function renderUsersTable() {
-  if (!currentUser || currentUser.role !== 'admin') return;
+  if (!canManagePortalUsers()) return;
+  document.getElementById('userAuditButton').style.display = currentUser.role === 'admin' ? '' : 'none';
+  document.getElementById('usersArchivedLabel').style.display = currentUser.role === 'admin' ? 'flex' : 'none';
+  if (currentUser.role !== 'admin') document.getElementById('userAuditPanel').hidden = true;
   updatePendingBadge();
   renderAllUsersTable();
 }
@@ -6298,6 +6335,7 @@ function renderAllUsersTable() {
   updateUserSectorFilterOptions();
 
   let users = db.users.filter(u => {
+    if (u.deletedAt && !(currentUser.role === 'admin' && document.getElementById('usersArchived').checked)) return false;
     const matchesText = !userFilter ||
       u.name.toLowerCase().includes(userFilter) ||
       u.email.toLowerCase().includes(userFilter);
@@ -6326,10 +6364,10 @@ function renderAllUsersTable() {
   </tr></thead><tbody>${users.map(u => `<tr>
     <td>
       <div style="display:flex;align-items:center;gap:10px">
-        <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#c0392b,#e67e22);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0">${u.name[0].toUpperCase()}</div>
+        <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#c0392b,#e67e22);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0">${escTicket(u.name[0].toUpperCase())}</div>
         <div>
-          <div style="font-weight:600;font-size:13px">${u.name}</div>
-          <div style="font-size:11px;color:var(--text-muted);font-family:monospace">${u.email}</div>
+          <div style="font-weight:600;font-size:13px">${escTicket(u.name)}</div>
+          <div style="font-size:11px;color:var(--text-muted);font-family:monospace">${escTicket(u.email)}</div>
         </div>
       </div>
     </td>
@@ -6343,12 +6381,13 @@ function renderAllUsersTable() {
                 : '<span style="color:var(--red);font-size:11px">Nenhum setor</span>'))
         : '<span style="color:var(--text-dim);font-size:11px">Todos</span>'}
     </td>
-    <td>${statusBadge(u.status)}</td>
+    <td>${u.deletedAt ? '<span class="status-badge status-blocked">Excluído</span>' : statusBadge(u.status)}</td>
     <td style="text-align:center;white-space:nowrap">
-      <button class="action-btn edit" onclick="openEditUser(${u.id})">✏ Editar</button>
+      ${currentUser.role==='admin' && !u.deletedAt ? `<button class="action-btn edit" onclick="openEditUser(${u.id})">✏ Editar</button>` : ''}
       ${u.status==='pending'?`<button class="action-btn approve" onclick="approveUser(${u.id}, this)">✔ Aprovar</button>`:''}
-      ${u.status==='active' && u.role!=='admin'?`<button class="action-btn block" onclick="blockUser(${u.id}, this)">✕ Bloquear</button>`:''}
-      ${u.status==='blocked'?`<button class="action-btn approve" onclick="unblockUser(${u.id}, this)">↩ Reativar</button>`:''}
+      ${!u.deletedAt && u.status==='active'?`<button class="action-btn block" onclick="blockUser(${u.id}, this)">✕ Bloquear</button>`:''}
+      ${!u.deletedAt && u.status==='blocked'?`<button class="action-btn approve" onclick="unblockUser(${u.id}, this)">↩ Reativar</button>`:''}
+      ${!u.deletedAt ? `<button class="action-btn block" onclick="deleteManagedUser(${u.id}, this)" title="${u.role==='admin'?'Admin não pode ser excluído; use Bloquear':'Excluir preservando o histórico'}">Excluir</button>` : `<button class="action-btn approve" onclick="restoreManagedUser(${u.id}, this)">Restaurar</button>`}
     </td>
   </tr>`).join('')}</tbody></table>`;
 }
@@ -6479,9 +6518,14 @@ function adminUserPayload(u, overrides={}) {
 async function patchAdminUser(u, overrides={}) {
   const dbId = Number(u?.dbId || u?.id);
   if (!Number.isFinite(dbId)) throw new Error('Usuário sem identificador válido no banco.');
+  const payload = adminUserPayload(u, overrides);
+  if (u.role === 'admin' && u.status === 'active' && payload.status !== 'active') {
+    if (!confirm('Bloquear este Admin? Não há proteção do último Admin ativo. Sem outra conta ativa autorizada a desbloquear, será necessário recuperar o acesso no Neon.')) throw new Error('Bloqueio cancelado.');
+    payload.confirmAdminBlock = true;
+  }
   const resposta = await portalApiRequest(`/api/admin/usuarios/${dbId}`, {
     method:'PATCH',
-    body:JSON.stringify(adminUserPayload(u, overrides))
+    body:JSON.stringify(payload)
   });
   if (resposta?.data) applyPortalDataResponse(resposta.data);
   return resposta;
@@ -6508,33 +6552,11 @@ async function approveUser(id, button=null) {
 }
 
 async function blockUser(id, button=null) {
-  const u = db.users.find(x => x.id === id);
-  if (!u) return;
-  setButtonBusy(button, true, 'Salvando...');
-  try {
-    await patchAdminUser(u, {status:'blocked'});
-    refreshAdminCrudViews();
-    showToast(`Acesso de ${u.name} bloqueado.`, 'success');
-  } catch (erro) {
-    showToast(erro?.message || 'Não foi possível bloquear o usuário.', 'error');
-  } finally {
-    setButtonBusy(button, false);
-  }
+  return changeManagedUserStatus(id, 'blocked', button);
 }
 
 async function unblockUser(id, button=null) {
-  const u = db.users.find(x => x.id === id);
-  if (!u) return;
-  setButtonBusy(button, true, 'Salvando...');
-  try {
-    await patchAdminUser(u, {status:'active'});
-    refreshAdminCrudViews();
-    showToast(`Acesso de ${u.name} reativado!`, 'success');
-  } catch (erro) {
-    showToast(erro?.message || 'Não foi possível reativar o usuário.', 'error');
-  } finally {
-    setButtonBusy(button, false);
-  }
+  return changeManagedUserStatus(id, 'active', button);
 }
 
 function configUser(id) {
@@ -6643,10 +6665,10 @@ async function addUser(button=null) {
     ? [...document.querySelectorAll('#newUserReportCheckGroup input:checked')].map(i => Number(i.value))
     : [];
 
-  if (role === 'sector' && reportAccessMode === 'sector' && sectors.length === 0) {
+  if (!hasManagementGrant('newUser') && role === 'sector' && reportAccessMode === 'sector' && sectors.length === 0) {
     showToast('Selecione pelo menos um setor para liberar.', 'error'); return;
   }
-  if (role === 'sector' && reportAccessMode === 'specific' && reportIds.length === 0) {
+  if (!hasManagementGrant('newUser') && role === 'sector' && reportAccessMode === 'specific' && reportIds.length === 0) {
     document.getElementById('newUserReportWarn').style.display = 'block';
     showToast('Selecione pelo menos um relatório específico.', 'error'); return;
   }
@@ -10145,10 +10167,13 @@ function navigatePortalHome(event) {
   setMobNav('mnReports');
 }
 function switchView(viewId, navEl) {
+  if (isUserManagementOnly() && !['users','changepass'].includes(viewId)) {
+    viewId = 'users'; navEl = document.getElementById('nav-users');
+  }
   if (viewId !== 'tickets') stopTicketFormsImport(true);
   // Proteger rotas administrativas.
   const adminOnlyViews = ['users','access','reportsmgr','sectors','updates'];
-  if (adminOnlyViews.includes(viewId) && currentUser?.role !== 'admin') {
+  if (adminOnlyViews.includes(viewId) && currentUser?.role !== 'admin' && !(viewId === 'users' && canManagePortalUsers())) {
     showToast('Acesso restrito ao administrador.', 'error');
     return;
   }
@@ -10329,12 +10354,12 @@ async function saveEditUser(button=null) {
     ? [...document.querySelectorAll('#euSectorCheckGroup input:checked')].map(i => i.value)
     : [...SECTORS];
 
-  if (role === 'sector' && reportAccessMode === 'sector' && sectors.length === 0) {
+  if (!hasManagementGrant('eu') && role === 'sector' && reportAccessMode === 'sector' && sectors.length === 0) {
     warn.style.display = 'block';
     showToast('Selecione pelo menos um setor!', 'error');
     return;
   }
-  if (role === 'sector' && reportAccessMode === 'specific' && reportIds.length === 0) {
+  if (!hasManagementGrant('eu') && role === 'sector' && reportAccessMode === 'specific' && reportIds.length === 0) {
     reportWarn.style.display = 'block';
     showToast('Selecione pelo menos um relatório!', 'error');
     return;
