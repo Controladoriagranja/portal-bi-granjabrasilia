@@ -28,45 +28,11 @@ function initManagementPortal() {
   // A sidebar usa também a classe .sidebar diretamente no elemento nav.
   ['nav-users','adminSection','mnAdmin'].forEach(id => document.getElementById(id)?.style.setProperty('display', id === 'adminSection' ? 'block' : 'flex'));
   document.getElementById('mnAdmin')?.querySelector('span')?.replaceChildren('Usuários');
-  document.getElementById('userRoleBadge').textContent = 'Gestão de usuários';
+  document.getElementById('userRoleBadge').textContent = 'Administrador TI';
   document.getElementById('view-users').style.removeProperty('display');
   renderUsersTable();
   switchView('users', document.getElementById('nav-users'));
   setMobNav('mnAdmin');
-}
-
-function toggleManagedUserCreate() {
-  if (!canManagePortalUsers()) return;
-  const panel = document.getElementById('managedUserCreate');
-  panel.hidden = !panel.hidden;
-  if (!panel.hidden) {
-    document.getElementById('managedUserSectors').innerHTML = SECTORS.map(s =>
-      `<label class="check-item"><input type="checkbox" value="${escTicket(s)}"> ${escTicket(sectorLabel(s))}</label>`).join('');
-    document.getElementById('managedUserName').focus();
-  }
-}
-async function createManagedUser(event) {
-  event.preventDefault();
-  if (!canManagePortalUsers()) return;
-  const button = document.getElementById('managedUserSubmit');
-  setButtonBusy(button, true, 'Criando...');
-  try {
-    const result = await portalApiRequest('/api/admin/usuarios', {method:'POST', body:JSON.stringify({
-      name:document.getElementById('managedUserName').value.trim(),
-      email:document.getElementById('managedUserEmail').value.trim(),
-      password:document.getElementById('managedUserPassword').value,
-      role:'sector', status:'active', reportAccessMode:'sector', reportIds:[],
-      sectors:[...document.querySelectorAll('#managedUserSectors input:checked')].map(el => el.value),
-      commercialAccess:{mode:'none'}, operationPermissions:[], ticketPanelAccess:false
-    })});
-    if (result.data) applyPortalDataResponse(result.data);
-    document.getElementById('managedUserForm').reset();
-    document.getElementById('managedUserCreate').hidden = true;
-    renderUsersTable();
-    showToast('Usuário criado. Permissões de dados adicionais podem ser configuradas pelo Admin.', 'success');
-  } catch (error) {
-    showToast(error.message || 'Não foi possível criar o usuário.', 'error');
-  } finally { setButtonBusy(button, false); }
 }
 
 async function changeManagedUserStatus(id, status, button) {
@@ -117,17 +83,5 @@ async function restoreManagedUser(id, button) {
     if (result.data) applyPortalDataResponse(result.data);
     renderUsersTable(); showToast('Conta restaurada, ainda bloqueada.', 'success');
   } catch (error) { showToast(error.message || 'Não foi possível restaurar.', 'error'); }
-  finally { setButtonBusy(button, false); }
-}
-async function loadUserAudit(button) {
-  if (currentUser?.role !== 'admin') return;
-  setButtonBusy(button, true, 'Carregando...');
-  const panel = document.getElementById('userAuditPanel');
-  panel.hidden = false;
-  try {
-    const result = await portalApiRequest('/api/admin/usuarios/auditoria', {method:'GET'});
-    panel.innerHTML = '<h3 style="padding:12px">Últimas 200 ações</h3><table><thead><tr><th>Data</th><th>Autor</th><th>Ação</th><th>Usuário afetado</th></tr></thead><tbody>' +
-      result.entries.map(row => `<tr><td>${escTicket(new Date(row.ocorrido_em).toLocaleString('pt-BR'))}</td><td>${escTicket(row.autor_email || 'Operação no banco')}</td><td>${escTicket(row.acao)}</td><td>${escTicket(row.usuario_nome || '')}<br>${escTicket(row.usuario_email || '')}</td></tr>`).join('') + '</tbody></table>';
-  } catch (error) { panel.textContent = error.message || 'Não foi possível consultar os logs.'; }
   finally { setButtonBusy(button, false); }
 }

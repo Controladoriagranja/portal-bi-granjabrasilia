@@ -3386,8 +3386,8 @@ def api_admin_usuario_create():
     usuario_atual = _usuario_autenticado()
     if not usuario_atual:
         return _resposta_nao_autorizado()
-    if not user_management.can_manage(usuario_atual):
-        return jsonify({"ok":False,"erro":"Sem permissão para cadastrar usuários."}), 403
+    if not user_management.is_admin(usuario_atual):
+        return jsonify({"ok":False,"erro":"Somente Admin pode cadastrar usuários pelo acesso normal."}), 403
 
     body = request.get_json(silent=True) or {}
     if not isinstance(body, dict):
@@ -3396,8 +3396,6 @@ def api_admin_usuario_create():
         body = {**body, 'commercialAccess': body['dataAccess']}
 
     try:
-        if user_management.management_only(usuario_atual):
-            user_management.validate_delegated_create(body)
         operation_permissions = operation_permissions_from_payload(body)
         commercial_access = {'mode':'general'} if str(body.get('role') or '').strip().lower() in {'admin','director'} else normalize_commercial_access(body.get('commercialAccess', {'mode':'none'}))
         zootecnico_access = normalize_zootecnico_access(body['zootecnicoAccess']) if 'zootecnicoAccess' in body else None
@@ -3427,7 +3425,7 @@ def api_admin_usuario_create():
     try:
         with engine.begin() as conn:
             user_management.actor_context(conn, usuario_atual)
-            if user_management.management_only(usuario_atual) or (operation_permissions and user_management.PERMISSION in operation_permissions):
+            if operation_permissions and user_management.PERMISSION in operation_permissions:
                 user_management.require_ready(conn)
             # Serializa todo cadastro, inclusive gestores e processos distintos,
             # antes da conferência case-insensitive de e-mail.

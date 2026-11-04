@@ -28,8 +28,6 @@ def allowed_request(user, path, method):
         return True
     if path == '/api/portal-data':
         return method == 'GET'
-    if path == '/api/admin/usuarios':
-        return method == 'POST'
     if re.fullmatch(r'/api/admin/usuarios/[0-9]+/status', path):
         return method == 'POST'
     if re.fullmatch(r'/api/admin/usuarios/[0-9]+', path):
@@ -40,7 +38,7 @@ def allowed_request(user, path, method):
 def portal_data(data, user):
     if not management_only(user):
         return data
-    # Apenas metadados necessários para cadastrar usuários, sem URLs dos BIs.
+    # Apenas metadados necessários para gerenciar usuários, sem URLs dos BIs.
     return {**data, 'reports': [{**r, 'url': ''} for r in data.get('reports', [])]}
 
 
@@ -61,19 +59,6 @@ def require_ready(conn):
                     AND tgname='usuarios_auditoria_trg' AND tgenabled IN ('O','A'))""")).scalar()
     if not ready:
         raise ValueError('Aplique a migração 20261104_gestao_usuarios.sql antes de usar a gestão delegada/exclusão.')
-
-
-def validate_delegated_create(body):
-    allowed = {'name','email','password','role','status','sectors','reportAccessMode',
-               'reportIds','ticketPanelAccess','commercialAccess','dataAccess','operationPermissions'}
-    if (set(body) - allowed or body.get('role', 'sector') != 'sector'
-        or body.get('status', 'active') != 'active'
-        or body.get('ticketPanelAccess', False) is not False
-        or body.get('operationPermissions', []) != []
-        or body.get('commercialAccess', {'mode':'none'}) != {'mode':'none'}
-        or body.get('dataAccess', {'mode':'none'}) != {'mode':'none'}
-        or body.get('reportAccessMode', 'sector') not in {'sector','specific'}):
-        raise ValueError('Gestor pode criar somente contas Setor, sem privilégios administrativos, comerciais ou delegação de gestão.')
 
 
 def confirm_admin_block(target, active, body):

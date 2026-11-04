@@ -168,20 +168,15 @@ class UserManagementTests(unittest.TestCase):
         for path,method in [('/api/chamados','GET'),('/api/auth/zootecnico-access','GET'),
                             ('/api/auth/report-access','GET'),('/api/admin/jobs','POST'),
                             ('/api/admin/usuarios/1','PATCH'),('/api/admin/usuarios/1/password','PATCH'),
-                            ('/api/portal-data','PUT'),('/api/admin/setores','POST')]:
+                            ('/api/portal-data','PUT'),('/api/admin/setores','POST'),
+                            ('/api/admin/usuarios','POST')]:
             self.assertFalse(management.allowed_request(delegate,path,method),(path,method))
         for path,method in [('/api/auth/me','GET'),('/api/auth/change-password','POST'),
-                            ('/api/admin/usuarios','POST'),('/api/admin/usuarios/1/status','POST'),
+                            ('/api/admin/usuarios/1/status','POST'),
                             ('/api/admin/usuarios/3','DELETE')]:
             self.assertTrue(management.allowed_request(delegate,path,method))
         self.assertTrue(management.allowed_request(self.engine.users[1],'/api/admin/setores','POST'))
 
-    def test_delegate_create_cannot_escalate_or_reset_existing_accounts(self):
-        management.validate_delegated_create({'name':'Comum','email':'u@example.invalid','password':'fake-only'})
-        for payload in [{'role':'admin'},{'role':'director'}, {'operationPermissions':[management.PERMISSION]},
-                        {'commercialAccess':{'mode':'general'}},{'zootecnicoAccess':{'mode':'todos'}},
-                        {'ticketPanelAccess':True},{'user_id':1}]:
-            with self.assertRaises(ValueError):management.validate_delegated_create(payload)
 
 
 class OfficialCreateTests(existing.OperationTests):
@@ -190,10 +185,18 @@ class OfficialCreateTests(existing.OperationTests):
         super().setUp()
         self.ns['OPERATION_PERMISSIONS']={existing.PERMISSION,management.PERMISSION}
 
-    def test_delegate_create_uses_official_hash_no_privileges_and_audit_context(self):
+    def test_it_admin_cannot_create_even_common_account_through_official_endpoint(self):
         self.actor=dict(usuario_id=2,nome='Operador',email='operador@example.invalid',role='sector',ativo=True,
                         operation_permissions=[management.PERMISSION])
         self.body.update(password='fake-password-not-a-real-secret',role='sector')
+        response=self.ns['api_admin_usuario_create']()
+        self.assertEqual(response[1],403)
+        self.assertFalse(any('INSERT INTO public.usuarios' in sql for sql,p in self.engine.calls))
+        self.assertNotIn(82,self.engine.users)
+
+    def test_normal_admin_can_create_it_admin_using_existing_permission_flag(self):
+        self.body.update(password='fake-password-not-a-real-secret',role='sector',
+                         operationPermissions=[management.PERMISSION])
         original=self.engine.execute
         def execute(sql,p=None):
             if 'to_regclass' in str(sql):return existing.Result(True)
@@ -201,18 +204,14 @@ class OfficialCreateTests(existing.OperationTests):
         self.engine.execute=execute
         response=self.ns['api_admin_usuario_create']()
         self.assertEqual(response[1],201)
+        self.assertEqual(self.engine.permissions[82],{management.PERMISSION})
         creation=next(sql for sql,p in self.engine.calls if sql.startswith('INSERT INTO public.usuarios'))
         self.assertIn("crypt(:senha, gen_salt('bf', 12))",creation)
-        self.assertEqual(self.engine.users[82]['role'],'sector')
-        actor=next(json.loads(p['actor']) for sql,p in self.engine.calls if 'set_config' in sql)
-        self.assertEqual(actor['id'],2)
-        self.assertNotIn('fake-password',json.dumps(actor))
-        self.assertEqual(self.engine.permissions.get(82,set()),set())
 
     def test_delegate_cannot_create_admin_through_official_endpoint(self):
         self.actor=dict(usuario_id=2,role='sector',ativo=True,operation_permissions=[management.PERMISSION])
         self.body.update(password='fake-only',role='admin')
-        self.assertEqual(self.ns['api_admin_usuario_create']()[1],400)
+        self.assertEqual(self.ns['api_admin_usuario_create']()[1],403)
         self.assertNotIn(82,self.engine.users)
 
     def test_delegated_director_cannot_inherit_general_access_in_external_apis(self):

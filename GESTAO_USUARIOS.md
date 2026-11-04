@@ -12,7 +12,7 @@ Implementação local; nenhuma migração, concessão ou publicação foi execut
    e o novo `api/user_management.py`, preservando os demais arquivos do backend.
 3. GitHub Pages: publicar `index.html` e `assets/js/user-management.js` juntos.
 4. Como Admin, abrir Usuários → Editar a conta escolhida → Permissões de operações
-   → marcar **Gerenciar usuários** → salvar. É possível criar uma conta Setor sem
+   → marcar **Administrador TI** → salvar. É possível criar uma conta Setor sem
    setores/relatórios quando esta permissão estiver marcada. Não é necessário SQL
    individual para conceder a função.
 
@@ -26,10 +26,12 @@ Não há mudanças de `.env`, dependências novas ou autenticação separada.
 - Para quem não é Admin, `usuarios.gerenciar` torna o acesso exclusivo à gestão
   de usuários, além de Trocar Senha/Sair. Setores/vínculos antigos não são apagados,
   mas não liberam os BIs enquanto esta função exclusiva estiver concedida.
-- A tela permite criar contas comuns Setor e selecionar setores. O Admin continua
-  responsável por vínculos de dados do Comercial/Integração, perfis privilegiados
-  e permissões adicionais. O operador não edita contas existentes, reseta suas
-  senhas ou concede a função de gestão a terceiros.
+- A conta é criada e configurada exclusivamente no cadastro normal do Admin,
+  com a flag **Administrador TI**. Não existe formulário separado de criação
+  nesta tela. O Administrador TI não cria contas, nem chamando a API diretamente,
+  não edita cadastros, reseta senhas ou concede sua função a terceiros.
+  A permissão interna `usuarios.gerenciar` foi reaproveitada: os vínculos existentes
+  permanecem válidos, sem nova coluna, flag de banco ou migração para esta correção.
 - O operador pode bloquear/desbloquear qualquer usuário, inclusive qualquer Admin.
   O bloqueio de Admin exige confirmação explícita no navegador e no corpo da API.
   **Não existe proteção do último Admin ativo**, conforme solicitado. O próprio
@@ -50,8 +52,9 @@ Não há mudanças de `.env`, dependências novas ou autenticação separada.
 
 ## Auditoria
 
-Tabela: `public.auditoria_usuarios`. Admin consulta pelo botão **Consultar logs**,
-com as últimas 200 ações, ou diretamente pelo SQL Editor.
+Tabela: `public.auditoria_usuarios`. O botão de consulta e o painel de logs
+foram retirados da tela. Os registros de auditoria e a consulta administrativa
+existente na API foram preservados; nenhuma consulta é disparada pela interface.
 
 Campos incluem ID/nome/e-mail do autor e do usuário afetado, ação, data/hora,
 origem, usuário SQL e estado anterior/posterior dos campos permitidos. Não inclui
@@ -112,3 +115,13 @@ Ainda requer validação após a implantação manual: executar o trigger no Neo
 com o papel utilizado pelo Render e testar uma ação do Portal conferindo o autor
 na tabela. Não testar o bloqueio de todos os Admins sem ter o SQL Editor acessível.
 Nenhum desses testes em produção foi executado pelo assistente.
+
+## Nova modificação de 04/11/2026 — Administrador TI
+
+Retirados o cadastro separado e a consulta de logs. A flag Administrador TI fica
+no cadastro/edição normal de usuários, reaproveitando a permissão já existente.
+Criação de contas é exclusiva do Admin no fluxo normal; a API também recusa
+criação por Administrador TI. Nenhuma conta foi criada ou alterada neste trabalho.
+Publicar `index.html`, `assets/js/user-management.js`, `api/app.py` e
+`api/user_management.py`. Esta correção não exige nova migração, Worker ou Anderson.
+Os pré-requisitos da implantação original permanecem aplicáveis, se ainda pendentes.

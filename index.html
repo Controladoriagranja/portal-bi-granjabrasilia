@@ -14,7 +14,7 @@
 <link rel="stylesheet" href="./assets/pwa/install.css">
 <script src="./assets/pwa/install.js" defer></script>
 <script src="./assets/js/zootecnico-access.js" defer></script>
-<script src="./assets/js/user-management.js" defer></script>
+<script src="./assets/js/user-management.js?v=administrador-ti-20261104-1" defer></script>
 
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="shortcut icon" type="image/png" href="favicon.png">
@@ -4043,25 +4043,8 @@
       <!-- VIEW: USERS (admin) -->
       <div class="view" id="view-users">
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
-          <button type="button" class="btn-sm accent" onclick="toggleManagedUserCreate()">+ Criar usuário</button>
-          <button type="button" class="btn-sm" id="userAuditButton" onclick="loadUserAudit(this)">Consultar logs</button>
           <label id="usersArchivedLabel" style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="usersArchived" onchange="renderUsersTable()"> Mostrar excluídos</label>
         </div>
-        <div id="managedUserCreate" hidden style="padding:18px;border:1px solid var(--border);border-radius:12px;margin-bottom:16px;background:var(--bg)">
-          <form id="managedUserForm" onsubmit="createManagedUser(event)">
-            <h3 style="margin-bottom:12px">Criar usuário comum</h3>
-            <div class="form-row">
-              <div class="form-group"><label for="managedUserName">Nome completo</label><input id="managedUserName" required maxlength="200" autocomplete="name"></div>
-              <div class="form-group"><label for="managedUserEmail">E-mail</label><input id="managedUserEmail" type="email" required autocomplete="off"></div>
-            </div>
-            <div class="form-group"><label for="managedUserPassword">Senha inicial</label><input id="managedUserPassword" type="password" required minlength="8" maxlength="128" autocomplete="new-password"></div>
-            <div class="form-group"><label>Setores permitidos</label><div class="checkgroup" id="managedUserSectors"></div></div>
-            <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Perfil Setor. O Admin configura os vínculos de dados do Comercial/Integração e permissões adicionais.</p>
-            <button type="submit" class="btn-sm accent" id="managedUserSubmit">Criar usuário</button>
-            <button type="button" class="btn-sm" onclick="toggleManagedUserCreate()">Cancelar</button>
-          </form>
-        </div>
-        <div id="userAuditPanel" class="table-wrapper" hidden style="margin-bottom:16px"></div>
         <div class="section-header" style="margin-bottom:16px">
           <div>
             <div class="section-title">Todos os Usuários</div>
@@ -4163,9 +4146,9 @@
 <div class="form-group" id="euOperationPermissions" style="border-top:1px solid var(--border);padding-top:14px">
   <label>Permissões de operações</label>
   <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;margin:10px 0">
-    <input type="checkbox" data-operation-permission="usuarios.gerenciar"> Gerenciar usuários
+    <input type="checkbox" data-operation-permission="usuarios.gerenciar"> Administrador TI
   </label>
-  <small>Para quem não é Admin, libera somente gestão de usuários. Pode bloquear qualquer Admin, mas não excluí-lo.</small>
+  <small>Libera somente a gestão de usuários. O cadastro de contas permanece no acesso normal do Admin.</small>
   <div style="font-size:12px;font-weight:700;margin:8px 0">Comercial</div>
   <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer">
     <input type="checkbox" data-operation-permission="comercial.frete.editar" style="width:16px;height:16px;accent-color:#e54837"> Editar fretes
@@ -4285,9 +4268,9 @@
 <div class="form-group" id="newUserOperationPermissions" style="border-top:1px solid var(--border);padding-top:14px">
   <label>Permissões de operações</label>
   <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer;margin:10px 0">
-    <input type="checkbox" data-operation-permission="usuarios.gerenciar"> Gerenciar usuários
+    <input type="checkbox" data-operation-permission="usuarios.gerenciar"> Administrador TI
   </label>
-  <small>Para quem não é Admin, libera somente gestão de usuários. Pode bloquear qualquer Admin, mas não excluí-lo.</small>
+  <small>Libera somente a gestão de usuários. O cadastro de contas permanece no acesso normal do Admin.</small>
   <div style="font-size:12px;font-weight:700;margin:8px 0">Comercial</div>
   <label style="display:flex;align-items:center;gap:10px;font-size:13px;cursor:pointer">
     <input type="checkbox" data-operation-permission="comercial.frete.editar" style="width:16px;height:16px;accent-color:#e54837"> Editar fretes
@@ -6237,9 +6220,7 @@ function closeModal(e) {
 // ═══════════════════════════════════════
 function renderUsersTable() {
   if (!canManagePortalUsers()) return;
-  document.getElementById('userAuditButton').style.display = currentUser.role === 'admin' ? '' : 'none';
   document.getElementById('usersArchivedLabel').style.display = currentUser.role === 'admin' ? 'flex' : 'none';
-  if (currentUser.role !== 'admin') document.getElementById('userAuditPanel').hidden = true;
   updatePendingBadge();
   renderAllUsersTable();
 }

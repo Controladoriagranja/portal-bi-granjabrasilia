@@ -49,7 +49,7 @@ def main():
             for(const id of ['nav-reports','nav-tickets','nav-updates','nav-access','nav-ticketadmin','nav-reportsmgr','nav-sectors'])
               check(getComputedStyle(document.getElementById(id)).display==='none','Menu indevido '+id);
             check(getComputedStyle(document.getElementById('nav-users')).display!=='none','Menu usuários');
-            check(getComputedStyle(document.getElementById('userAuditButton')).display==='none','Log só Admin');
+            check(!document.getElementById('userAuditButton') && !document.getElementById('userAuditPanel'),'Logs removidos da tela');
             check(!document.querySelector('#allUsersTable button[onclick^="openEditUser"]'),'Sem edição delegada');
             check(!document.getElementById('allUsersTable').textContent.includes('excluido@example.invalid'),'Ocultar excluídos');
             check(!document.querySelector('#allUsersTable img'),'Escapar nome em HTML');
@@ -59,15 +59,9 @@ def main():
             switchView('updates');check(document.querySelector('#view-users.active'),'Bloquear rota updates');
             switchView('reports');check(document.querySelector('#view-users.active'),'Bloquear rota relatórios');
             check(testCalls.length===0,'Nenhuma consulta de negócio');
-            toggleManagedUserCreate();check(!document.getElementById('managedUserCreate').hidden,'Abrir cadastro');
-            check(document.querySelectorAll('#managedUserSectors input').length===1,'Setores no cadastro');
-            document.getElementById('managedUserName').value='Novo';document.getElementById('managedUserEmail').value='novo@example.invalid';
-            document.getElementById('managedUserPassword').value='fake-password-only';
-            await createManagedUser({preventDefault(){}});
-            const create=testCalls.pop();const payload=JSON.parse(create.options.body);
-            check(create.path==='/api/admin/usuarios' && create.options.method==='POST','Cadastro oficial');
-            check(payload.role==='sector' && payload.operationPermissions.length===0,'Sem elevação');
-            check(document.getElementById('managedUserPassword').value==='','Limpar senha após sucesso');
+            check(!document.getElementById('managedUserCreate'),'Sem cadastro separado');
+            check(typeof createManagedUser==='undefined','Sem criação delegada');
+            check(document.getElementById('userRoleBadge').textContent==='Administrador TI','Identificação TI');
             testConfirmation=false;await changeManagedUserStatus(1,'blocked');check(testCalls.length===0,'Cancelar bloqueio Admin');
             testConfirmation=true;await changeManagedUserStatus(1,'blocked');
             const block=testCalls.pop();check(block.path.endsWith('/1/status') && JSON.parse(block.options.body).confirmAdminBlock,'Confirmar bloqueio Admin');
@@ -76,11 +70,12 @@ def main():
             restoreManagementNavigation();check(document.getElementById('nav-reports').style.display!=='none','Restaurar navegação ao trocar sessão');
             currentUser=db.users[0];renderUsersTable();
             check(!!document.querySelector('#allUsersTable button[onclick^="openEditUser"]'),'Admin mantém edição');
-            check(getComputedStyle(document.getElementById('userAuditButton')).display!=='none','Admin consulta logs');
+            check(!document.getElementById('userAuditButton'),'Sem botão de logs para Admin');
             document.getElementById('usersArchived').checked=true;renderUsersTable();
             check(document.getElementById('allUsersTable').textContent.includes('excluido@example.invalid'),'Admin vê excluídos');
             check(!!document.querySelector('#allUsersTable button[onclick^="restoreManagedUser"]'),'Admin restaura');
-            await loadUserAudit();check(testCalls.pop().path.endsWith('/auditoria'),'Log só sob demanda');
+            check(document.querySelector('#newUserOperationPermissions').textContent.includes('Administrador TI'),'Flag no cadastro normal');
+            check(document.querySelector('#euOperationPermissions').textContent.includes('Administrador TI'),'Flag na edição normal');
             done({count});
           })().catch(error=>done({error:error.message,stack:error.stack}));
         """)
