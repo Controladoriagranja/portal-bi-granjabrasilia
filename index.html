@@ -5075,6 +5075,7 @@ db.users.forEach(u => {
 });
 syncSectors();
 
+let portalPreviewSession = null;
 let currentUser = null;
 let portalSessionGeneration = 0;
 
@@ -5093,6 +5094,45 @@ function applyLoadedData(loaded) {
 
 }
 
+function renderUserPreviewBanner(){
+ document.getElementById('userPreviewBanner')?.remove();if(!portalPreviewSession)return;
+ const banner=document.createElement('div');banner.id='userPreviewBanner';banner.setAttribute('role','status');
+ Object.assign(banner.style,{position:'fixed',bottom:'14px',right:'14px',left:'auto',maxWidth:'calc(100vw - 28px)',zIndex:'100050',display:'flex',gap:'12px',alignItems:'center',flexWrap:'wrap',padding:'12px 16px',background:'#10395c',color:'#fff',borderRadius:'10px',boxShadow:'0 4px 18px #0003'});
+ const text=document.createElement('span');text.textContent='Visualizando como '+currentUser.name+' · Somente leitura';
+ const close=document.createElement('button');close.type='button';close.className='btn-sm';close.textContent='Encerrar visualização';close.onclick=()=>{clearPortalToken();clearSession();window.close();showScreen('login');};
+ banner.append(text,close);document.body.append(banner);
+}
+async function receiveUserPreview(){
+ const params=new URLSearchParams(location.search),nonce=params.get('user-preview');if(!nonce)return true;
+ clearPortalToken();clearSession();
+ if(!window.opener||!/^[a-f0-9-]{36}$/.test(nonce)){setLoginServerStatus('Abra a visualização pelo botão do usuário na sessão de Admin.','error');return false;}
+ setLoginServerStatus('Preparando visualização do usuário…','loading');
+ return new Promise(resolve=>{
+  const parent=window.opener;let timer,repeat;
+  function finish(ok){clearTimeout(timer);clearInterval(repeat);removeEventListener('message',receive);params.delete('user-preview');history.replaceState(null,'',location.pathname+(params.size?'?'+params:'')+location.hash);window.opener=null;resolve(ok);}
+  function receive(event){
+   if(event.origin!==location.origin||event.source!==parent||event.data?.type!=='portal-user-preview'||event.data?.nonce!==nonce||typeof event.data?.token!=='string')return;
+   setPortalToken(event.data.token);finish(true);
+  }
+  addEventListener('message',receive);const ready=()=>parent.postMessage({type:'portal-user-preview-ready',nonce},location.origin);
+  repeat=setInterval(ready,500);timer=setTimeout(()=>{setLoginServerStatus('Não foi possível iniciar a visualização. Tente novamente na sessão de Admin.','error');finish(false);},90000);ready();
+ });
+}
+async function startUserPreview(id,button){
+ if(currentUser?.role!=='admin'||portalPreviewSession){showToast('Somente Admin pode visualizar como outro usuário.','error');return;}
+ const user=db.users.find(u=>Number(u.id)===Number(id));if(!user||user.status!=='active'||user.deletedAt){showToast('Usuário bloqueado, excluído ou sem acesso ativo ao portal.','error');return;}
+ const nonce=crypto.randomUUID(),url=new URL(location.href);url.search='';url.hash='';url.searchParams.set('user-preview',nonce);
+ const child=window.open(url.href,'_blank');if(!child){showToast('Permita abrir uma nova aba para visualizar o portal do usuário.','error');return;}
+ let token='',ready=false,timeout;
+ function send(){if(ready&&token&&!child.closed){child.postMessage({type:'portal-user-preview',nonce,token},location.origin);cleanup();}}
+ function receive(event){if(event.origin===location.origin&&event.source===child&&event.data?.type==='portal-user-preview-ready'&&event.data?.nonce===nonce){ready=true;send();}}
+ function cleanup(){removeEventListener('message',receive);clearTimeout(timeout);}
+ addEventListener('message',receive);timeout=setTimeout(cleanup,90000);setButtonBusy(button,true,'Abrindo…');
+ try{const response=await portalApiRequest('/api/admin/usuarios/'+Number(user.dbId||user.id)+'/preview',{method:'POST',body:'{}'});if(!response?.token)throw new Error('Não foi possível criar a sessão de visualização.');token=response.token;send();}
+ catch(e){cleanup();child.close();showToast(e.message||'Falha ao abrir a visualização.','error');}
+ finally{setButtonBusy(button,false);}
+}
+
 function getPortalToken() {
   try { return sessionStorage.getItem('granjabi_auth_token'); } catch(e) { return null; }
 }
@@ -5106,6 +5146,7 @@ function setPortalToken(token) {
 }
 
 function clearPortalToken() {
+  portalPreviewSession=null;document.getElementById('userPreviewBanner')?.remove();
   void exitReportFullscreen();
   // Descartar o documento autenticado ao sair/perder a sessão.
   const reportFrame = document.getElementById('reportIframe');
@@ -5149,6 +5190,7 @@ async function getNeonSession() {
 
 async function initApp() {
   showScreen('login');
+  if(!await receiveUserPreview())return;
   warmupPortalApi();
 
   neonSessionToken = getPortalToken();
@@ -5162,6 +5204,7 @@ async function initApp() {
 
   try {
     const bootstrap = await portalApiRequest('/api/auth/bootstrap', {method:'GET'});
+    portalPreviewSession=bootstrap?.user?.sessionPreview||null;
     if (bootstrap?.portalData) applyPortalDataResponse(bootstrap.portalData);
 
     const emailAutenticado = String(bootstrap?.user?.email || '').trim().toLowerCase();
@@ -5466,6 +5509,7 @@ async function fetchJsonWithTimeout(url, options={}, timeoutMs=65000) {
 }
 
 async function portalApiRequest(path, options = {}) {
+  if(portalPreviewSession&&!['GET','HEAD','OPTIONS'].includes(String(options.method||'GET').toUpperCase()))throw new Error('Esta visualização permite somente consultas. Faça alterações na sua sessão de administrador.');
   if (!neonSessionToken) neonSessionToken = getPortalToken();
   if (!neonSessionToken) throw new Error("Sessão inválida. Entre novamente.");
 
@@ -5709,6 +5753,7 @@ function showScreen(id) {
 // PORTAL INIT
 // ═══════════════════════════════════════
 function initPortal() {
+  renderUserPreviewBanner();
   restoreManagementNavigation();
   document.getElementById('mnAdmin')?.querySelector('span')?.replaceChildren('Admin');
   const u = currentUser;
@@ -6365,6 +6410,7 @@ function renderAllUsersTable() {
     <td>${u.deletedAt ? '<span class="status-badge status-blocked">Excluído</span>' : statusBadge(u.status)}</td>
     <td style="text-align:center;white-space:nowrap">
       ${currentUser.role==='admin' && !u.deletedAt ? `<button class="action-btn edit" onclick="openEditUser(${u.id})">✏ Editar</button>` : ''}
+      ${currentUser.role==='admin' && !portalPreviewSession && !u.deletedAt ? `<button class="action-btn edit" onclick="startUserPreview(${u.id}, this)" ${u.status!=='active'?'disabled title="Usuário sem acesso ativo ao portal"':''}>👁 Visualizar portal</button>` : ''}
       ${u.status==='pending'?`<button class="action-btn approve" onclick="approveUser(${u.id}, this)">✔ Aprovar</button>`:''}
       ${!u.deletedAt && u.status==='active'?`<button class="action-btn block" onclick="blockUser(${u.id}, this)">✕ Bloquear</button>`:''}
       ${!u.deletedAt && u.status==='blocked'?`<button class="action-btn approve" onclick="unblockUser(${u.id}, this)">↩ Reativar</button>`:''}
