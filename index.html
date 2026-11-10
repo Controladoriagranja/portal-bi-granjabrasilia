@@ -11456,5 +11456,16 @@ async function loadUpdateStatus(){
   <button type="button" class="pwa-install-button" data-pwa-close>Entendi</button>
 </dialog>
 
+<script>
+// Download generated spreadsheets in the portal rather than inside its report iframe.
+window.addEventListener('message',function(event){
+ const frame=document.getElementById('reportIframe'),data=event.data;
+ if(!frame||event.source!==frame.contentWindow||data?.type!=='bi:excel-download')return;
+ let expected;try{expected=new URL(frame.src,location.href).origin;}catch{return;}
+ if(event.origin!==expected||!data.id||!(data.buffer instanceof ArrayBuffer)||data.buffer.byteLength>50*1024*1024||data.buffer.byteLength<4||!/^[-\w .]+\.xlsx$/.test(data.filename))return;
+ const bytes=new Uint8Array(data.buffer);if(bytes[0]!==80||bytes[1]!==75)return;
+ const url=URL.createObjectURL(new Blob([data.buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})),link=document.createElement('a');link.href=url;link.download=data.filename;document.body.append(link);link.click();link.remove();event.source.postMessage({type:'bi:excel-saved',id:data.id},event.origin);setTimeout(()=>URL.revokeObjectURL(url),60000);
+});
+</script>
 </body>
 </html>
