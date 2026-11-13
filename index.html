@@ -11475,5 +11475,14 @@ window.addEventListener('message',function(event){
  const url=URL.createObjectURL(new Blob([data.buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})),link=document.createElement('a');link.href=url;link.download=data.filename;document.body.append(link);link.click();link.remove();event.source.postMessage({type:'bi:excel-saved',id:data.id},event.origin);setTimeout(()=>URL.revokeObjectURL(url),60000);
 });
 </script>
+
+<script>
+(()=>{const frame=document.getElementById('reportIframe');const buttons=()=>document.querySelectorAll('.report-back-btn,.report-floating-back');
+frame.addEventListener('load',()=>{for(const b of buttons()){b.textContent='← Voltar ao portal';b.onclick=()=>closeModal();}});
+window.addEventListener('message',e=>{if(e.source!==frame.contentWindow||e.origin!==location.origin||e.data?.type!=='bi:overview-return')return;
+const u=new URL('/bi-zootecnico/visao-geral.html',location.origin),params=new URLSearchParams(e.data.query||'');for(const k of ['visao','ano','mes','periodo']){const v=params.get(k);if(v&&/^[a-z0-9-]+$/.test(v))u.searchParams.set(k,v);}
+for(const b of buttons()){b.textContent='← Voltar à Visão Geral';b.onclick=()=>{frame.contentWindow.location.href=u.href;};}
+});})();
+</script>
 </body>
 </html>
