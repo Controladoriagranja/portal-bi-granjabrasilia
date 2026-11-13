@@ -5839,7 +5839,7 @@ function getUserReports() {
   if (!u) return [];
   if (canAccessGeneralView(u)) {
     const base = u.role === 'admin' || u.role === 'director' ? db.reports : (u.reportAccessMode === 'specific' ? db.reports.filter(r => (u.reportIds || []).map(Number).includes(Number(r.id))) : db.reports.filter(r => (u.sectors || []).includes(r.sector)));
-    return [...base, GENERAL_ADMIN_REPORT];
+    return base;
   }
   if (u.role === 'director') return db.reports;
 
