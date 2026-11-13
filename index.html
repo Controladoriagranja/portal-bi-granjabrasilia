@@ -5832,7 +5832,7 @@ function initPortal() {
 
 // Visão independente em desenvolvimento; não pertence a um setor.
 const GENERAL_ADMIN_REPORT = Object.freeze({id:-20261113,title:'Visão Geral',desc:'Mapa de calor dos indicadores · Em desenvolvimento · Acesso restrito',sector:'',url:'https://controladoriagranja.github.io/bi-zootecnico/visao-geral.html'});
-function canAccessGeneralView(u) { return Boolean(u && (u.role === 'admin' || Number(u.dbId || u.id) === 5)); }
+function canAccessGeneralView(u) { return Boolean(u && (['admin', 'director', 'diretor'].includes(u.role))); }
 function getUserReports() {
   if (isUserManagementOnly()) return [];
   const u = currentUser;
