@@ -5830,11 +5830,14 @@ function initPortal() {
   setMobNav('mnReports');
 }
 
+// Visão independente em desenvolvimento; não pertence a um setor.
+const GENERAL_ADMIN_REPORT = Object.freeze({id:-20261113,title:'Visão Geral',desc:'Mapa de calor dos indicadores · Em desenvolvimento · Admin',sector:'',url:'https://controladoriagranja.github.io/bi-zootecnico/visao-geral.html'});
 function getUserReports() {
   if (isUserManagementOnly()) return [];
   const u = currentUser;
   if (!u) return [];
-  if (u.role === 'admin' || u.role === 'director') return db.reports;
+  if (u.role === 'admin') return [...db.reports, GENERAL_ADMIN_REPORT];
+  if (u.role === 'director') return db.reports;
 
   const mode = u.reportAccessMode || 'sector';
   if (mode === 'specific') {
@@ -5853,6 +5856,7 @@ function getUserAccessItems() {
 function canOpenReportPage(reportId, pageId = '') {
   const u = currentUser;
   if (!u) return false;
+  if (Number(reportId) === GENERAL_ADMIN_REPORT.id) return u.role === 'admin';
   if (u.role === 'admin' || u.role === 'director') return true;
   return getUserReports().some(r => Number(r.id) === Number(reportId));
 }
@@ -5866,7 +5870,7 @@ function renderDashboard() {
   const u = currentUser;
 
   // Stats
-  const sectors = [...new Set(items.map(x => x.report.sector))];
+  const sectors = [...new Set(items.map(x => x.report.sector).filter(Boolean))];
   const statsGrid = document.getElementById('statsGrid');
   const isAdminDir = u.role === 'admin' || u.role === 'director';
   const pending = db.users.filter(x => x.status === 'pending').length;
@@ -5918,7 +5922,7 @@ function renderDashboard() {
 let activeSectorTab = 'all';
 function renderReportTabs() {
   const items = getUserAccessItems();
-  const sectors = [...new Set(items.map(x => x.report.sector))];
+  const sectors = [...new Set(items.map(x => x.report.sector).filter(Boolean))];
   const tabs = document.getElementById('reportTabs');
   tabs.innerHTML = `<div class="tab active" onclick="filterReportTab('all',this)">Todos</div>` +
     sectors.map(s => `<div class="tab" onclick="filterReportTab('${s}',this)">${sectorLabel(s)}</div>`).join('');
@@ -5941,7 +5945,7 @@ function accessCard(item) {
   const desc = pg ? `${r.title} — acesso somente a esta tela` : r.desc;
   const pageArg = pg ? `, '${pg.id}'` : '';
   return `<div class="report-card">
-    <div class="report-sector-tag" style="${sectorTagStyle(r.sector)}">${sectorLabel(r.sector)}</div>
+    ${r.sector ? `<div class="report-sector-tag" style="${sectorTagStyle(r.sector)}">${sectorLabel(r.sector)}</div>` : '<div class="report-sector-tag">Visão independente · Admin</div>'}
     <div class="report-title">${title}</div>
     <div class="report-desc">${desc}</div>
     <button class="btn-open" onclick="openReport(${r.id}${pageArg})">🔗 Abrir Tela</button>
@@ -6170,7 +6174,7 @@ function configureReportDownloads(iframe, reportUrl) {
 
 async function openReport(id, pageId = '') {
   const openingSession = portalSessionGeneration;
-  const r = db.reports.find(x => Number(x.id) === Number(id));
+  const r = getUserReports().find(x => Number(x.id) === Number(id));
   if (!r || !canOpenReportPage(id, pageId)) {
     showToast('Você não possui acesso a esta tela.', 'error');
     return;
