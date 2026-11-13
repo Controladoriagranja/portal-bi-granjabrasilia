@@ -5831,12 +5831,16 @@ function initPortal() {
 }
 
 // Visão independente em desenvolvimento; não pertence a um setor.
-const GENERAL_ADMIN_REPORT = Object.freeze({id:-20261113,title:'Visão Geral',desc:'Mapa de calor dos indicadores · Em desenvolvimento · Admin',sector:'',url:'https://controladoriagranja.github.io/bi-zootecnico/visao-geral.html'});
+const GENERAL_ADMIN_REPORT = Object.freeze({id:-20261113,title:'Visão Geral',desc:'Mapa de calor dos indicadores · Em desenvolvimento · Acesso restrito',sector:'',url:'https://controladoriagranja.github.io/bi-zootecnico/visao-geral.html'});
+function canAccessGeneralView(u) { return Boolean(u && (u.role === 'admin' || Number(u.dbId || u.id) === 5)); }
 function getUserReports() {
   if (isUserManagementOnly()) return [];
   const u = currentUser;
   if (!u) return [];
-  if (u.role === 'admin') return [...db.reports, GENERAL_ADMIN_REPORT];
+  if (canAccessGeneralView(u)) {
+    const base = u.role === 'admin' || u.role === 'director' ? db.reports : (u.reportAccessMode === 'specific' ? db.reports.filter(r => (u.reportIds || []).map(Number).includes(Number(r.id))) : db.reports.filter(r => (u.sectors || []).includes(r.sector)));
+    return [...base, GENERAL_ADMIN_REPORT];
+  }
   if (u.role === 'director') return db.reports;
 
   const mode = u.reportAccessMode || 'sector';
@@ -5856,7 +5860,7 @@ function getUserAccessItems() {
 function canOpenReportPage(reportId, pageId = '') {
   const u = currentUser;
   if (!u) return false;
-  if (Number(reportId) === GENERAL_ADMIN_REPORT.id) return u.role === 'admin';
+  if (Number(reportId) === GENERAL_ADMIN_REPORT.id) return canAccessGeneralView(u);
   if (u.role === 'admin' || u.role === 'director') return true;
   return getUserReports().some(r => Number(r.id) === Number(reportId));
 }
@@ -5945,7 +5949,7 @@ function accessCard(item) {
   const desc = pg ? `${r.title} — acesso somente a esta tela` : r.desc;
   const pageArg = pg ? `, '${pg.id}'` : '';
   return `<div class="report-card">
-    ${r.sector ? `<div class="report-sector-tag" style="${sectorTagStyle(r.sector)}">${sectorLabel(r.sector)}</div>` : '<div class="report-sector-tag">Visão independente · Admin</div>'}
+    ${r.sector ? `<div class="report-sector-tag" style="${sectorTagStyle(r.sector)}">${sectorLabel(r.sector)}</div>` : '<div class="report-sector-tag">Visão independente · Acesso restrito</div>'}
     <div class="report-title">${title}</div>
     <div class="report-desc">${desc}</div>
     <button class="btn-open" onclick="openReport(${r.id}${pageArg})">🔗 Abrir Tela</button>
