@@ -17,12 +17,14 @@ URL='https://api-bi-granja.controladoriagb05.workers.dev/api/zootecnico/acesso/o
 CACHE=Path(tempfile.gettempdir())/'portal-zootecnico-opcoes-v1'
 TTL=300
 SOURCES=frozenset({'vw_desempenho_acerto_portal','base_dinamica','mortalidade_peso_abertos',
-    'vw_historico_lotes_criacao_portal','acerto_lote_resultado_geral','mortalidade_peso_fechados'})
+    'vw_historico_lotes_criacao_portal','acerto_lote_resultado_geral','mortalidade_peso_fechados','acompanhamento_lotes_criacao'})
 
 
 def validate(data):
-    if not isinstance(data,dict) or data.get('ok') is not True or set(data.get('sources',{}))!=SOURCES:
+    if not isinstance(data,dict) or data.get('ok') is not True or set(data.get('sources',{})) not in (SOURCES, SOURCES-{'acompanhamento_lotes_criacao'}):
         raise ValueError('Catálogo zootécnico inválido.')
+    # Aceita o catalogo anterior durante a instalacao em duas etapas.
+    data={**data,'sources':{**data['sources'],'acompanhamento_lotes_criacao':data['sources'].get('acompanhamento_lotes_criacao',[])}}
     for values in data['sources'].values():
         if not isinstance(values,list) or len(values)>5000 or any(not isinstance(x,str) or not x or x!=x.strip() or len(x)>500 for x in values):
             raise ValueError('Valores técnicos inválidos.')

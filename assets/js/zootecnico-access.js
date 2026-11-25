@@ -5,7 +5,7 @@
   const role=p=>document.getElementById(p==='eu'?'euRole':'newUserRole')?.value;
   const manager=p=>['admin','director'].includes(role(p));
   const searchKey=v=>typeof normalizeAccessSearch==='function'?normalizeAccessSearch(v):String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR');
-  const names={vw_desempenho_acerto_portal:'Desempenho — Lotes Fechados',base_dinamica:'GPD por Fase',mortalidade_peso_abertos:'Lotes em Criação',vw_historico_lotes_criacao_portal:'Histórico de Lotes',acerto_lote_resultado_geral:'Carga do Desempenho',mortalidade_peso_fechados:'Carga do Histórico'};
+  const names={acompanhamento_lotes_criacao:'Acompanhamento de mortalidades',vw_desempenho_acerto_portal:'Desempenho — Lotes Fechados',base_dinamica:'GPD por Fase',mortalidade_peso_abertos:'Lotes em Criação',vw_historico_lotes_criacao_portal:'Histórico de Lotes',acerto_lote_resultado_geral:'Carga do Desempenho',mortalidade_peso_fechados:'Carga do Histórico'};
   function state(p){if(!states.has(p))states.set(p,{uid:0,dirty:false,loaded:false,identities:[],users:[],identityId:null,userIds:[]});return states.get(p);}
   function status(p,text){field(p,'Status').textContent=text;}
   function identity(p){const s=state(p);return s.identities.find(i=>i.id===s.identityId);}

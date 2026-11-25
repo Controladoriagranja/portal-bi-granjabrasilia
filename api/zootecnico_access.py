@@ -15,6 +15,7 @@ SOURCES = (
     "vw_desempenho_acerto_portal", "acerto_lote_resultado_geral",
     "base_dinamica", "mortalidade_peso_abertos", "mortalidade_peso_fechados",
     "vw_historico_lotes_criacao_portal",
+    "acompanhamento_lotes_criacao",
 )
 PRIMARY_SOURCES = SOURCES[0], SOURCES[2], SOURCES[3], SOURCES[5]
 
