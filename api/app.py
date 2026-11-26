@@ -3612,6 +3612,21 @@ def api_admin_relatorio_item(relatorio_id):
         return jsonify({"ok": False, "erro": "Erro interno ao processar o relatório."}), 500
 
 
+def _normalizar_cor_setor(value):
+    if value is None or value == '':
+        return None  # Clientes antigos podem omitir a cor; PATCH preserva a atual.
+    if not isinstance(value, str):
+        raise ValueError('Informe uma cor hexadecimal válida (#RRGGBB).')
+    color = value.strip()
+    if re.fullmatch(r'#?[0-9a-fA-F]{3}', color):
+        color = '#' + ''.join(char * 2 for char in color.lstrip('#'))
+    elif re.fullmatch(r'[0-9a-fA-F]{6}', color):
+        color = '#' + color
+    if not re.fullmatch(r'#[0-9a-fA-F]{6}', color):
+        raise ValueError('Informe uma cor hexadecimal válida (#RRGGBB).')
+    return color.upper()
+
+
 @app.route("/api/admin/setores", methods=["POST"])
 def api_admin_setor_create():
     usuario_atual, erro = _admin_atual_ou_resposta()
@@ -3619,7 +3634,10 @@ def api_admin_setor_create():
         return erro
     body = request.get_json(silent=True) or {}
     nome = str(body.get("name") or "").strip()
-    cor = str(body.get("color") or "").strip() or None
+    try:
+        cor = _normalizar_cor_setor(body.get("color"))
+    except ValueError as error:
+        return jsonify({"ok":False,"erro":str(error)}), 400
     codigo = _normalizar_codigo_setor(body.get("code") or nome)
     if not nome or not codigo:
         return jsonify({"ok": False, "erro": "Informe o nome do setor."}), 400
@@ -3682,7 +3700,10 @@ def api_admin_setor_item(codigo):
             else:
                 body = request.get_json(silent=True) or {}
                 nome = str(body.get("name") or "").strip()
-                cor = body.get("color")
+                try:
+                    cor = _normalizar_cor_setor(body.get("color"))
+                except ValueError as error:
+                    return jsonify({"ok":False,"erro":str(error)}), 400
                 if not nome:
                     return jsonify({"ok": False, "erro": "Informe o nome do setor."}), 400
                 conn.execute(text("""

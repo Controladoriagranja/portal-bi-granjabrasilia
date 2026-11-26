@@ -12,6 +12,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="apple-touch-icon" sizes="180x180" href="./assets/pwa/apple-touch-icon.png">
 <link rel="stylesheet" href="./assets/pwa/install.css">
+<link rel="stylesheet" href="./assets/css/sector-colors.css?v=20261126">
+<script src="./assets/js/sector-colors.js?v=20261126" defer></script>
 <script src="./assets/pwa/install.js" defer></script>
 <script src="./assets/js/zootecnico-access.js?v=20261124-acompanhamento" defer></script>
 <script src="./assets/js/user-management.js?v=administrador-ti-20261104-1" defer></script>
@@ -4390,7 +4392,7 @@
         <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
 
           <!-- Add sector form -->
-          <div class="form-panel" style="min-width:280px;max-width:340px">
+          <div class="form-panel sector-create-panel">
             <div class="form-title">➕ Novo Setor</div>
             <div class="form-group">
               <label>Nome do Setor</label>
@@ -4398,17 +4400,7 @@
             </div>
             <div class="form-group">
               <label>Cor de identificação</label>
-              <div style="display:flex;gap:8px;flex-wrap:wrap" id="colorPicker">
-                <label class="color-opt" style="--c:#58a6ff"><input type="radio" name="sectorColor" value="#58a6ff" checked><span></span></label>
-                <label class="color-opt" style="--c:#3fb950"><input type="radio" name="sectorColor" value="#3fb950"><span></span></label>
-                <label class="color-opt" style="--c:#f0b429"><input type="radio" name="sectorColor" value="#f0b429"><span></span></label>
-                <label class="color-opt" style="--c:#f85149"><input type="radio" name="sectorColor" value="#f85149"><span></span></label>
-                <label class="color-opt" style="--c:#a78bfa"><input type="radio" name="sectorColor" value="#a78bfa"><span></span></label>
-                <label class="color-opt" style="--c:#f472b6"><input type="radio" name="sectorColor" value="#f472b6"><span></span></label>
-                <label class="color-opt" style="--c:#34d399"><input type="radio" name="sectorColor" value="#34d399"><span></span></label>
-                <label class="color-opt" style="--c:#fb923c"><input type="radio" name="sectorColor" value="#fb923c"><span></span></label>
-                <label class="color-opt" style="--c:#e74c3c"><input type="radio" name="sectorColor" value="#e74c3c"><span></span></label>
-              </div>
+              <div id="newSectorColorPicker" data-initial-color="#58a6ff"></div>
             </div>
             <button class="btn-sm accent" id="addSectorBtn" onclick="addSector(this)" style="width:100%;justify-content:center">Criar Setor</button>
           </div>
@@ -4876,6 +4868,18 @@
 <!-- TOAST -->
 <div class="toast" id="toast"><span id="toastIcon">✓</span><span id="toastMsg"></span></div>
 
+<dialog id="sectorEditDialog" aria-labelledby="sectorEditTitle">
+  <form onsubmit="saveSectorEditor(event)">
+    <h3 id="sectorEditTitle">Editar setor</h3>
+    <div class="form-group"><label for="editSectorName">Nome do setor</label><input id="editSectorName" required maxlength="80"></div>
+    <div class="form-group"><label>Cor de identificação</label><div id="editSectorColorPicker"></div></div>
+    <p id="editSectorError" role="alert" style="font-size:12px;color:var(--red);margin-bottom:10px"></p>
+    <div style="display:flex;justify-content:flex-end;gap:8px">
+      <button type="button" class="btn-sm" onclick="closeSectorEditor()">Cancelar</button>
+      <button type="submit" class="btn-sm accent" id="saveSectorEditBtn">Salvar alterações</button>
+    </div>
+  </form>
+</dialog>
 <script>
 // ═══════════════════════════════════════
 // DATA STORE + LOCALSTORAGE
@@ -10489,8 +10493,9 @@ function slugify(str) {
 async function addSector(button=null) {
   const name = document.getElementById('newSectorName').value.trim();
   if (!name) { showToast('Digite o nome do setor!', 'error'); return; }
-  const colorInput = document.querySelector('input[name="sectorColor"]:checked');
-  const color = colorInput?.value || '';
+  let color;
+  try { color = mountSectorColorPicker('newSectorColorPicker').get(); }
+  catch (error) { showToast(error.message, 'error'); return; }
 
   setButtonBusy(button || document.getElementById('addSectorBtn'), true, 'Criando...');
   try {
@@ -10534,26 +10539,7 @@ async function removeSector(slug, button=null) {
 }
 
 async function editSector(slug, button=null) {
-  const atual = sectorLabel(slug);
-  const novo = prompt('Novo nome de exibição do setor:', atual);
-  if (novo === null) return;
-  const nome = String(novo || '').trim();
-  if (!nome) { showToast('O nome do setor não pode ficar vazio.', 'error'); return; }
-
-  setButtonBusy(button, true, 'Salvando...');
-  try {
-    const resposta = await portalApiRequest(`/api/admin/setores/${encodeURIComponent(slug)}`, {
-      method:'PATCH',
-      body:JSON.stringify({name:nome})
-    });
-    if (resposta?.data) applyPortalDataResponse(resposta.data);
-    refreshAdminCrudViews();
-    showToast('Setor atualizado.', 'success');
-  } catch (erro) {
-    showToast(erro?.message || 'Não foi possível atualizar o setor.', 'error');
-  } finally {
-    setButtonBusy(button, false);
-  }
+  openSectorEditor(slug);
 }
 
 function renderSectorsList() {
@@ -10569,7 +10555,7 @@ function renderSectorsList() {
     const c = sectorColor(s);
     return `<div class="sector-row">
       <div class="sector-dot" style="background:${c}"></div>
-      <div class="sector-name">${sectorLabel(s)}</div>
+      <div class="sector-name">${escTicket(sectorLabel(s))}</div>
       <div class="sector-meta">${rCount} relatório${rCount!==1?'s':''} · ${uCount} usuário${uCount!==1?'s':''}</div>
       <button class="action-btn edit" onclick="editSector('${s}', this)">✏ Editar</button>
       ${isDefault

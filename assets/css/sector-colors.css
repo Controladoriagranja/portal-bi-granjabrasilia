@@ -1,0 +1,17 @@
+.sector-color-picker { width:100%; max-width:290px; }
+.sector-color-sv { position:relative; height:150px; border-radius:9px; cursor:crosshair; touch-action:none; background:linear-gradient(to top,#000,transparent),linear-gradient(to right,#fff,transparent),var(--picker-hue,#f00); }
+.sector-color-cursor { position:absolute; width:15px; height:15px; border:3px solid #fff; border-radius:50%; box-shadow:0 0 2px 1px #0008; transform:translate(-50%,-50%); pointer-events:none; }
+.sector-color-picker input.sector-color-hue { display:block; width:100%; height:12px; margin:18px 0; padding:0; border:0; border-radius:20px; appearance:none; -webkit-appearance:none; background:linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)!important; cursor:pointer; }
+.sector-color-hue::-webkit-slider-thumb { appearance:none; -webkit-appearance:none; width:20px; height:20px; border-radius:50%; background:var(--picker-hue,#f00); border:3px solid #fff; box-shadow:0 0 2px #0008; }
+.sector-color-hue::-moz-range-thumb { width:15px; height:15px; border-radius:50%; background:var(--picker-hue,#f00); border:3px solid #fff; }
+.sector-color-hex-row { display:flex; align-items:center; gap:10px; }
+.sector-color-picker input.sector-color-hex { flex:1; width:0; min-width:0; font-family:monospace; }
+.sector-color-swatch { width:32px; height:32px; border:1px solid var(--border); border-radius:7px; flex-shrink:0; }
+.sector-color-error { display:block; min-height:18px; margin-top:5px; color:var(--red,#d32f2f); font-size:11px; }
+.sector-color-sv:focus-visible { outline:2px solid var(--accent,#e54837); outline-offset:3px; }
+#sectorEditDialog { width:min(440px,calc(100vw - 24px)); max-height:calc(100dvh - 24px); overflow:auto; margin:auto; padding:24px; border:1px solid var(--border); border-radius:14px; background:var(--surface,#fff); color:var(--text); box-shadow:0 15px 60px #0004; }
+#sectorEditDialog::backdrop { background:#0008; }
+#sectorEditDialog h3 { margin:0 0 18px; }
+#sectorEditDialog .sector-color-picker { max-width:none; }
+#view-sectors .sector-create-panel { min-width:0; width:100%; max-width:340px; }
+@media (max-width:767px) { #view-sectors .sector-create-panel { max-width:none; } }
